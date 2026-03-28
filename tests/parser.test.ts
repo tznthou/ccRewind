@@ -126,17 +126,31 @@ describe('parseLine', () => {
     expect(result!.contentText).toBeNull()
   })
 
-  it('queue-operation → parsed without message', () => {
+  it('queue-operation with content → extracts prompt text', () => {
     const line = JSON.stringify({
       type: 'queue-operation',
       operation: 'enqueue',
       timestamp: '2024-06-01T10:00:00.000Z',
       sessionId: 's1',
+      content: 'Help me debug this',
     })
     const result = parseLine(line)
     expect(result).not.toBeNull()
     expect(result!.type).toBe('queue-operation')
     expect(result!.role).toBeNull()
+    expect(result!.contentText).toBe('Help me debug this')
+  })
+
+  it('queue-operation without content → contentText null', () => {
+    const line = JSON.stringify({
+      type: 'queue-operation',
+      operation: 'dequeue',
+      timestamp: '2024-06-01T10:00:00.000Z',
+      sessionId: 's1',
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.contentText).toBeNull()
   })
 })
 
@@ -144,7 +158,8 @@ describe('parseSession', () => {
   it('sample.jsonl → full parse with correct structure', async () => {
     const result = await parseSession(path.join(FIXTURES, 'sample.jsonl'), 'test-session-001')
     expect(result.sessionId).toBe('test-session-001')
-    expect(result.title).toBe('Help me review this code')
+    // Title 來自 queue-operation 的 content（優先於 user 訊息）
+    expect(result.title).toBe('Help me review code')
     expect(result.skippedLines).toBe(0)
     expect(result.totalLines).toBe(8)
     expect(result.messages.length).toBe(8)

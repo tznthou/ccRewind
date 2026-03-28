@@ -91,6 +91,9 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolResult = result.hasToolResult
     toolNames = result.toolNames
     contentJson = message.content != null ? JSON.stringify(message.content) : null
+  } else if (typeof obj.content === 'string') {
+    // queue-operation 等 type 的 prompt 存在頂層 content 欄位
+    contentText = obj.content as string
   }
 
   return {
@@ -142,11 +145,15 @@ export async function parseSession(filePath: string, sessionId: string): Promise
       endedAt = parsed.timestamp
     }
 
-    // Title 推導：第一筆 user 訊息的 contentText
-    if (!title && parsed.role === 'user' && parsed.contentText) {
-      title = parsed.contentText.length > TITLE_MAX_LENGTH
-        ? parsed.contentText.slice(0, TITLE_MAX_LENGTH) + '…'
-        : parsed.contentText
+    // Title 推導：queue-operation prompt 優先，其次第一筆 user 訊息
+    if (!title && parsed.contentText) {
+      const isQueuePrompt = parsed.type === 'queue-operation'
+      const isFirstUser = parsed.role === 'user'
+      if (isQueuePrompt || isFirstUser) {
+        title = parsed.contentText.length > TITLE_MAX_LENGTH
+          ? parsed.contentText.slice(0, TITLE_MAX_LENGTH) + '…'
+          : parsed.contentText
+      }
     }
   }
 
