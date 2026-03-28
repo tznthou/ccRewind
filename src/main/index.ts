@@ -9,7 +9,7 @@ const DB_PATH = path.join(os.homedir(), '.ccrewind', 'index.db')
 
 let db: Database | null = null
 
-function createWindow(): void {
+function createWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
@@ -44,6 +44,8 @@ function createWindow(): void {
       shell.openExternal(url)
     }
   })
+
+  return mainWindow
 }
 
 app.whenReady().then(() => {
@@ -51,11 +53,13 @@ app.whenReady().then(() => {
   db = new Database(DB_PATH)
   registerIpcHandlers(db)
 
-  createWindow()
+  const mainWindow = createWindow()
 
-  // 啟動索引（背景執行，不阻塞視窗）
-  runIndexer(db, sendIndexerStatus).catch((err) => {
-    console.error('Indexer failed:', err)
+  // 等 renderer 載入完成再啟動索引，避免早期狀態事件遺失
+  mainWindow.webContents.once('did-finish-load', () => {
+    runIndexer(db!, sendIndexerStatus).catch((err) => {
+      console.error('Indexer failed:', err)
+    })
   })
 
   app.on('activate', () => {
