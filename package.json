@@ -11,6 +11,9 @@
     "lint": "eslint . --fix",
     "test": "vitest run"
   },
+  "engines": {
+    "node": ">=20.0.0 <23.0.0"
+  },
   "dependencies": {
     "better-sqlite3": "^11.8.0"
   },

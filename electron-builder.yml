@@ -5,7 +5,6 @@ directories:
   output: dist
 files:
   - out/**/*
-  - "!node_modules/**/*"
 mac:
   target:
     - dmg

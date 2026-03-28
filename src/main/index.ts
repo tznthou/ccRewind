@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import path from 'path'
 
 function createWindow(): void {
@@ -10,17 +10,32 @@ function createWindow(): void {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false
+      nodeIntegration: false,
+      sandbox: true
     },
     titleBarStyle: 'hiddenInset',
     title: 'ccRewind'
   })
 
-  if (process.env.ELECTRON_RENDERER_URL) {
+  // #4: Only load dev server URL in development
+  if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
     mainWindow.loadURL(process.env.ELECTRON_RENDERER_URL)
   } else {
     mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'))
   }
+
+  // #3: Deny new window creation
+  mainWindow.webContents.setWindowOpenHandler(() => {
+    return { action: 'deny' }
+  })
+
+  // #3: External links open in default browser
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
 }
 
 app.whenReady().then(() => {
