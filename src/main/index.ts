@@ -1,5 +1,13 @@
 import { app, BrowserWindow, shell } from 'electron'
 import path from 'path'
+import os from 'os'
+import { Database } from './database'
+import { registerIpcHandlers, sendIndexerStatus } from './ipc-handlers'
+import { runIndexer } from './indexer'
+
+const DB_PATH = path.join(os.homedir(), '.ccrewind', 'index.db')
+
+let db: Database | null = null
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -39,7 +47,16 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // 初始化 Database + IPC
+  db = new Database(DB_PATH)
+  registerIpcHandlers(db)
+
   createWindow()
+
+  // 啟動索引（背景執行，不阻塞視窗）
+  runIndexer(db, sendIndexerStatus).catch((err) => {
+    console.error('Indexer failed:', err)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -52,4 +69,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+app.on('will-quit', () => {
+  db?.close()
+  db = null
 })

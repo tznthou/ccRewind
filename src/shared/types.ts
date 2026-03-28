@@ -42,6 +42,16 @@ export interface SearchResult {
   timestamp: string | null
 }
 
+/** Renderer 透過 contextBridge 取得的 API */
+export interface ElectronAPI {
+  getProjects: () => Promise<Project[]>
+  getSessions: (projectId: string) => Promise<SessionMeta[]>
+  loadSession: (sessionId: string) => Promise<Message[]>
+  search: (query: string, projectId?: string | null) => Promise<SearchResult[]>
+  onIndexerStatus: (callback: (status: IndexerStatus) => void) => void
+  offIndexerStatus: () => void
+}
+
 /** 索引進度 */
 export interface IndexerStatus {
   phase: 'scanning' | 'parsing' | 'indexing' | 'done'
