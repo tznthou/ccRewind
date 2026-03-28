@@ -65,6 +65,7 @@ describe('IPC Handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     db = new Database(':memory:')
+    registerIpcHandlers(db)
   })
 
   afterEach(() => {
@@ -73,7 +74,6 @@ describe('IPC Handlers', () => {
 
   describe('registerIpcHandlers', () => {
     it('registers all required channels', () => {
-      registerIpcHandlers(db)
       const channels = vi.mocked(ipcMain.handle).mock.calls.map(c => c[0])
       expect(channels).toContain('projects:list')
       expect(channels).toContain('sessions:list')
@@ -85,7 +85,6 @@ describe('IPC Handlers', () => {
   describe('projects:list', () => {
     it('returns project list from database', () => {
       seedData(db)
-      registerIpcHandlers(db)
       const handler = getHandler('projects:list')
       const result = handler(event)
       expect(result).toEqual([
@@ -98,7 +97,6 @@ describe('IPC Handlers', () => {
     })
 
     it('returns empty array when no projects', () => {
-      registerIpcHandlers(db)
       const handler = getHandler('projects:list')
       expect(handler(event)).toEqual([])
     })
@@ -107,7 +105,6 @@ describe('IPC Handlers', () => {
   describe('sessions:list', () => {
     it('returns sessions for given project', () => {
       seedData(db)
-      registerIpcHandlers(db)
       const handler = getHandler('sessions:list')
       const result = handler(event, 'proj-1')
       expect(result).toHaveLength(1)
@@ -119,7 +116,6 @@ describe('IPC Handlers', () => {
     })
 
     it('returns empty array for nonexistent project', () => {
-      registerIpcHandlers(db)
       const handler = getHandler('sessions:list')
       expect(handler(event, 'nonexistent')).toEqual([])
     })
@@ -128,7 +124,6 @@ describe('IPC Handlers', () => {
   describe('session:load', () => {
     it('returns messages ordered by sequence', () => {
       seedData(db)
-      registerIpcHandlers(db)
       const handler = getHandler('session:load')
       const result = handler(event, 'sess-1')
       expect(result).toHaveLength(2)
@@ -145,7 +140,6 @@ describe('IPC Handlers', () => {
     })
 
     it('returns empty array for invalid session id', () => {
-      registerIpcHandlers(db)
       const handler = getHandler('session:load')
       expect(handler(event, 'invalid-id')).toEqual([])
     })
@@ -154,7 +148,6 @@ describe('IPC Handlers', () => {
   describe('search:query', () => {
     it('returns search results for matching query', () => {
       seedData(db)
-      registerIpcHandlers(db)
       const handler = getHandler('search:query')
       const result = handler(event, 'Hello')
       expect(result).toHaveLength(1)
@@ -166,7 +159,6 @@ describe('IPC Handlers', () => {
 
     it('returns empty array for no matches', () => {
       seedData(db)
-      registerIpcHandlers(db)
       const handler = getHandler('search:query')
       expect(handler(event, 'nonexistent-xyz-query')).toEqual([])
     })
@@ -189,7 +181,6 @@ describe('IPC Handlers', () => {
         ],
       })
 
-      registerIpcHandlers(db)
       const handler = getHandler('search:query')
       const result = handler(event, 'Hello', 'proj-2')
       expect(result).toHaveLength(1)
