@@ -14,6 +14,7 @@ export interface MessageInput {
   toolNames: string[]
   timestamp: string | null
   sequence: number
+  rawJson: string | null
 }
 
 /** indexSession 的參數型別 */
@@ -89,6 +90,7 @@ export class Database {
         tool_names TEXT,
         timestamp TEXT,
         sequence INTEGER NOT NULL,
+        raw_json TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
@@ -190,6 +192,20 @@ export class Database {
     }))
   }
 
+  /** 移除 DB 中不在 keepIds 集合的 session（清理已刪除的 JSONL） */
+  removeStaleSessionsExcept(keepIds: Set<string>): void {
+    const allRows = this.db.prepare('SELECT id FROM sessions').all() as Array<{ id: string }>
+    const doRemove = this.db.transaction(() => {
+      for (const row of allRows) {
+        if (!keepIds.has(row.id)) {
+          this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(row.id)
+          this.db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id)
+        }
+      }
+    })
+    doRemove()
+  }
+
   // ── Atomic session indexing ──
 
   indexSession(params: IndexSessionParams): void {
@@ -215,15 +231,15 @@ export class Database {
       )
       // 5. Bulk insert messages
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, content_json, has_tool_use, has_tool_result, tool_names, timestamp, sequence)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, content_json, has_tool_use, has_tool_result, tool_names, timestamp, sequence, raw_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       for (const m of params.messages) {
         insertMsg.run(
           params.sessionId, m.type, m.role, m.contentText, m.contentJson,
           m.hasToolUse ? 1 : 0, m.hasToolResult ? 1 : 0,
           m.toolNames.length > 0 ? m.toolNames.join(',') : null,
-          m.timestamp, m.sequence,
+          m.timestamp, m.sequence, m.rawJson,
         )
       }
     })
