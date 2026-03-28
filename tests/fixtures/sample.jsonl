@@ -1,0 +1,8 @@
+{"type":"queue-operation","operation":"enqueue","timestamp":"2024-06-01T10:00:00.000Z","sessionId":"test-session-001","content":"Help me review code"}
+{"type":"queue-operation","operation":"dequeue","timestamp":"2024-06-01T10:00:01.000Z","sessionId":"test-session-001"}
+{"type":"user","uuid":"u1","parentUuid":null,"timestamp":"2024-06-01T10:00:02.000Z","sessionId":"test-session-001","message":{"role":"user","content":"Help me review this code"}}
+{"type":"assistant","uuid":"a1","parentUuid":"u1","timestamp":"2024-06-01T10:00:03.000Z","sessionId":"test-session-001","message":{"role":"assistant","content":[{"type":"thinking","thinking":"Let me analyze the code."},{"type":"text","text":"I'll review the code. Let me read it first."},{"type":"tool_use","id":"toolu_001","name":"Read","input":{"file_path":"/tmp/test.ts"}}],"model":"claude-sonnet-4-20250514","stop_reason":"tool_use"}}
+{"type":"user","uuid":"u2","parentUuid":"a1","timestamp":"2024-06-01T10:00:04.000Z","sessionId":"test-session-001","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"toolu_001","content":"const x = 1;","is_error":false}]}}
+{"type":"assistant","uuid":"a2","parentUuid":"u2","timestamp":"2024-06-01T10:00:05.000Z","sessionId":"test-session-001","message":{"role":"assistant","content":[{"type":"text","text":"The code looks clean."},{"type":"text","text":"No issues found."}],"model":"claude-sonnet-4-20250514","stop_reason":"end_turn"}}
+{"type":"system","subtype":"bridge_status","content":"Remote control active","sessionId":"test-session-001","timestamp":"2024-06-01T10:00:06.000Z"}
+{"type":"last-prompt","sessionId":"test-session-001","timestamp":"2024-06-01T10:00:07.000Z"}

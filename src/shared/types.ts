@@ -49,3 +49,49 @@ export interface IndexerStatus {
   total: number
   current: number
 }
+
+// ── Scanner 中間型別 ──
+
+/** 掃描到的 session 檔案資訊 */
+export interface ScannedSession {
+  filePath: string
+  fileSize: number
+  fileMtime: string
+  sessionId: string
+}
+
+/** 掃描到的專案資訊 */
+export interface ScannedProject {
+  projectId: string
+  displayName: string
+  sessions: ScannedSession[]
+}
+
+// ── Parser 中間型別 ──
+
+/** 單行 JSONL 解析結果 */
+export interface ParsedLine {
+  type: string
+  uuid: string | null
+  parentUuid: string | null
+  sessionId: string | null
+  timestamp: string | null
+  role: 'user' | 'assistant' | null
+  contentText: string | null
+  contentJson: string | null
+  hasToolUse: boolean
+  hasToolResult: boolean
+  toolNames: string[]
+  rawJson: string
+}
+
+/** 整個 session 解析結果 */
+export interface ParsedSession {
+  sessionId: string
+  title: string | null
+  messages: ParsedLine[]
+  startedAt: string | null
+  endedAt: string | null
+  skippedLines: number
+  totalLines: number
+}

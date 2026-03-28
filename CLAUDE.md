@@ -8,6 +8,10 @@
 - lint: `pnpm eslint . --fix`
 - dist: `pnpm dist`（打包 Electron 應用）
 
+## 接續
+
+- 新 session 開始前，先讀取 `.claude/RESUME.md`
+
 ## 工作流程
 
 - branch: `feat/xxx`, `fix/xxx`, `refactor/xxx`

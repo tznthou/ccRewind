@@ -1,0 +1,3 @@
+{"type":"user","uuid":"u1","timestamp":"2024-06-01T10:00:00.000Z","sessionId":"test-002","message":{"role":"user","content":"First message"}}
+THIS IS NOT VALID JSON {{{
+{"type":"assistant","uuid":"a1","timestamp":"2024-06-01T10:00:01.000Z","sessionId":"test-002","message":{"role":"assistant","content":"Response text"}}
