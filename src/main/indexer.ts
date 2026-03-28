@@ -1,4 +1,4 @@
-import type { IndexerStatus } from '../shared/types'
+import type { IndexerStatus, ParsedSession } from '../shared/types'
 import type { Database } from './database'
 import { scanProjects } from './scanner'
 import { parseSession } from './parser'
@@ -24,7 +24,7 @@ export async function runIndexer(
     db.upsertProject(project.projectId, project.displayName)
   }
 
-  // 2. DIFFING — 收集需要索引的 session + 清理已刪除的 session
+  // 2. DIFFING — 批次取得所有已索引 mtime，避免 N+1 query
   interface SessionToIndex {
     filePath: string
     fileSize: number
@@ -34,19 +34,22 @@ export async function runIndexer(
     projectDisplayName: string
   }
 
+  const existingMtimes = db.getAllSessionMtimes()
   const sessionsToIndex: SessionToIndex[] = []
   const scannedSessionIds = new Set<string>()
+  const affectedProjects = new Set<string>()
 
   for (const project of projects) {
     for (const session of project.sessions) {
       scannedSessionIds.add(session.sessionId)
-      const existingMtime = db.getSessionMtime(session.sessionId)
-      if (existingMtime === null || existingMtime !== session.fileMtime) {
+      const existingMtime = existingMtimes.get(session.sessionId)
+      if (existingMtime === undefined || existingMtime !== session.fileMtime) {
         sessionsToIndex.push({
           ...session,
           projectId: project.projectId,
           projectDisplayName: project.displayName,
         })
+        affectedProjects.add(project.projectId)
       }
     }
   }
@@ -68,7 +71,7 @@ export async function runIndexer(
     const s = sessionsToIndex[i]
 
     // 解析 JSONL — 讀取失敗跳過，不中斷
-    let parsed
+    let parsed: ParsedSession
     try {
       parsed = await parseSession(s.filePath, s.sessionId)
     } catch {
@@ -102,7 +105,7 @@ export async function runIndexer(
     })
   }
 
-  // 4. FINALIZE — 更新受影響 project 的統計 + 所有空 project 的統計
+  // 4. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
   for (const project of projects) {
     db.updateProjectStats(project.projectId)
   }

@@ -195,15 +195,27 @@ export class Database {
   /** 移除 DB 中不在 keepIds 集合的 session（清理已刪除的 JSONL） */
   removeStaleSessionsExcept(keepIds: Set<string>): void {
     const allRows = this.db.prepare('SELECT id FROM sessions').all() as Array<{ id: string }>
+    const delMessages = this.db.prepare('DELETE FROM messages WHERE session_id = ?')
+    const delSession = this.db.prepare('DELETE FROM sessions WHERE id = ?')
     const doRemove = this.db.transaction(() => {
       for (const row of allRows) {
         if (!keepIds.has(row.id)) {
-          this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(row.id)
-          this.db.prepare('DELETE FROM sessions WHERE id = ?').run(row.id)
+          delMessages.run(row.id)
+          delSession.run(row.id)
         }
       }
     })
     doRemove()
+  }
+
+  /** 一次取得所有 session 的 file_mtime（增量索引批次比對用） */
+  getAllSessionMtimes(): Map<string, string> {
+    const rows = this.db.prepare('SELECT id, file_mtime FROM sessions').all() as Array<{ id: string; file_mtime: string }>
+    const map = new Map<string, string>()
+    for (const r of rows) {
+      map.set(r.id, r.file_mtime)
+    }
+    return map
   }
 
   // ── Atomic session indexing ──
@@ -214,12 +226,8 @@ export class Database {
       this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(params.sessionId)
       // 2. 刪除舊 session
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
-      // 3. Upsert project
-      this.db.prepare(`
-        INSERT INTO projects (id, display_name)
-        VALUES (?, ?)
-        ON CONFLICT(id) DO UPDATE SET display_name = excluded.display_name
-      `).run(params.projectId, params.projectDisplayName)
+      // 3. Upsert project（重用 upsertProject 避免 SQL 重複）
+      this.upsertProject(params.projectId, params.projectDisplayName)
       // 4. Insert session
       this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at)
@@ -329,7 +337,8 @@ export class Database {
         timestamp: r.timestamp,
       }))
     } catch {
-      // FTS5 語法錯誤（如未關閉的引號）→ 回傳空陣列
+      // FTS5 查詢失敗（語法錯誤、未關閉的引號等）→ 回傳空陣列
+      // DB 連線等嚴重錯誤會在其他操作（indexSession, getMessages）時拋出
       return []
     }
   }
