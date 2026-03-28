@@ -26,7 +26,7 @@ export interface Message {
   contentJson: string | null
   hasToolUse: boolean
   hasToolResult: boolean
-  toolNames: string | null
+  toolNames: string[] | null
   timestamp: string | null
   sequence: number
 }

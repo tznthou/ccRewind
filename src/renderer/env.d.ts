@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
 declare interface Window {
-  api: Record<string, unknown>
+  // Task 4 will expand this with IPC API methods
+  api: Record<string, never>
 }
