@@ -1,0 +1,14 @@
+appId: com.ccrewind.app
+productName: ccRewind
+directories:
+  buildResources: build
+  output: dist
+files:
+  - out/**/*
+  - "!node_modules/**/*"
+mac:
+  target:
+    - dmg
+    - zip
+  artifactName: ${name}-${version}-${arch}.${ext}
+npmRebuild: true

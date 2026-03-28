@@ -1,0 +1,42 @@
+{
+  "name": "ccrewind",
+  "version": "0.1.0",
+  "description": "Claude Code 對話回放與考古工具",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
+    "build": "electron-vite build",
+    "dist": "electron-builder build --config electron-builder.yml",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --fix",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.4",
+    "@types/better-sqlite3": "^7.6.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "electron": "^33.3.0",
+    "electron-builder": "^25.1.0",
+    "electron-vite": "^5.0.0",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.57.2",
+    "vite": "^6.0.0",
+    "vitest": "^3.0.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "electron",
+      "esbuild"
+    ]
+  }
+}
