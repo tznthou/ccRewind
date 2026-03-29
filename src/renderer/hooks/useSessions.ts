@@ -9,12 +9,18 @@ export function useSessions(projectId: string | null) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [fetchedId, setFetchedId] = useState<string | null>(null)
+  const [fetchedPhase, setFetchedPhase] = useState(indexerPhase)
 
-  // projectId 變更時在 render phase 重置（React 支援的 getDerivedStateFromProps 模式）
+  // projectId 或 indexerPhase 變更時在 render phase 重置
   if (projectId !== fetchedId) {
     setFetchedId(projectId)
     setSessions([])
     setLoading(projectId !== null)
+    setError(null)
+    setFetchedPhase(indexerPhase)
+  } else if (indexerPhase !== fetchedPhase) {
+    setFetchedPhase(indexerPhase)
+    setLoading(true)
     setError(null)
   }
 
@@ -22,8 +28,6 @@ export function useSessions(projectId: string | null) {
     if (!projectId) return
 
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
     window.api.getSessions(projectId)
       .then((data) => {

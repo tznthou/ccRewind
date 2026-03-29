@@ -10,11 +10,17 @@ export function useProjects() {
 
   // indexer 完成時的 phase 作為 refetch 觸發點
   const indexerPhase = indexerStatus?.phase ?? null
+  const [fetchedPhase, setFetchedPhase] = useState(indexerPhase)
+
+  // render-phase 重置（React 支援的 getDerivedStateFromProps 模式）
+  if (indexerPhase !== fetchedPhase) {
+    setFetchedPhase(indexerPhase)
+    setLoading(true)
+    setError(null)
+  }
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
-    setError(null)
 
     window.api.getProjects()
       .then((data) => {
