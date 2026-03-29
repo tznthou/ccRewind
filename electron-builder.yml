@@ -5,8 +5,8 @@ directories:
   output: dist
 files:
   - out/**/*
+afterPack: ./scripts/afterPack.js
 mac:
-  identity: "-"
   target:
     - dmg
     - zip
