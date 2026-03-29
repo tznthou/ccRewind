@@ -50,7 +50,7 @@
   /* Typography */
   --font-display: 'Instrument Serif', serif;
   --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-code: 'Geist Mono', 'SF Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
+  --font-code: 'SF Mono', 'Fira Code', Menlo, Monaco, Consolas, monospace;
   /* Aliases for backward compat */
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
