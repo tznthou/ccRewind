@@ -4,12 +4,13 @@ import { formatTime } from '../../utils/formatTime'
 import type { SearchResult, GroupedSearchResult } from '../../../shared/types'
 import styles from './SearchResults.module.css'
 
-/** 將 FTS5 snippet 中的 <mark>...</mark> 轉為 React 元素 */
+/** FTS5 snippet 使用 Unicode sentinel \uE000/\uE001 標記匹配位置，轉為 React <mark> 元素 */
 function renderSnippet(snippet: string): ReactNode {
-  const parts = snippet.split(/(<mark>.*?<\/mark>)/g)
+  const parts = snippet.split(/(\uE000.*?\uE001)/g)
   return parts.map((part, i) => {
-    const match = part.match(/^<mark>(.*)<\/mark>$/)
-    if (match) return <mark key={i}>{match[1]}</mark>
+    if (part.startsWith('\uE000') && part.endsWith('\uE001')) {
+      return <mark key={i}>{part.slice(1, -1)}</mark>
+    }
     return part
   })
 }

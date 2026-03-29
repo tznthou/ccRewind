@@ -184,7 +184,7 @@ export class Database {
     this.db.close()
   }
 
-  /** 測試用：直接執行 SQL 查詢 */
+  /** ⚠️ 測試專用：接受任意 SQL，禁止接到 IPC handler */
   rawAll<T>(sql: string): T[] {
     return this.db.prepare(sql).all() as T[]
   }
@@ -508,6 +508,7 @@ export class Database {
   static readonly SEARCH_PAGE_SIZE = 30
 
   search(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE): SearchPage {
+    limit = Math.min(limit, 100)
     try {
       let sql = `
         SELECT
@@ -516,7 +517,7 @@ export class Database {
           s.title AS session_title,
           s.project_id,
           p.display_name AS project_name,
-          snippet(messages_fts, 0, '<mark>', '</mark>', '...', 64) AS snippet,
+          snippet(messages_fts, 0, x'EE8080', x'EE8081', '...', 64) AS snippet,
           m.timestamp
         FROM messages_fts
         JOIN messages m ON m.id = messages_fts.rowid

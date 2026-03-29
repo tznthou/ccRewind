@@ -18,10 +18,12 @@ export function registerIpcHandlers(db: Database): void {
     return db.getMessages(sessionId)
   })
 
-  ipcMain.handle('search:query', (_event, query: unknown, projectId?: unknown) => {
+  ipcMain.handle('search:query', (_event, query: unknown, projectId?: unknown, offset?: unknown) => {
     if (typeof query !== 'string') throw new Error('Invalid query')
+    if (query.length > 500) throw new Error('Query too long')
     const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : String(projectId)
-    return db.search(query, pid)
+    const off = typeof offset === 'number' ? offset : 0
+    return db.search(query, pid, off)
   })
 
   ipcMain.handle('export:markdown', async (_event, sessionId: unknown) => {
