@@ -3,7 +3,13 @@ import { defineConfig } from 'electron-vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
-  main: {},
+  main: {
+    build: {
+      rollupOptions: {
+        external: ['better-sqlite3']
+      }
+    }
+  },
   preload: {},
   renderer: {
     resolve: {
@@ -11,6 +17,21 @@ export default defineConfig({
         '@renderer': resolve('src/renderer')
       }
     },
-    plugins: [react()]
+    plugins: [
+      react(),
+      {
+        name: 'strip-csp-in-dev',
+        transformIndexHtml: {
+          order: 'pre',
+          handler(html, ctx) {
+            if (ctx.server) {
+              // Dev mode — strip meta CSP so Vite inline scripts work
+              return html.replace(/<meta http-equiv="Content-Security-Policy"[^>]*\/>/, '')
+            }
+            return html
+          }
+        }
+      }
+    ]
   }
 })

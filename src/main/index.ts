@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, session, shell } from 'electron'
 import path from 'path'
 import os from 'os'
 import { Database } from './database'
@@ -56,6 +56,19 @@ function createWindow(): BrowserWindow {
 }
 
 app.whenReady().then(() => {
+  // CSP — production 由 index.html <meta> 處理；dev 放行 Vite HMR 所需
+  if (!app.isPackaged) {
+    const devCsp = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self' ws://localhost:*"
+    session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+      callback({
+        responseHeaders: {
+          ...details.responseHeaders,
+          'Content-Security-Policy': [devCsp]
+        }
+      })
+    })
+  }
+
   // 初始化 Database + IPC
   db = new Database(DB_PATH)
   registerIpcHandlers(db)

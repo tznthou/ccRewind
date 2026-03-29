@@ -29,9 +29,13 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
     const parsed = JSON.parse(contentJson)
     if (!Array.isArray(parsed)) return []
     return parsed.filter(
-      (block: unknown): block is ContentBlock =>
-        block != null && typeof block === 'object' &&
-        ((block as ContentBlock).type === 'tool_use' || (block as ContentBlock).type === 'tool_result'),
+      (block: unknown): block is ContentBlock => {
+        if (block == null || typeof block !== 'object') return false
+        const b = block as Record<string, unknown>
+        if (b.type === 'tool_use') return typeof b.name === 'string'
+        if (b.type === 'tool_result') return typeof b.tool_use_id === 'string'
+        return false
+      },
     )
   } catch {
     return []
