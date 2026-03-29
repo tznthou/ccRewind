@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
 import MessageBubble from './MessageBubble'
 import styles from './ChatView.module.css'
@@ -9,12 +10,43 @@ interface ChatViewProps {
 
 export default function ChatView({ sessionId }: ChatViewProps) {
   const { messages, loading, error } = useSession(sessionId)
+  const { targetMessageId, searchQuery } = useAppState()
+  const dispatch = useAppDispatch()
   const containerRef = useRef<HTMLDivElement>(null)
+  const pendingScrollRef = useRef<number | null>(null)
 
+  // 記住 targetMessageId，在 effect 中寫 ref（避免 render phase 寫 ref）
   useEffect(() => {
-    // scroll container 是外層 <main>，即 .chatView 的 parentElement
-    containerRef.current?.parentElement?.scrollTo(0, 0)
+    if (targetMessageId) {
+      pendingScrollRef.current = targetMessageId
+      dispatch({ type: 'CLEAR_TARGET_MESSAGE' })
+    }
+  }, [targetMessageId, dispatch])
+
+  // 一般換 session 時 scroll to top
+  useEffect(() => {
+    if (!pendingScrollRef.current) {
+      containerRef.current?.parentElement?.scrollTo(0, 0)
+    }
   }, [messages])
+
+  // 搜尋跳轉：loading 結束後 scroll to target + pulse
+  useEffect(() => {
+    const mid = pendingScrollRef.current
+    if (!mid || loading) return
+    pendingScrollRef.current = null
+
+    const el = containerRef.current?.querySelector(`[data-message-id="${mid}"]`)
+    if (el instanceof HTMLElement) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      el.classList.add(styles.highlightTarget)
+      const onEnd = () => {
+        el.classList.remove(styles.highlightTarget)
+        el.removeEventListener('animationend', onEnd)
+      }
+      el.addEventListener('animationend', onEnd)
+    }
+  }, [loading])
 
   if (loading) {
     return <div className={styles.status}>載入對話中...</div>
@@ -31,7 +63,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   return (
     <div ref={containerRef} className={styles.chatView}>
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} />
+        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} />
       ))}
     </div>
   )
