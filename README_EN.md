@@ -13,6 +13,11 @@ A lightweight, read-only, offline-first desktop app for browsing your Claude Cod
   <img src="docs/icon-github.png" alt="ccRewind" width="128" />
 </p>
 
+<p align="center">
+  <img src="docs/preview-app.webp" alt="ccRewind App Preview" width="480" />
+  <img src="docs/preview-brand.webp" alt="ccRewind Branding" width="480" />
+</p>
+
 ---
 
 ## Core Concept
