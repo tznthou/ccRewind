@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.8.0] - 2026-03-29
+
+### Added
+
+- Syntax highlighting for code blocks via highlight.js `atom-one-dark` theme
+- Local font bundling: all 6 font families (7 woff2 files, ~402 KB) shipped with the app — fully offline, no Google Fonts CDN dependency
+
+### Changed
+
+- CSP tightened: removed `fonts.googleapis.com` and `fonts.gstatic.com` from `style-src` and `font-src`
+- Removed phantom `Geist Mono` from Timeline theme font stack (was never bundled)
+- `highlight.js` promoted from transitive to direct dependency
+
 ## [0.6.0] - 2026-03-29
 
 ### Added
