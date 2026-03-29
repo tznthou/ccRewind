@@ -64,3 +64,17 @@
 .scopeLabel input[type="radio"] {
   margin: 0;
 }
+
+/* Theme C — Terminal: mono input, dashed border */
+:global([data-theme="terminal"]) .input {
+  font-family: var(--font-code);
+  border-style: dashed;
+}
+
+:global([data-theme="terminal"]) .container {
+  border-bottom-style: dashed;
+}
+
+:global([data-theme="terminal"]) .scopeLabel {
+  font-family: var(--font-code);
+}

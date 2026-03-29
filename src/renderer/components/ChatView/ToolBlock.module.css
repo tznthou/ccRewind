@@ -50,3 +50,21 @@
   max-height: 400px;
   overflow-y: auto;
 }
+
+/* Theme A — Archive: hard shadow, no radius */
+:global([data-theme="archive"]) .toolBlock {
+  box-shadow: var(--shadow-card);
+}
+
+/* Theme C — Terminal: dashed border, mono label */
+:global([data-theme="terminal"]) .toolBlock {
+  border-style: dashed;
+}
+
+:global([data-theme="terminal"]) .summary {
+  font-family: var(--font-code);
+}
+
+:global([data-theme="terminal"]) .content {
+  border-top-style: dashed;
+}

@@ -66,8 +66,8 @@
 }
 
 .content :global(pre) {
-  background-color: #1e1e1e;
-  color: #d4d4d4;
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
   padding: var(--space-md);
   border-radius: var(--radius-sm);
   overflow-x: auto;
@@ -82,7 +82,7 @@
 }
 
 .content :global(:not(pre) > code) {
-  background-color: rgba(0, 0, 0, 0.06);
+  background-color: var(--color-code-inline-bg);
   padding: 1px 4px;
   border-radius: 3px;
 }
@@ -136,13 +136,85 @@
 .systemLabel {
   font-weight: 600;
   font-size: var(--font-size-xs);
-  color: #664d03;
+  color: var(--color-system-label);
   flex-shrink: 0;
 }
 
 .systemText {
-  color: #664d03;
+  color: var(--color-system-label);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ============================================================
+   Theme A — Archive Room
+   ============================================================ */
+
+:global([data-theme="archive"]) .bubble {
+  box-shadow: var(--shadow-bubble);
+}
+
+:global([data-theme="archive"]) .role {
+  font-family: var(--font-display);
+  font-variant: small-caps;
+  border: 1px solid var(--color-accent);
+  padding: 1px 6px;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+}
+
+/* ============================================================
+   Theme B — Timeline
+   ============================================================ */
+
+:global([data-theme="timeline"]) .assistant {
+  border-left: 3px solid var(--color-accent-assistant);
+}
+
+:global([data-theme="timeline"]) .content :global(h1),
+:global([data-theme="timeline"]) .content :global(h2),
+:global([data-theme="timeline"]) .content :global(h3) {
+  font-family: var(--font-display);
+}
+
+/* ============================================================
+   Theme C — Terminal Memory
+   ============================================================ */
+
+:global([data-theme="terminal"]) .bubble {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed var(--color-border);
+  border-radius: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+:global([data-theme="terminal"]) .role {
+  font-family: var(--font-code);
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+:global([data-theme="terminal"]) .user .role::before {
+  content: '\25B8 ';
+  color: var(--color-accent-user);
+}
+
+:global([data-theme="terminal"]) .assistant .role::before {
+  content: '\25C2 ';
+  color: var(--color-accent-assistant);
+}
+
+:global([data-theme="terminal"]) .user .role {
+  color: var(--color-accent-user);
+}
+
+:global([data-theme="terminal"]) .assistant .role {
+  color: var(--color-accent-assistant);
+}
+
+:global([data-theme="terminal"]) .content :global(pre) {
+  border: 1px dashed var(--color-border);
 }

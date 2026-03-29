@@ -25,7 +25,7 @@
 
 .exportButton:hover:not(:disabled) {
   background: var(--color-accent);
-  color: #fff;
+  color: var(--color-bg);
 }
 
 .exportButton:disabled {

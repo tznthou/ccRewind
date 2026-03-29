@@ -183,3 +183,106 @@
   border-radius: 2px;
   transition: width 0.3s ease;
 }
+
+/* ============================================================
+   Theme A — Archive Room
+   ============================================================ */
+
+:global([data-theme="archive"]) .sectionLabel {
+  font-family: var(--font-display);
+  font-variant: small-caps;
+  letter-spacing: 1.5px;
+}
+
+:global([data-theme="archive"]) .badge {
+  border-radius: 0;
+}
+
+:global([data-theme="archive"]) .title {
+  font-family: var(--font-display);
+}
+
+/* ============================================================
+   Theme B — Timeline
+   ============================================================ */
+
+:global([data-theme="timeline"]) .title {
+  font-family: var(--font-display);
+}
+
+:global([data-theme="timeline"]) .sessionItem {
+  position: relative;
+  padding-left: 36px;
+}
+
+:global([data-theme="timeline"]) .sessionItem::before {
+  content: '';
+  position: absolute;
+  left: 16px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--color-border);
+}
+
+:global([data-theme="timeline"]) .sessionItem::after {
+  content: '';
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--color-accent);
+  background: var(--color-bg-sidebar);
+  z-index: 1;
+}
+
+:global([data-theme="timeline"]) .sessionItem.selected::after {
+  background: var(--color-accent-assistant);
+  border-color: var(--color-accent-assistant);
+}
+
+:global([data-theme="timeline"]) .sessionItem:hover::after {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+/* ============================================================
+   Theme C — Terminal Memory
+   ============================================================ */
+
+:global([data-theme="terminal"]) .title {
+  font-family: var(--font-display);
+  letter-spacing: 0.02em;
+}
+
+:global([data-theme="terminal"]) .subtitle {
+  font-family: var(--font-code);
+}
+
+:global([data-theme="terminal"]) .sectionLabel {
+  font-family: var(--font-code);
+  letter-spacing: 0.02em;
+}
+
+:global([data-theme="terminal"]) .sessionTitle {
+  font-family: var(--font-code);
+}
+
+:global([data-theme="terminal"]) .sessionMeta {
+  font-family: var(--font-code);
+}
+
+:global([data-theme="terminal"]) .section {
+  border-bottom-style: dashed;
+}
+
+:global([data-theme="terminal"]) .sessionItem {
+  border-bottom-style: dashed;
+}
+
+:global([data-theme="terminal"]) .indexerStatus {
+  border-top-style: dashed;
+}

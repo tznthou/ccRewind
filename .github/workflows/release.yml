@@ -1,0 +1,125 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. v0.5.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        run: |
+          gh release delete ${{ steps.get_version.outputs.VERSION }} --yes || true
+          gh release create ${{ steps.get_version.outputs.VERSION }} \
+            --title "ccRewind ${{ steps.get_version.outputs.VERSION }}" \
+            --notes "$(cat <<'NOTES'
+          ## ccRewind ${{ steps.get_version.outputs.VERSION }}
+
+          Claude Code 對話回放與考古工具
+
+          ### macOS
+          - **DMG** (recommended): 拖曳至 Applications 即可
+          - **ZIP**: 解壓後直接執行
+
+          > ⚠️ **macOS**：首次開啟時會顯示「無法打開」警告（未經 Apple 簽署）。
+          > 請右鍵點擊 app → 選擇「打開」→ 再次點擊「打開」即可，之後不會再提示。
+          >
+          > ⚠️ **Windows**：首次執行時會顯示 SmartScreen「Windows 已保護您的電腦」警告。
+          > 請點擊「其他資訊」→「仍要執行」即可。
+
+          System requirements: macOS 11+ / Windows 10+
+          NOTES
+          )" \
+            --draft=false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-macos:
+    needs: create-release
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Cache Electron
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package (DMG + ZIP)
+        run: pnpm dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify artifacts
+        run: |
+          echo "Release artifacts:"
+          find dist -name "*.dmg" -o -name "*.zip" | grep -v blockmap | while read -r f; do
+            echo "  $(basename "$f") ($(du -h "$f" | cut -f1))"
+          done
+          DMG_COUNT=$(find dist -name "*.dmg" | wc -l)
+          if [ "$DMG_COUNT" -eq 0 ]; then
+            echo "ERROR: No DMG files found"
+            exit 1
+          fi
+
+      - name: Upload Release Assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.create-release.outputs.version }}
+          files: |
+            dist/*.dmg
+            dist/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

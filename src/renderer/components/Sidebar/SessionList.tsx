@@ -2,21 +2,28 @@ import { useRef } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
+import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { formatDateTime } from '../../utils/formatTime'
 import styles from './Sidebar.module.css'
 
-const SESSION_ITEM_HEIGHT = 56
+const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
+  archive: 56,
+  timeline: 56,
+  terminal: 56,
+}
 
 export default function SessionList() {
   const { selectedProjectId, selectedSessionId } = useAppState()
   const dispatch = useAppDispatch()
+  const { theme } = useTheme()
   const { sessions, loading, error } = useSessions(selectedProjectId)
   const parentRef = useRef<HTMLDivElement>(null)
+  const itemHeight = SESSION_ITEM_HEIGHT[theme]
 
   const virtualizer = useVirtualizer({
     count: sessions.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => SESSION_ITEM_HEIGHT,
+    estimateSize: () => itemHeight,
     overscan: 5,
   })
 

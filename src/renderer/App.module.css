@@ -8,6 +8,10 @@
 .titleBar {
   grid-column: 1 / -1;
   -webkit-app-region: drag;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 12px;
 }
 
 .sidebar {
@@ -31,4 +35,37 @@
   gap: var(--space-md);
   color: var(--color-text-muted);
   font-size: var(--font-size-lg);
+}
+
+/* ============================================================
+   Theme A — Archive Room: paper ruled-line texture
+   ============================================================ */
+
+:global([data-theme="archive"]) .main {
+  background-image: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 27px,
+    rgba(0, 0, 0, 0.03) 27px,
+    rgba(0, 0, 0, 0.03) 28px
+  );
+}
+
+/* ============================================================
+   Theme C — Terminal Memory: scanline overlay
+   ============================================================ */
+
+:global([data-theme="terminal"]) .layout::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent 0px,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+  z-index: 9999;
 }

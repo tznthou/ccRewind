@@ -1,6 +1,8 @@
 import { AppProvider, useAppState } from './context/AppContext'
+import { ThemeProvider } from './context/ThemeContext'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatView from './components/ChatView/ChatView'
+import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher'
 import styles from './App.module.css'
 
 function AppContent() {
@@ -8,7 +10,9 @@ function AppContent() {
 
   return (
     <div className={styles.layout}>
-      <div className={styles.titleBar} />
+      <div className={styles.titleBar}>
+        <ThemeSwitcher />
+      </div>
       <aside className={styles.sidebar}>
         <Sidebar />
       </aside>
@@ -30,8 +34,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <AppProvider>
-      <AppContent />
-    </AppProvider>
+    <ThemeProvider>
+      <AppProvider>
+        <AppContent />
+      </AppProvider>
+    </ThemeProvider>
   )
 }
