@@ -4,6 +4,7 @@ import SessionList from './SessionList'
 import SearchBar from './SearchBar'
 import SearchResults from './SearchResults'
 import IndexerStatus from './IndexerStatus'
+import UpdateBanner from '../UpdateBanner/UpdateBanner'
 import logoUrl from '../../assets/logo@2x.webp'
 import styles from './Sidebar.module.css'
 
@@ -19,6 +20,8 @@ export default function Sidebar() {
         </div>
         <p className={styles.subtitle}>Claude Code 對話回放工具</p>
       </header>
+
+      <UpdateBanner />
 
       <SearchBar />
 

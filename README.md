@@ -39,6 +39,7 @@ ccRewind 讀取 `~/.claude/projects/` 下的 JSONL 對話紀錄，建立 SQLite 
 | **Tool 摺疊** | tool_use / tool_result 預設摺疊，點擊展開查看完整內容 |
 | **全文搜尋** | FTS5 索引，支援全部專案 / 目前專案範圍切換，點擊跳轉 + 高亮 |
 | **Markdown 匯出** | 一鍵將 session 匯出為 `.md` 檔案，含 metadata 表格 + tool 摺疊 |
+| **更新通知** | 啟動時自動偵測 GitHub 新版本，一鍵開啟下載頁面 |
 | **增量索引** | 首次啟動掃描所有 JSONL，後續僅處理新增/修改的檔案 |
 | **虛擬捲動** | 大量 session 不卡頓（@tanstack/react-virtual） |
 | **無障礙** | WCAG 2.1 AA 對比度、ARIA 標籤、鍵盤導覽、焦點管理 |
@@ -76,7 +77,7 @@ graph TB
 | TypeScript 5.9 | 型別安全 | strict mode |
 | better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 66 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 77 個測試，透過 Electron 執行 |
 
 ---
 
@@ -125,6 +126,7 @@ ccRewind/
 │   │   ├── database.ts        # SQLite + FTS5 管理
 │   │   ├── indexer.ts         # 增量索引器
 │   │   ├── exporter.ts        # Markdown 匯出
+│   │   ├── updater.ts         # GitHub Release 更新偵測
 │   │   └── ipc-handlers.ts    # IPC 通訊處理
 │   ├── preload/               # contextBridge 安全橋接
 │   │   └── index.ts
@@ -133,12 +135,13 @@ ccRewind/
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # 專案選擇 + Session 清單 + 搜尋
 │   │   │   ├── ChatView/      # 對話閱讀器 + 匯出按鈕
-│   │   │   └── ThemeSwitcher/ # 三主題切換按鈕
+│   │   │   ├── ThemeSwitcher/ # 三主題切換按鈕
+│   │   │   └── UpdateBanner/  # 更新通知橫幅
 │   │   ├── hooks/             # useSession, useSessions, useProjects
 │   │   └── context/           # AppContext + ThemeContext（主題持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（66 個）
+├── tests/                     # Vitest 測試（77 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

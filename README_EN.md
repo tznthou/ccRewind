@@ -38,6 +38,7 @@ Everything is read-only — ccRewind never modifies any file under `~/.claude/`.
 | **Tool Collapsing** | tool_use / tool_result blocks collapsed by default, click to expand |
 | **Full-Text Search** | FTS5 index with all-projects / current-project scope toggle, click-to-jump + highlight |
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
+| **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
 
@@ -74,7 +75,7 @@ graph TB
 | TypeScript 5.9 | Type safety | Strict mode |
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
-| Vitest 3 | Test framework | 66 tests, run through Electron |
+| Vitest 3 | Test framework | 77 tests, run through Electron |
 
 ---
 
@@ -123,6 +124,7 @@ ccRewind/
 │   │   ├── database.ts        # SQLite + FTS5 management
 │   │   ├── indexer.ts         # Incremental indexer
 │   │   ├── exporter.ts        # Markdown export
+│   │   ├── updater.ts         # GitHub Release update checker
 │   │   └── ipc-handlers.ts    # IPC communication handlers
 │   ├── preload/               # contextBridge security bridge
 │   │   └── index.ts
@@ -130,12 +132,14 @@ ccRewind/
 │   │   ├── App.tsx            # Root component
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
-│   │   │   └── ChatView/      # Conversation reader + export button
+│   │   │   ├── ChatView/      # Conversation reader + export button
+│   │   │   ├── ThemeSwitcher/ # Three-theme toggle
+│   │   │   └── UpdateBanner/  # Update notification banner
 │   │   ├── hooks/             # useSession, useSessions, useProjects
 │   │   └── context/           # AppContext (useReducer state management)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (66)
+├── tests/                     # Vitest tests (77)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

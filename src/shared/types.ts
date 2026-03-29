@@ -52,6 +52,22 @@ export interface ElectronAPI {
   exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
+  /** 檢查更新（回傳最新狀態） */
+  checkForUpdates: () => Promise<UpdateState>
+  /** 取得目前更新狀態（不發請求） */
+  getUpdateState: () => Promise<UpdateState>
+  /** 開啟 GitHub Release 頁面 */
+  openReleasePage: () => Promise<void>
+  /** 略過此版本的更新提示 */
+  dismissUpdate: (version: string) => Promise<void>
+}
+
+/** 更新檢查狀態 */
+export interface UpdateState {
+  status: 'idle' | 'checking' | 'available' | 'dismissed' | 'latest' | 'error'
+  currentVersion: string
+  latestVersion: string | null
+  releaseUrl: string | null
 }
 
 /** 索引進度 */

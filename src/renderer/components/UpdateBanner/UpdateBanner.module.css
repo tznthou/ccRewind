@@ -1,0 +1,91 @@
+.banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-lg);
+  background-color: var(--color-accent-light);
+  border-bottom: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+}
+
+/* Terminal 主題：降低亮度，改描邊風格 */
+:global([data-theme="terminal"]) .banner {
+  background-color: rgba(34, 211, 238, 0.08);
+  border-bottom-style: dashed;
+}
+
+:global([data-theme="terminal"]) .downloadBtn {
+  background-color: transparent;
+  border: 1px solid var(--color-accent);
+  color: var(--color-accent);
+}
+
+:global([data-theme="terminal"]) .downloadBtn:hover {
+  background-color: rgba(34, 211, 238, 0.15);
+  opacity: 1;
+}
+
+:global([data-theme="terminal"]) .dismissBtn {
+  color: var(--color-text-muted);
+  border-color: var(--color-border);
+}
+
+:global([data-theme="terminal"]) .dismissBtn:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.info {
+  flex: 1;
+  min-width: 0;
+}
+
+.versionText {
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-xs);
+  flex-shrink: 0;
+}
+
+.downloadBtn {
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: none;
+  background-color: var(--color-accent);
+  color: #fff;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.downloadBtn:hover {
+  opacity: 0.85;
+}
+
+.downloadBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.dismissBtn {
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.dismissBtn:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.dismissBtn:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

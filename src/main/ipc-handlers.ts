@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import type { Database } from './database'
 import type { IndexerStatus } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
+import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
 /** 註冊所有 IPC handlers（invoke/handle 模式） */
 export function registerIpcHandlers(db: Database): void {
@@ -26,6 +27,19 @@ export function registerIpcHandlers(db: Database): void {
   ipcMain.handle('export:markdown', async (_event, sessionId: unknown) => {
     if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
     return exportSessionAsMarkdown(db, sessionId)
+  })
+
+  // ── 更新檢查 ──
+
+  ipcMain.handle('updates:check', () => checkForUpdates())
+
+  ipcMain.handle('updates:get-state', () => getUpdateState())
+
+  ipcMain.handle('updates:open-release', () => openReleasePage())
+
+  ipcMain.handle('updates:dismiss', (_event, version: unknown) => {
+    if (typeof version !== 'string') throw new Error('Invalid version')
+    dismissUpdate(version)
   })
 }
 
