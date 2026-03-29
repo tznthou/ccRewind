@@ -81,6 +81,12 @@
   font-size: var(--font-size-sm);
 }
 
+.content :global(.hljs) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
 .content :global(:not(pre) > code) {
   background-color: var(--color-code-inline-bg);
   padding: 1px 4px;

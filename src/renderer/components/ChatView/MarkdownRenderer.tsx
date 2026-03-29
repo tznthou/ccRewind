@@ -3,6 +3,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeSanitize from 'rehype-sanitize'
+import 'highlight.js/styles/atom-one-dark.css'
 
 interface MarkdownRendererProps {
   content: string
