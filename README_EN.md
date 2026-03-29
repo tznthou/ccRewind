@@ -9,8 +9,9 @@
 
 A lightweight, read-only, offline-first desktop app for browsing your Claude Code conversation history.
 
-<!-- ![ccRewind Preview](docs/preview.png) -->
-<!-- TODO: Add app screenshot -->
+<p align="center">
+  <img src="docs/icon-github.png" alt="ccRewind" width="128" />
+</p>
 
 ---
 

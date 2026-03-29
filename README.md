@@ -9,8 +9,9 @@
 
 Claude Code 對話回放與考古工具——輕量、只讀、離線優先的桌面應用程式，讓你回顧與 Claude Code 的每一次協作對話。
 
-<!-- ![ccRewind Preview](docs/preview.png) -->
-<!-- TODO: 補上應用程式截圖 -->
+<p align="center">
+  <img src="docs/icon-github.png" alt="ccRewind" width="128" />
+</p>
 
 ---
 
