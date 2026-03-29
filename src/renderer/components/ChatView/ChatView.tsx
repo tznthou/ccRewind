@@ -37,14 +37,19 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     pendingScrollRef.current = null
 
     const el = containerRef.current?.querySelector(`[data-message-id="${mid}"]`)
-    if (el instanceof HTMLElement) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      el.classList.add(styles.highlightTarget)
-      const onEnd = () => {
-        el.classList.remove(styles.highlightTarget)
-        el.removeEventListener('animationend', onEnd)
-      }
-      el.addEventListener('animationend', onEnd)
+    if (!(el instanceof HTMLElement)) return
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.classList.add(styles.highlightTarget)
+    const onEnd = () => {
+      el.classList.remove(styles.highlightTarget)
+      el.removeEventListener('animationend', onEnd)
+    }
+    el.addEventListener('animationend', onEnd)
+
+    return () => {
+      el.classList.remove(styles.highlightTarget)
+      el.removeEventListener('animationend', onEnd)
     }
   }, [loading])
 
