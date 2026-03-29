@@ -37,10 +37,12 @@ ccRewind 讀取 `~/.claude/projects/` 下的 JSONL 對話紀錄，建立 SQLite 
 | **對話瀏覽** | user/assistant 氣泡介面，Markdown 渲染 + 程式碼語法高亮 |
 | **三主題切換** | 檔案室（Archive）、時間線（Timeline）、終端回憶（Terminal），一鍵切換 |
 | **Tool 摺疊** | tool_use / tool_result 預設摺疊，點擊展開查看完整內容 |
-| **全文搜尋** | FTS5 索引，支援全部專案 / 目前專案範圍切換，點擊跳轉 + 高亮 |
+| **全文搜尋** | FTS5 索引，分頁載入，結果按 session 分組，支援全部專案 / 目前專案範圍切換 |
+| **資料保全** | JSONL 被刪除時自動封存對話，不丟失任何歷史紀錄 |
 | **Markdown 匯出** | 一鍵將 session 匯出為 `.md` 檔案，含 metadata 表格 + tool 摺疊 |
 | **更新通知** | 啟動時自動偵測 GitHub 新版本，一鍵開啟下載頁面 |
 | **增量索引** | 首次啟動掃描所有 JSONL，後續僅處理新增/修改的檔案 |
+| **DB 自動遷移** | schema 變更時自動升級，大型資料庫無痛升版 |
 | **虛擬捲動** | 大量 session 不卡頓（@tanstack/react-virtual） |
 | **無障礙** | WCAG 2.1 AA 對比度、ARIA 標籤、鍵盤導覽、焦點管理 |
 
@@ -77,7 +79,7 @@ graph TB
 | TypeScript 5.9 | 型別安全 | strict mode |
 | better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 77 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 86 個測試，透過 Electron 執行 |
 
 ---
 
@@ -141,7 +143,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext（主題持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（77 個）
+├── tests/                     # Vitest 測試（86 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

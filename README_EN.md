@@ -36,10 +36,12 @@ Everything is read-only — ccRewind never modifies any file under `~/.claude/`.
 |---------|-------------|
 | **Conversation Browser** | User/assistant bubble UI with Markdown rendering + syntax highlighting |
 | **Tool Collapsing** | tool_use / tool_result blocks collapsed by default, click to expand |
-| **Full-Text Search** | FTS5 index with all-projects / current-project scope toggle, click-to-jump + highlight |
+| **Full-Text Search** | FTS5 index with pagination, results grouped by session, all-projects / current-project scope toggle |
+| **Data Preservation** | Automatically archives conversations when JSONL files are deleted — no history is ever lost |
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards |
+| **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
 
 ---
@@ -75,7 +77,7 @@ graph TB
 | TypeScript 5.9 | Type safety | Strict mode |
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
-| Vitest 3 | Test framework | 77 tests, run through Electron |
+| Vitest 3 | Test framework | 86 tests, run through Electron |
 
 ---
 
@@ -139,7 +141,7 @@ ccRewind/
 │   │   └── context/           # AppContext (useReducer state management)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (77)
+├── tests/                     # Vitest tests (86)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
