@@ -30,6 +30,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     if (!(el instanceof HTMLElement)) return
 
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    el.focus({ preventScroll: true })
     el.classList.add(styles.highlightTarget)
     const onEnd = () => {
       el.classList.remove(styles.highlightTarget)

@@ -2,14 +2,12 @@ import { useProjects } from '../../hooks/useProjects'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import styles from './Sidebar.module.css'
 
-/** /Users/tznthou/Documents/foo → ~/Documents/foo */
+/** Shorten absolute path to ~/... for display */
 function shortenPath(displayName: string): string {
-  const homePrefix = '/Users/'
-  if (!displayName.startsWith(homePrefix)) return displayName
-  const afterUsers = displayName.slice(homePrefix.length)
-  const slashIndex = afterUsers.indexOf('/')
-  if (slashIndex === -1) return '~'
-  return '~' + afterUsers.slice(slashIndex)
+  // Match both Unix /Users/xxx/... and Windows C:\Users\xxx\...
+  const match = displayName.match(/^(?:[A-Z]:)?[\\/]Users[\\/][^\\/]+(.*)$/i)
+  if (!match) return displayName
+  return '~' + match[1].replace(/\\/g, '/')
 }
 
 export default function ProjectList() {

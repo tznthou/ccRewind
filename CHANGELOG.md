@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-03-29
+
+### Fixed
+
+- Color contrast WCAG AA compliance for all three themes:
+  - Timeline: `--color-text-muted` #94A3B8 → #6B7994 (2.47:1 → 4.67:1)
+  - Archive: `--color-text-muted` #9A8E7D → #706658 (2.8:1 → 4.97:1)
+  - Terminal: `--color-text-muted` #4A5068 → #9298AC (2.15:1 → 6.11:1)
+  - Terminal: `--color-text-secondary` #7A8194 → #8D95A8
+  - Terminal: `--color-border` #2E3140 → #3D4255 (dashed separators more visible)
+- Focus management: search jump now moves focus to target message (`tabIndex={-1}` + `el.focus()`)
+- Path hardcoding in `ProjectList.tsx`: replaced `/Users/` prefix with cross-platform regex
+- Search bar missing loading state: input disables with "搜尋中..." placeholder during query
+
 ## [0.4.0] - 2026-03-29
 
 ### Added

@@ -17,7 +17,7 @@
   --color-border: #CBD5E1;
   --color-text: #1E293B;
   --color-text-secondary: #64748B;
-  --color-text-muted: #94A3B8;
+  --color-text-muted: #6B7994;
   --color-accent: #0891B2;
   --color-accent-light: #E0F7FA;
   --color-error: #dc3545;
@@ -127,7 +127,7 @@ mark {
   --color-border: #C4B9A5;
   --color-text: #2C2417;
   --color-text-secondary: #7A6E5D;
-  --color-text-muted: #9A8E7D;
+  --color-text-muted: #706658;
   --color-accent: #B8860B;
   --color-accent-light: #F0E6D0;
   --color-accent-user: #B8860B;
@@ -159,11 +159,11 @@ mark {
   --color-bg: #1B1D23;
   --color-bg-sidebar: #16181E;
   --color-bg-hover: #252830;
-  --color-bg-selected: #2E3140;
-  --color-border: #2E3140;
+  --color-bg-selected: #353A4D;
+  --color-border: #3D4255;
   --color-text: #C9CDD8;
-  --color-text-secondary: #7A8194;
-  --color-text-muted: #4A5068;
+  --color-text-secondary: #8D95A8;
+  --color-text-muted: #9298AC;
   --color-accent: #22D3EE;
   --color-accent-light: rgba(34, 211, 238, 0.1);
   --color-accent-user: #22D3EE;

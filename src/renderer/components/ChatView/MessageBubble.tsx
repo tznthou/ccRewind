@@ -79,7 +79,7 @@ export default memo(function MessageBubble({ message, searchQuery = '' }: Messag
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} tabIndex={-1}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>

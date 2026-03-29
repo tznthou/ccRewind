@@ -6,6 +6,7 @@ export default function SearchBar() {
   const { selectedProjectId, searchQuery } = useAppState()
   const dispatch = useAppDispatch()
   const [input, setInput] = useState(searchQuery)
+  const [searching, setSearching] = useState(false)
   const [scope, setScope] = useState<'all' | 'project'>('all')
 
   // 外部清搜尋（如切換專案）時同步 input
@@ -14,12 +15,15 @@ export default function SearchBar() {
   const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && input.trim()) {
       const projectId = scope === 'project' ? selectedProjectId : null
+      setSearching(true)
       try {
         const results = await window.api.search(input.trim(), projectId)
         dispatch({ type: 'SET_SEARCH', query: input.trim(), results })
       } catch {
         // FTS5 查詢語法錯誤等 — 視為無結果
         dispatch({ type: 'SET_SEARCH', query: input.trim(), results: [] })
+      } finally {
+        setSearching(false)
       }
     }
     if (e.key === 'Escape') {
@@ -39,10 +43,11 @@ export default function SearchBar() {
         <input
           className={styles.input}
           type="text"
-          placeholder="搜尋對話內容..."
+          placeholder={searching ? '搜尋中...' : '搜尋對話內容...'}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
+          disabled={searching}
         />
         {searchQuery && (
           <button className={styles.clearBtn} onClick={handleClear} aria-label="清除搜尋">
