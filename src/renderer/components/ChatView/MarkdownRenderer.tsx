@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
@@ -10,7 +11,7 @@ interface MarkdownRendererProps {
 const REMARK_PLUGINS = [remarkGfm]
 const REHYPE_PLUGINS = [rehypeSanitize, rehypeHighlight]
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export default memo(function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
     <Markdown
       remarkPlugins={REMARK_PLUGINS}
@@ -19,4 +20,4 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
       {content}
     </Markdown>
   )
-}
+})

@@ -21,7 +21,7 @@ interface ToolResultBlock {
   content: unknown
 }
 
-type ContentBlock = ToolUseBlock | ToolResultBlock | { type: string }
+type ContentBlock = ToolUseBlock | ToolResultBlock
 
 function extractToolBlocks(contentJson: string | null): ContentBlock[] {
   if (!contentJson) return []
@@ -79,31 +79,23 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
         </div>
       )}
 
-      {toolBlocks.map((block, i) => {
-        if (block.type === 'tool_use') {
-          const tb = block as ToolUseBlock
-          return (
-            <ToolBlock
-              key={`tool-${i}`}
-              toolName={tb.name}
-              content={JSON.stringify(tb.input, null, 2)}
-              type="tool_use"
-            />
-          )
-        }
-        if (block.type === 'tool_result') {
-          const tb = block as ToolResultBlock
-          return (
-            <ToolBlock
-              key={`result-${i}`}
-              toolName={tb.tool_use_id.slice(0, 12)}
-              content={typeof tb.content === 'string' ? tb.content : JSON.stringify(tb.content, null, 2)}
-              type="tool_result"
-            />
-          )
-        }
-        return null
-      })}
+      {toolBlocks.map((block, i) =>
+        block.type === 'tool_use' ? (
+          <ToolBlock
+            key={`tool-${i}`}
+            toolName={block.name}
+            content={JSON.stringify(block.input, null, 2)}
+            type="tool_use"
+          />
+        ) : (
+          <ToolBlock
+            key={`result-${i}`}
+            toolName={block.tool_use_id.slice(0, 12)}
+            content={typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)}
+            type="tool_result"
+          />
+        ),
+      )}
     </div>
   )
 })
