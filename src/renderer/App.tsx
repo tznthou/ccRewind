@@ -8,6 +8,7 @@ function AppContent() {
 
   return (
     <div className={styles.layout}>
+      <div className={styles.titleBar} />
       <aside className={styles.sidebar}>
         <Sidebar />
       </aside>

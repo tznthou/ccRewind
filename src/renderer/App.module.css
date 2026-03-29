@@ -1,18 +1,22 @@
 .layout {
-  display: flex;
+  display: grid;
+  grid-template-rows: 28px 1fr;
+  grid-template-columns: var(--sidebar-width) 1fr;
   height: 100vh;
 }
 
+.titleBar {
+  grid-column: 1 / -1;
+  -webkit-app-region: drag;
+}
+
 .sidebar {
-  width: var(--sidebar-width);
   border-right: 1px solid var(--color-border);
   background-color: var(--color-bg-sidebar);
   overflow-y: auto;
-  flex-shrink: 0;
 }
 
 .main {
-  flex: 1;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

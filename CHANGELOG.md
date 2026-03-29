@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-29
+
+### Added
+
+- Full-text search UI: SearchBar with Enter-to-search, scope toggle (all/current project)
+- SearchResults with FTS5 snippet preview, click-to-jump with scroll + pulse animation
+- MessageBubble search highlight (`<mark>`) for user messages
+- Markdown export: session → `.md` file with metadata table, user/assistant messages, tool `<details>` blocks
+- Export button in ChatView toolbar with native save dialog
+- Dynamic backtick fence (`makeFence`) for safe code block export
+- Title bar drag region for macOS `hiddenInset` window
+
+### Fixed
+
+- Same-session search jump: effect now triggers on `targetMessageId` change (not just `loading`)
+- Search excludes non-rendered message types (`last-prompt`, `queue-operation`)
+- Removed redundant `pendingScrollRef` in favor of direct `targetMessageId` usage
+
+### Changed
+
+- Exporter extracts tool blocks once per message (was parsed twice: filter + render)
+
 ## [0.3.0] - 2026-03-29
 
 ### Added
