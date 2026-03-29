@@ -37,11 +37,18 @@ function createWindow(): BrowserWindow {
     return { action: 'deny' }
   })
 
-  // #3: External links open in default browser
+  // #3: External links open in default browser (protocol whitelist)
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (url !== mainWindow.webContents.getURL()) {
       event.preventDefault()
-      shell.openExternal(url)
+      try {
+        const parsed = new URL(url)
+        if (parsed.protocol === 'https:' || parsed.protocol === 'http:') {
+          shell.openExternal(url)
+        }
+      } catch {
+        // invalid URL — silently ignore
+      }
     }
   })
 

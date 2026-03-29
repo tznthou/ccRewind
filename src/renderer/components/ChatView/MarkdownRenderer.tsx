@@ -1,13 +1,14 @@
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
+import rehypeSanitize from 'rehype-sanitize'
 
 interface MarkdownRendererProps {
   content: string
 }
 
 const REMARK_PLUGINS = [remarkGfm]
-const REHYPE_PLUGINS = [rehypeHighlight]
+const REHYPE_PLUGINS = [rehypeHighlight, rehypeSanitize]
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
