@@ -149,18 +149,20 @@ describe('IPC Handlers', () => {
     it('returns search results for matching query', () => {
       seedData(db)
       const handler = getHandler('search:query')
-      const result = handler(event, 'Hello')
-      expect(result).toHaveLength(1)
-      expect(result[0]).toEqual(expect.objectContaining({
+      const page = handler(event, 'Hello')
+      expect(page.results).toHaveLength(1)
+      expect(page.results[0]).toEqual(expect.objectContaining({
         sessionId: 'sess-1',
         projectId: 'proj-1',
       }))
     })
 
-    it('returns empty array for no matches', () => {
+    it('returns empty page for no matches', () => {
       seedData(db)
       const handler = getHandler('search:query')
-      expect(handler(event, 'nonexistent-xyz-query')).toEqual([])
+      const page = handler(event, 'nonexistent-xyz-query')
+      expect(page.results).toEqual([])
+      expect(page.hasMore).toBe(false)
     })
 
     it('filters by project when projectId provided', () => {
@@ -182,9 +184,9 @@ describe('IPC Handlers', () => {
       })
 
       const handler = getHandler('search:query')
-      const result = handler(event, 'Hello', 'proj-2')
-      expect(result).toHaveLength(1)
-      expect(result[0].projectId).toBe('proj-2')
+      const page = handler(event, 'Hello', 'proj-2')
+      expect(page.results).toHaveLength(1)
+      expect(page.results[0].projectId).toBe('proj-2')
     })
   })
 

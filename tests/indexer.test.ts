@@ -130,9 +130,9 @@ describe('runIndexer', () => {
     expect(last.progress).toBe(100)
 
     // 驗證 FTS 可搜尋
-    const searchResults = db.search('deploy')
-    expect(searchResults.length).toBeGreaterThanOrEqual(1)
-    expect(searchResults[0].sessionId).toBe('sess-001')
+    const page = db.search('deploy')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].sessionId).toBe('sess-001')
   })
 
   it('incrementalRun → only processes new/modified files', async () => {

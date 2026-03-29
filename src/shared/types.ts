@@ -14,6 +14,7 @@ export interface SessionMeta {
   messageCount: number
   startedAt: string | null
   endedAt: string | null
+  archived: boolean
 }
 
 /** 訊息 */
@@ -42,12 +43,28 @@ export interface SearchResult {
   timestamp: string | null
 }
 
+/** 搜尋分頁回應 */
+export interface SearchPage {
+  results: SearchResult[]
+  offset: number
+  hasMore: boolean
+}
+
+/** 按 session 分組的搜尋結果 */
+export interface GroupedSearchResult {
+  sessionId: string
+  sessionTitle: string | null
+  projectId: string
+  projectName: string
+  matches: Array<{ messageId: number; snippet: string; timestamp: string | null }>
+}
+
 /** Renderer 透過 contextBridge 取得的 API */
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>
   getSessions: (projectId: string) => Promise<SessionMeta[]>
   loadSession: (sessionId: string) => Promise<Message[]>
-  search: (query: string, projectId?: string | null) => Promise<SearchResult[]>
+  search: (query: string, projectId?: string | null, offset?: number) => Promise<SearchPage>
   /** 匯出 session 為 Markdown 檔案 */
   exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */

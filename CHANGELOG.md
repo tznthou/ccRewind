@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.0] - 2026-03-30
+
+### Added
+
+- DB migration system: `schema_version` table with automatic migration runner
+- Search pagination: 30 results per page with "Load More" button
+- Search results grouped by session: collapsible session groups with match count badges
+- Archived sessions: JSONL files deleted from disk are preserved in DB as "已封存" instead of being permanently deleted
+- `message_content` and `message_archive` side tables for data preservation
+
+### Changed
+
+- **Breaking (DB schema)**: `messages` table split into 3 tables for search performance — `content_json` moved to `message_content`, `raw_json` moved to `message_archive`. Existing DBs auto-migrate on startup (~60-90s for large DBs)
+- FTS5 snippet context expanded from 32 to 64 tokens
+- FTS5 snippet delimiters changed from `<mark>` HTML to Unicode Private Use Area sentinels (U+E000/U+E001) to prevent UI glitch when indexed content contains literal `<mark>` text
+- `removeStaleSessionsExcept()` renamed to `archiveStaleSessionsExcept()` — sets `archived=1` instead of deleting
+- Search API returns `SearchPage` (with `results`, `offset`, `hasMore`) instead of flat `SearchResult[]`
+- Search scope preserved across pagination (fixes bug where "Load More" used wrong project filter)
+
+### Fixed
+
+- Archived sessions re-index correctly when JSONL file reappears (even if mtime unchanged)
+- Migration v1 uses `INSERT OR IGNORE` to prevent UNIQUE conflict on partial migration recovery
+- Search `limit` hard-capped at 100 as defense-in-depth
+- IPC search query length limited to 500 characters
+- Collapsed search groups reset on new search query
+
 ## [0.8.0] - 2026-03-29
 
 ### Added

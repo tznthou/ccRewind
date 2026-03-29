@@ -56,6 +56,30 @@ describe('schema', () => {
   })
 })
 
+describe('migration system', () => {
+  it('schema_version table exists with baseline', () => {
+    const rows = db.rawAll<{ version: number; description: string }>(
+      'SELECT version, description FROM schema_version ORDER BY version',
+    )
+    expect(rows.length).toBeGreaterThanOrEqual(1)
+    expect(rows[0].version).toBe(0)
+    expect(rows[0].description).toBe('baseline')
+  })
+
+  it('getSchemaVersion returns current version', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(0)
+  })
+
+  it('double construction does not re-apply migrations', () => {
+    const v1 = db.getSchemaVersion()
+    // 用同一路徑重新建構 Database，不應重跑已套用的 migration
+    const db2 = new Database(path.join(tmpDir, 'test.db'))
+    const v2 = db2.getSchemaVersion()
+    db2.close()
+    expect(v2).toBe(v1)
+  })
+})
+
 describe('upsertProject', () => {
   it('insert then update → only one row, displayName updated', () => {
     db.upsertProject('proj-1', '/Users/test/proj1')
@@ -199,8 +223,8 @@ describe('updateProjectStats', () => {
   })
 })
 
-describe('removeStaleSessionsExcept', () => {
-  it('removes sessions not in keepIds set', () => {
+describe('archiveStaleSessionsExcept', () => {
+  it('archives sessions not in keepIds set (messages preserved, FTS still works)', () => {
     db.indexSession({
       sessionId: 'keep-me', projectId: 'proj-1', projectDisplayName: '/test',
       title: null, messageCount: 1, filePath: '/tmp/a.jsonl', fileSize: 0,
@@ -208,23 +232,153 @@ describe('removeStaleSessionsExcept', () => {
       messages: [msg({ type: 'user', role: 'user', contentText: 'Keep this', sequence: 0 })],
     })
     db.indexSession({
-      sessionId: 'delete-me', projectId: 'proj-1', projectDisplayName: '/test',
+      sessionId: 'archive-me', projectId: 'proj-1', projectDisplayName: '/test',
       title: null, messageCount: 1, filePath: '/tmp/b.jsonl', fileSize: 0,
       fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
-      messages: [msg({ type: 'user', role: 'user', contentText: 'Delete this', sequence: 0 })],
+      messages: [msg({ type: 'user', role: 'user', contentText: 'Archive this content', sequence: 0 })],
     })
 
-    db.removeStaleSessionsExcept(new Set(['keep-me']))
+    db.archiveStaleSessionsExcept(new Set(['keep-me']))
 
     const sessions = db.getSessions('proj-1')
-    expect(sessions).toHaveLength(1)
-    expect(sessions[0].id).toBe('keep-me')
+    expect(sessions).toHaveLength(2)
 
-    // 刪除的 session 的 messages 也應被清除
-    expect(db.getMessages('delete-me')).toEqual([])
-    // FTS 也不應搜到被刪的內容
-    const results = db.search('Delete')
-    expect(results).toEqual([])
+    const kept = sessions.find(s => s.id === 'keep-me')!
+    expect(kept.archived).toBe(false)
+
+    const archived = sessions.find(s => s.id === 'archive-me')!
+    expect(archived.archived).toBe(true)
+
+    // archived session 的 messages 仍存在
+    const msgs = db.getMessages('archive-me')
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].contentText).toBe('Archive this content')
+
+    // FTS 仍可搜尋到 archived session 的內容
+    const page = db.search('Archive')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results.some(r => r.sessionId === 'archive-me')).toBe(true)
+  })
+
+  it('re-indexing an archived session un-archives it', () => {
+    db.indexSession({
+      sessionId: 'revive-me', projectId: 'proj-1', projectDisplayName: '/test',
+      title: 'Original', messageCount: 1, filePath: '/tmp/c.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', contentText: 'Will be archived', sequence: 0 })],
+    })
+
+    db.archiveStaleSessionsExcept(new Set([]))
+    let sessions = db.getSessions('proj-1')
+    expect(sessions[0].archived).toBe(true)
+
+    // re-index → un-archive
+    db.indexSession({
+      sessionId: 'revive-me', projectId: 'proj-1', projectDisplayName: '/test',
+      title: 'Revived', messageCount: 1, filePath: '/tmp/c.jsonl', fileSize: 100,
+      fileMtime: '2024-01-02T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', contentText: 'Back alive', sequence: 0 })],
+    })
+
+    sessions = db.getSessions('proj-1')
+    expect(sessions[0].archived).toBe(false)
+    expect(sessions[0].title).toBe('Revived')
+  })
+})
+
+describe('table split (message_content + message_archive)', () => {
+  it('message_content and message_archive tables exist', () => {
+    const tables = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+    )
+    const names = tables.map(r => r.name)
+    expect(names).toContain('message_content')
+    expect(names).toContain('message_archive')
+  })
+
+  it('indexSession stores content_json in message_content, raw_json in message_archive', () => {
+    db.indexSession({
+      sessionId: 'split-001', projectId: 'proj-split', projectDisplayName: '/test/split',
+      title: 'Split test', messageCount: 1, filePath: '/tmp/split.jsonl', fileSize: 100,
+      fileMtime: '2024-06-01T00:00:00.000Z', startedAt: '2024-06-01T00:00:00.000Z', endedAt: '2024-06-01T00:00:00.000Z',
+      messages: [msg({
+        type: 'user', role: 'user', contentText: 'split test',
+        contentJson: '["test content json"]', rawJson: '{"raw":"json line"}',
+        sequence: 0,
+      })],
+    })
+
+    // messages 表不應有 content_json 和 raw_json 欄位
+    const msgCols = db.rawAll<{ name: string }>(
+      "PRAGMA table_info(messages)",
+    ).map(r => r.name)
+    expect(msgCols).not.toContain('content_json')
+    expect(msgCols).not.toContain('raw_json')
+
+    // message_content 應有資料
+    const content = db.rawAll<{ content_json: string }>(
+      "SELECT content_json FROM message_content",
+    )
+    expect(content).toHaveLength(1)
+    expect(content[0].content_json).toBe('["test content json"]')
+
+    // message_archive 應有資料
+    const archive = db.rawAll<{ raw_json: string }>(
+      "SELECT raw_json FROM message_archive",
+    )
+    expect(archive).toHaveLength(1)
+    expect(archive[0].raw_json).toBe('{"raw":"json line"}')
+  })
+
+  it('getMessages returns contentJson via JOIN', () => {
+    db.indexSession({
+      sessionId: 'join-001', projectId: 'proj-join', projectDisplayName: '/test/join',
+      title: 'Join test', messageCount: 1, filePath: '/tmp/join.jsonl', fileSize: 100,
+      fileMtime: '2024-06-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({
+        type: 'assistant', role: 'assistant', contentText: 'hello',
+        contentJson: '{"blocks":[]}', sequence: 0,
+      })],
+    })
+
+    const msgs = db.getMessages('join-001')
+    expect(msgs).toHaveLength(1)
+    expect(msgs[0].contentJson).toBe('{"blocks":[]}')
+  })
+
+  it('re-index cascades delete to message_content and message_archive', () => {
+    db.indexSession({
+      sessionId: 'cascade-001', projectId: 'proj-cas', projectDisplayName: '/test/cas',
+      title: 'Cascade', messageCount: 1, filePath: '/tmp/cas.jsonl', fileSize: 100,
+      fileMtime: '2024-06-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({
+        type: 'user', role: 'user', contentText: 'old',
+        contentJson: '"old"', rawJson: '{"old":true}', sequence: 0,
+      })],
+    })
+
+    // re-index with new data
+    db.indexSession({
+      sessionId: 'cascade-001', projectId: 'proj-cas', projectDisplayName: '/test/cas',
+      title: 'Cascade Updated', messageCount: 1, filePath: '/tmp/cas.jsonl', fileSize: 200,
+      fileMtime: '2024-06-02T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({
+        type: 'user', role: 'user', contentText: 'new',
+        contentJson: '"new"', rawJson: '{"new":true}', sequence: 0,
+      })],
+    })
+
+    const content = db.rawAll<{ content_json: string }>(
+      "SELECT content_json FROM message_content mc JOIN messages m ON m.id = mc.message_id WHERE m.session_id = 'cascade-001'",
+    )
+    expect(content).toHaveLength(1)
+    expect(content[0].content_json).toBe('"new"')
+
+    const archive = db.rawAll<{ raw_json: string }>(
+      "SELECT raw_json FROM message_archive ma JOIN messages m ON m.id = ma.message_id WHERE m.session_id = 'cascade-001'",
+    )
+    expect(archive).toHaveLength(1)
+    expect(archive[0].raw_json).toBe('{"new":true}')
   })
 })
 
@@ -252,28 +406,32 @@ describe('FTS5 search', () => {
   })
 
   it('fts5Query → returns matches with snippet', () => {
-    const results = db.search('deploy')
-    expect(results.length).toBeGreaterThanOrEqual(2)
-    for (const r of results) {
+    const page = db.search('deploy')
+    expect(page.results.length).toBeGreaterThanOrEqual(2)
+    for (const r of page.results) {
       expect(r.snippet.toLowerCase()).toContain('deploy')
     }
   })
 
   it('search with projectId filter → only returns from that project', () => {
-    const results = db.search('deploy', 'proj-1')
-    expect(results.length).toBeGreaterThanOrEqual(1)
-    for (const r of results) {
+    const page = db.search('deploy', 'proj-1')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    for (const r of page.results) {
       expect(r.projectId).toBe('proj-1')
     }
   })
 
-  it('search no match → returns empty array', () => {
-    expect(db.search('nonexistentkeyword12345')).toEqual([])
+  it('search no match → returns empty page', () => {
+    const page = db.search('nonexistentkeyword12345')
+    expect(page.results).toEqual([])
+    expect(page.hasMore).toBe(false)
   })
 
-  it('malformed FTS query → returns empty array, no throw', () => {
+  it('malformed FTS query → returns empty page, no throw', () => {
     expect(() => db.search('"unclosed quote')).not.toThrow()
-    expect(db.search('"unclosed quote')).toEqual([])
+    const page = db.search('"unclosed quote')
+    expect(page.results).toEqual([])
+    expect(page.hasMore).toBe(false)
   })
 
   it('re-index cleans up FTS → old content not searchable', () => {
@@ -287,9 +445,22 @@ describe('FTS5 search', () => {
       ],
     })
 
-    const results = db.search('deploy')
-    for (const r of results) {
+    const page = db.search('deploy')
+    for (const r of page.results) {
       expect(r.sessionId).not.toBe('sess-001')
     }
+  })
+
+  it('pagination: offset + limit + hasMore', () => {
+    // 已有 3 筆含 "deploy" 的 messages（2 from sess-001, 1 from sess-002）
+    const page1 = db.search('deploy', null, 0, 2)
+    expect(page1.results).toHaveLength(2)
+    expect(page1.offset).toBe(0)
+    expect(page1.hasMore).toBe(true)
+
+    const page2 = db.search('deploy', null, 2, 2)
+    expect(page2.results.length).toBeGreaterThanOrEqual(1)
+    expect(page2.offset).toBe(2)
+    expect(page2.hasMore).toBe(false)
   })
 })

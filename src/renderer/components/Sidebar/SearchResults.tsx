@@ -1,4 +1,4 @@
-import { useState, useMemo, type ReactNode } from 'react'
+import { useState, useMemo, useEffect, type ReactNode } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { formatTime } from '../../utils/formatTime'
 import type { SearchResult, GroupedSearchResult } from '../../../shared/types'
@@ -46,6 +46,8 @@ export default function SearchResults() {
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
 
   const groups = useMemo(() => groupSearchResults(searchResults), [searchResults])
+
+  useEffect(() => { setCollapsedGroups(new Set()) }, [searchQuery])
 
   const toggleGroup = (sessionId: string) => {
     setCollapsedGroups(prev => {
