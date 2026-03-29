@@ -69,11 +69,11 @@ function makeFence(content: string, lang?: string): string {
 /** 純函式：將 session 資料轉為 Markdown 字串 */
 export function sessionToMarkdown(data: ExportSessionData): string {
   const title = data.title || 'Untitled Session'
-  const visibleMessages = data.messages.filter((m) => {
-    if (m.type === 'last-prompt' || m.type === 'queue-operation') return false
-    const toolBlocks = extractToolBlocks(m.contentJson)
-    return m.contentText || toolBlocks.length > 0
-  })
+  // 一次解析 tool blocks，避免 filter + render 雙重 JSON.parse
+  const prepared = data.messages
+    .filter((m) => m.type !== 'last-prompt' && m.type !== 'queue-operation')
+    .map((m) => ({ msg: m, toolBlocks: extractToolBlocks(m.contentJson) }))
+    .filter(({ msg, toolBlocks }) => msg.contentText || toolBlocks.length > 0)
 
   const lines: string[] = []
 
@@ -85,13 +85,13 @@ export function sessionToMarkdown(data: ExportSessionData): string {
   lines.push(`| Project | ${data.projectName} |`)
   lines.push(`| Started | ${data.startedAt ?? '—'} |`)
   lines.push(`| Ended | ${data.endedAt ?? '—'} |`)
-  lines.push(`| Messages | ${visibleMessages.length} |`)
+  lines.push(`| Messages | ${prepared.length} |`)
   lines.push('')
   lines.push('---')
   lines.push('')
 
   // Messages
-  for (const msg of visibleMessages) {
+  for (const { msg, toolBlocks } of prepared) {
     const role = msg.role === 'user' ? 'User' : 'Assistant'
     lines.push(`## ${role}`)
     lines.push('')
@@ -100,8 +100,6 @@ export function sessionToMarkdown(data: ExportSessionData): string {
       lines.push(msg.contentText)
       lines.push('')
     }
-
-    const toolBlocks = extractToolBlocks(msg.contentJson)
     for (const block of toolBlocks) {
       if (block.type === 'tool_use') {
         const content = formatToolContent(block.input)
