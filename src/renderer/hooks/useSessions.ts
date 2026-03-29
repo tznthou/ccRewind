@@ -20,12 +20,16 @@ export function useSessions(projectId: string | null) {
     setFetchedPhase(indexerPhase)
   } else if (indexerPhase !== fetchedPhase) {
     setFetchedPhase(indexerPhase)
-    setLoading(true)
-    setError(null)
+    if (indexerPhase === 'done') {
+      setLoading(true)
+      setError(null)
+    }
   }
 
   useEffect(() => {
     if (!projectId) return
+    // 跳過 indexer 中間 phase，只在 mount 或 done 時 fetch
+    if (indexerPhase !== null && indexerPhase !== 'done') return
 
     let cancelled = false
 

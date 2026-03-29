@@ -8,7 +8,7 @@ interface MarkdownRendererProps {
 }
 
 const REMARK_PLUGINS = [remarkGfm]
-const REHYPE_PLUGINS = [rehypeHighlight, rehypeSanitize]
+const REHYPE_PLUGINS = [rehypeSanitize, rehypeHighlight]
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (

@@ -12,14 +12,19 @@ export function useProjects() {
   const indexerPhase = indexerStatus?.phase ?? null
   const [fetchedPhase, setFetchedPhase] = useState(indexerPhase)
 
-  // render-phase 重置（React 支援的 getDerivedStateFromProps 模式）
+  // render-phase 重置：只在 indexer 完成時觸發 refetch，中間 phase 不 refetch
   if (indexerPhase !== fetchedPhase) {
     setFetchedPhase(indexerPhase)
-    setLoading(true)
-    setError(null)
+    if (indexerPhase === 'done') {
+      setLoading(true)
+      setError(null)
+    }
   }
 
   useEffect(() => {
+    // 跳過 indexer 中間 phase（scanning/parsing/indexing），只在 mount 或 done 時 fetch
+    if (indexerPhase !== null && indexerPhase !== 'done') return
+
     let cancelled = false
 
     window.api.getProjects()
