@@ -11,3 +11,5 @@ mac:
     - zip
   artifactName: ${name}-${version}-${arch}.${ext}
 npmRebuild: true
+asarUnpack:
+  - node_modules/better-sqlite3

@@ -1,6 +1,6 @@
 {
   "name": "ccrewind",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "description": "Claude Code 對話回放與考古工具",
   "main": "./out/main/index.js",
   "scripts": {
@@ -9,7 +9,8 @@
     "dist": "electron-builder build --config electron-builder.yml",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --fix",
-    "test": "vitest run"
+    "test": "ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron ./node_modules/vitest/vitest.mjs run",
+    "postinstall": "electron-rebuild -f -o better-sqlite3"
   },
   "engines": {
     "node": ">=20.0.0 <23.0.0"

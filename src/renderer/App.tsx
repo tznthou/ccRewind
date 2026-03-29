@@ -1,33 +1,36 @@
-function App() {
+import { AppProvider, useAppState } from './context/AppContext'
+import Sidebar from './components/Sidebar/Sidebar'
+import ChatView from './components/ChatView/ChatView'
+import styles from './App.module.css'
+
+function AppContent() {
+  const { selectedSessionId } = useAppState()
+
   return (
-    <div style={{ display: 'flex', height: '100vh' }}>
-      <aside
-        style={{
-          width: 280,
-          borderRight: '1px solid #e0e0e0',
-          padding: 16,
-          overflowY: 'auto',
-          backgroundColor: '#fafafa'
-        }}
-      >
-        <h2 style={{ fontSize: 18, fontWeight: 700 }}>ccRewind</h2>
-        <p style={{ color: '#888', fontSize: 13, marginTop: 4 }}>
-          Claude Code 對話回放工具
-        </p>
+    <div className={styles.layout}>
+      <aside className={styles.sidebar}>
+        <Sidebar />
       </aside>
-      <main
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#999'
-        }}
-      >
-        選擇一個專案開始瀏覽
+      <main className={styles.main}>
+        {selectedSessionId ? (
+          <ChatView sessionId={selectedSessionId} />
+        ) : (
+          <div className={styles.placeholder}>
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>選擇一個 Session 開始瀏覽</span>
+          </div>
+        )}
       </main>
     </div>
   )
 }
 
-export default App
+export default function App() {
+  return (
+    <AppProvider>
+      <AppContent />
+    </AppProvider>
+  )
+}
