@@ -1,0 +1,111 @@
+import type { Message } from '../../../shared/types'
+import MarkdownRenderer from './MarkdownRenderer'
+import ToolBlock from './ToolBlock'
+import styles from './MessageBubble.module.css'
+
+interface MessageBubbleProps {
+  message: Message
+}
+
+interface ToolUseBlock {
+  type: 'tool_use'
+  name: string
+  input: unknown
+}
+
+interface ToolResultBlock {
+  type: 'tool_result'
+  tool_use_id: string
+  content: unknown
+}
+
+type ContentBlock = ToolUseBlock | ToolResultBlock | { type: string }
+
+function extractToolBlocks(contentJson: string | null): ContentBlock[] {
+  if (!contentJson) return []
+  try {
+    const parsed = JSON.parse(contentJson)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (block: unknown): block is ContentBlock =>
+        block != null && typeof block === 'object' &&
+        ((block as ContentBlock).type === 'tool_use' || (block as ContentBlock).type === 'tool_result'),
+    )
+  } catch {
+    return []
+  }
+}
+
+function formatTimestamp(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  const hours = String(d.getHours()).padStart(2, '0')
+  const mins = String(d.getMinutes()).padStart(2, '0')
+  return `${hours}:${mins}`
+}
+
+export default function MessageBubble({ message }: MessageBubbleProps) {
+  const isUser = message.role === 'user'
+  const isSystem = message.type === 'queue-operation'
+  const toolBlocks = extractToolBlocks(message.contentJson)
+
+  // last-prompt 不顯示
+  if (message.type === 'last-prompt') return null
+
+  // queue-operation 顯示為系統提示
+  if (isSystem) {
+    return (
+      <div className={styles.systemMessage}>
+        <span className={styles.systemLabel}>系統</span>
+        <span className={styles.systemText}>
+          {message.contentText?.slice(0, 200) ?? '(queue operation)'}
+        </span>
+      </div>
+    )
+  }
+
+  return (
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`}>
+      <div className={styles.header}>
+        <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
+        <span className={styles.time}>{formatTimestamp(message.timestamp)}</span>
+      </div>
+
+      {message.contentText && (
+        <div className={styles.content}>
+          {isUser ? (
+            <p className={styles.plainText}>{message.contentText}</p>
+          ) : (
+            <MarkdownRenderer content={message.contentText} />
+          )}
+        </div>
+      )}
+
+      {toolBlocks.map((block, i) => {
+        if (block.type === 'tool_use') {
+          const tb = block as ToolUseBlock
+          return (
+            <ToolBlock
+              key={`tool-${i}`}
+              toolName={tb.name}
+              content={JSON.stringify(tb.input, null, 2)}
+              type="tool_use"
+            />
+          )
+        }
+        if (block.type === 'tool_result') {
+          const tb = block as ToolResultBlock
+          return (
+            <ToolBlock
+              key={`result-${i}`}
+              toolName={tb.tool_use_id.slice(0, 12)}
+              content={typeof tb.content === 'string' ? tb.content : JSON.stringify(tb.content, null, 2)}
+              type="tool_result"
+            />
+          )
+        }
+        return null
+      })}
+    </div>
+  )
+}
