@@ -1,6 +1,8 @@
+import { memo } from 'react'
 import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
+import { formatTime } from '../../utils/formatTime'
 import styles from './MessageBubble.module.css'
 
 interface MessageBubbleProps {
@@ -36,15 +38,7 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
   }
 }
 
-function formatTimestamp(iso: string | null): string {
-  if (!iso) return ''
-  const d = new Date(iso)
-  const hours = String(d.getHours()).padStart(2, '0')
-  const mins = String(d.getMinutes()).padStart(2, '0')
-  return `${hours}:${mins}`
-}
-
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
@@ -68,7 +62,7 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
     <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
-        <span className={styles.time}>{formatTimestamp(message.timestamp)}</span>
+        <span className={styles.time}>{formatTime(message.timestamp)}</span>
       </div>
 
       {message.contentText && (
@@ -108,4 +102,4 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       })}
     </div>
   )
-}
+})

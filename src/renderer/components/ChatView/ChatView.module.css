@@ -1,0 +1,26 @@
+.chatView {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xl);
+  min-height: 100%;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex: 1;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-lg);
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  flex: 1;
+  color: var(--color-error);
+  font-size: var(--font-size-base);
+}

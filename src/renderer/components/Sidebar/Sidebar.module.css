@@ -1,0 +1,175 @@
+/* Container — flex column 佔滿 sidebar 高度 */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Sidebar header */
+.header {
+  padding: var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.title {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+}
+
+.subtitle {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  margin-top: var(--space-xs);
+}
+
+/* Project section — 最多佔 40% 高度 */
+.section {
+  flex-shrink: 0;
+  max-height: 40%;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.projectScroll {
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* Session section — 佔剩餘空間 */
+.sessionSection {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Section */
+.sectionLabel {
+  padding: var(--space-sm) var(--space-lg);
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Status / Error text */
+.statusText {
+  padding: var(--space-lg);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+}
+
+.errorText {
+  padding: var(--space-lg);
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+}
+
+/* Project list */
+.projectList {
+  list-style: none;
+}
+
+.projectItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-lg);
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.projectItem:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.projectItem.selected {
+  background-color: var(--color-bg-selected);
+}
+
+.projectName {
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.badge {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-hover);
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* Session list */
+.sessionListContainer {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.sessionItem {
+  padding: var(--space-sm) var(--space-lg);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.1s;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.sessionItem:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.sessionItem.selected {
+  background-color: var(--color-accent-light);
+}
+
+.sessionTitle {
+  font-size: var(--font-size-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionMeta {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+/* Indexer status */
+.indexerStatus {
+  padding: var(--space-sm) var(--space-lg);
+  border-top: 1px solid var(--color-border);
+}
+
+.indexerLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-xs);
+}
+
+.progressTrack {
+  height: 4px;
+  background-color: var(--color-bg-hover);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background-color: var(--color-accent);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
