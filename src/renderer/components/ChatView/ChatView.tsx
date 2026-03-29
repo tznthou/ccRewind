@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
 import MessageBubble from './MessageBubble'
@@ -53,6 +53,17 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     }
   }, [loading])
 
+  const [exporting, setExporting] = useState(false)
+
+  const handleExport = useCallback(async () => {
+    setExporting(true)
+    try {
+      await window.api.exportMarkdown(sessionId)
+    } finally {
+      setExporting(false)
+    }
+  }, [sessionId])
+
   if (loading) {
     return <div className={styles.status}>載入對話中...</div>
   }
@@ -67,6 +78,15 @@ export default function ChatView({ sessionId }: ChatViewProps) {
 
   return (
     <div ref={containerRef} className={styles.chatView}>
+      <div className={styles.toolbar}>
+        <button
+          className={styles.exportButton}
+          onClick={handleExport}
+          disabled={exporting || messages.length === 0}
+        >
+          {exporting ? 'Exporting...' : 'Export Markdown'}
+        </button>
+      </div>
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} />
       ))}

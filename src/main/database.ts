@@ -218,6 +218,31 @@ export class Database {
     return map
   }
 
+  /** 取得匯出所需的 session metadata（含專案名稱） */
+  getSessionForExport(sessionId: string): {
+    title: string | null
+    projectName: string
+    startedAt: string | null
+    endedAt: string | null
+  } | null {
+    const row = this.db.prepare(
+      'SELECT s.title, p.display_name AS project_name, s.started_at, s.ended_at FROM sessions s JOIN projects p ON p.id = s.project_id WHERE s.id = ?',
+    ).get(sessionId) as {
+      title: string | null
+      project_name: string
+      started_at: string | null
+      ended_at: string | null
+    } | undefined
+
+    if (!row) return null
+    return {
+      title: row.title,
+      projectName: row.project_name,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+    }
+  }
+
   // ── Atomic session indexing ──
 
   indexSession(params: IndexSessionParams): void {

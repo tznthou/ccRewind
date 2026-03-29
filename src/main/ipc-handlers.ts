@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import type { Database } from './database'
 import type { IndexerStatus } from '../shared/types'
+import { exportSessionAsMarkdown } from './exporter'
 
 /** 註冊所有 IPC handlers（invoke/handle 模式） */
 export function registerIpcHandlers(db: Database): void {
@@ -20,6 +21,11 @@ export function registerIpcHandlers(db: Database): void {
     if (typeof query !== 'string') throw new Error('Invalid query')
     const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : String(projectId)
     return db.search(query, pid)
+  })
+
+  ipcMain.handle('export:markdown', async (_event, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    return exportSessionAsMarkdown(db, sessionId)
   })
 }
 

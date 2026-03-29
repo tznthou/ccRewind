@@ -5,6 +5,34 @@
   min-height: 100%;
 }
 
+.toolbar {
+  display: flex;
+  justify-content: flex-end;
+  padding-bottom: var(--space-sm);
+}
+
+.exportButton {
+  padding: var(--space-xs) var(--space-md);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  color: var(--color-accent);
+  background: transparent;
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.exportButton:hover:not(:disabled) {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.exportButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .status {
   display: flex;
   align-items: center;
@@ -23,4 +51,13 @@
   flex: 1;
   color: var(--color-error);
   font-size: var(--font-size-base);
+}
+
+.highlightTarget {
+  animation: highlightPulse 1.5s ease-out;
+}
+
+@keyframes highlightPulse {
+  0% { box-shadow: 0 0 0 4px var(--color-accent); }
+  100% { box-shadow: 0 0 0 0 transparent; }
 }

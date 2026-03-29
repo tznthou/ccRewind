@@ -48,6 +48,8 @@ export interface ElectronAPI {
   getSessions: (projectId: string) => Promise<SessionMeta[]>
   loadSession: (sessionId: string) => Promise<Message[]>
   search: (query: string, projectId?: string | null) => Promise<SearchResult[]>
+  /** 匯出 session 為 Markdown 檔案 */
+  exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
 }
