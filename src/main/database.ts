@@ -39,6 +39,27 @@ interface Migration {
   up: (db: BetterSqlite3.Database) => void
 }
 
+/** 重建 message_content / message_archive 表，修正 FK 指向 messages */
+function rebuildSideTables(db: BetterSqlite3.Database): void {
+  db.exec(`
+    ALTER TABLE message_content RENAME TO message_content_old;
+    CREATE TABLE message_content (
+      message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      content_json TEXT
+    );
+    INSERT INTO message_content SELECT * FROM message_content_old;
+    DROP TABLE message_content_old;
+
+    ALTER TABLE message_archive RENAME TO message_archive_old;
+    CREATE TABLE message_archive (
+      message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      raw_json TEXT
+    );
+    INSERT INTO message_archive SELECT * FROM message_archive_old;
+    DROP TABLE message_archive_old;
+  `)
+}
+
 /** 所有 migrations，依 version 遞增排列 */
 const migrations: Migration[] = [
   {
@@ -104,23 +125,7 @@ const migrations: Migration[] = [
       `)
 
       // 4. 重建 message_content / message_archive（FK 被 RENAME 改壞了）
-      db.exec(`
-        ALTER TABLE message_content RENAME TO message_content_old;
-        CREATE TABLE message_content (
-          message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-          content_json TEXT
-        );
-        INSERT INTO message_content SELECT * FROM message_content_old;
-        DROP TABLE message_content_old;
-
-        ALTER TABLE message_archive RENAME TO message_archive_old;
-        CREATE TABLE message_archive (
-          message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-          raw_json TEXT
-        );
-        INSERT INTO message_archive SELECT * FROM message_archive_old;
-        DROP TABLE message_archive_old;
-      `)
+      rebuildSideTables(db)
 
       // 5. 重建 FTS5 triggers（舊 trigger 隨 messages_old 一起消失了）
       db.exec(`
@@ -155,23 +160,7 @@ const migrations: Migration[] = [
       const schema = (db.prepare("SELECT sql FROM sqlite_master WHERE name='message_content'").get() as { sql: string })?.sql ?? ''
       if (!schema.includes('messages_old')) return // FK 已正確
 
-      db.exec(`
-        ALTER TABLE message_content RENAME TO message_content_old;
-        CREATE TABLE message_content (
-          message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-          content_json TEXT
-        );
-        INSERT INTO message_content SELECT * FROM message_content_old;
-        DROP TABLE message_content_old;
-
-        ALTER TABLE message_archive RENAME TO message_archive_old;
-        CREATE TABLE message_archive (
-          message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
-          raw_json TEXT
-        );
-        INSERT INTO message_archive SELECT * FROM message_archive_old;
-        DROP TABLE message_archive_old;
-      `)
+      rebuildSideTables(db)
     },
   },
 ]
@@ -433,13 +422,9 @@ export class Database {
 
   indexSession(params: IndexSessionParams): void {
     const doIndex = this.db.transaction(() => {
-      // 1. 先刪除舊 messages（觸發 FTS5 delete trigger）
       this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(params.sessionId)
-      // 2. 刪除舊 session
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
-      // 3. Upsert project（重用 upsertProject 避免 SQL 重複）
       this.upsertProject(params.projectId, params.projectDisplayName)
-      // 4. Insert session
       this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -448,7 +433,6 @@ export class Database {
         params.filePath, params.fileSize, params.fileMtime,
         params.startedAt, params.endedAt,
       )
-      // 5. Bulk insert messages（slim table + content/archive side tables）
       const insertMsg = this.db.prepare(`
         INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -562,7 +546,8 @@ export class Database {
       }>
 
       const hasMore = rows.length > limit
-      const results = (hasMore ? rows.slice(0, limit) : rows).map(r => ({
+      if (hasMore) rows.pop()
+      const results = rows.map(r => ({
         sessionId: r.session_id,
         sessionTitle: r.session_title,
         projectId: r.project_id,

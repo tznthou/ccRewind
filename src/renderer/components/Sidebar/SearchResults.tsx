@@ -75,11 +75,9 @@ export default function SearchResults() {
     )
   }
 
-  const totalMatches = searchResults.length
-
   return (
     <div className={styles.container}>
-      <div className={styles.count}>{totalMatches} 筆結果（{groups.length} 個 session）</div>
+      <div className={styles.count}>{searchResults.length} 筆結果（{groups.length} 個 session）</div>
       {groups.map((g) => {
         const collapsed = collapsedGroups.has(g.sessionId)
         return (
