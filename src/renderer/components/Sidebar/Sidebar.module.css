@@ -11,6 +11,16 @@
   border-bottom: 1px solid var(--color-border);
 }
 
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.logo {
+  flex-shrink: 0;
+}
+
 .title {
   font-size: var(--font-size-xl);
   font-weight: 700;

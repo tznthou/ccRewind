@@ -4,6 +4,7 @@ import SessionList from './SessionList'
 import SearchBar from './SearchBar'
 import SearchResults from './SearchResults'
 import IndexerStatus from './IndexerStatus'
+import logoUrl from '../../assets/logo@2x.webp'
 import styles from './Sidebar.module.css'
 
 export default function Sidebar() {
@@ -12,7 +13,10 @@ export default function Sidebar() {
   return (
     <div className={styles.container}>
       <header className={styles.header}>
-        <h1 className={styles.title}>ccRewind</h1>
+        <div className={styles.titleRow}>
+          <img src={logoUrl} alt="" width={24} height={24} className={styles.logo} />
+          <h1 className={styles.title}>ccRewind</h1>
+        </div>
         <p className={styles.subtitle}>Claude Code 對話回放工具</p>
       </header>
 
