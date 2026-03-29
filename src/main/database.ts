@@ -85,12 +85,12 @@ const migrations: Migration[] = [
         );
       `)
 
-      // 2. 批量搬移資料
+      // 2. 批量搬移資料（OR IGNORE 防止 initSchema 先建表後殘留資料導致 UNIQUE 衝突）
       db.exec(`
-        INSERT INTO message_content (message_id, content_json)
+        INSERT OR IGNORE INTO message_content (message_id, content_json)
           SELECT id, content_json FROM messages WHERE content_json IS NOT NULL;
 
-        INSERT INTO message_archive (message_id, raw_json)
+        INSERT OR IGNORE INTO message_archive (message_id, raw_json)
           SELECT id, raw_json FROM messages WHERE raw_json IS NOT NULL;
       `)
 
@@ -151,6 +151,7 @@ const migrations: Migration[] = [
       db.exec('ALTER TABLE sessions ADD COLUMN archived INTEGER DEFAULT 0')
     },
   },
+  // v3 被開發期間的臨時 migration 佔用（已 apply 到生產 DB），故跳至 v4
   {
     version: 4,
     description: 'fix FK references broken by v1 rename (message_content/archive → messages)',
