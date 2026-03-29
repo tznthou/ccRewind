@@ -283,6 +283,7 @@ export class Database {
   /** 依序執行尚未套用的 migrations */
   private runMigrations(): void {
     const current = this.getSchemaVersion()
+    let migrated = false
     for (const m of migrations) {
       if (m.version <= current) continue
       const migrate = this.db.transaction(() => {
@@ -290,6 +291,10 @@ export class Database {
         this.db.prepare('INSERT INTO schema_version (version, description) VALUES (?, ?)').run(m.version, m.description)
       })
       migrate()
+      migrated = true
+    }
+    if (migrated) {
+      this.db.exec('VACUUM')
     }
   }
 
