@@ -13,30 +13,20 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   const { targetMessageId, searchQuery } = useAppState()
   const dispatch = useAppDispatch()
   const containerRef = useRef<HTMLDivElement>(null)
-  const pendingScrollRef = useRef<number | null>(null)
-
-  // 記住 targetMessageId，在 effect 中寫 ref（避免 render phase 寫 ref）
-  useEffect(() => {
-    if (targetMessageId) {
-      pendingScrollRef.current = targetMessageId
-      dispatch({ type: 'CLEAR_TARGET_MESSAGE' })
-    }
-  }, [targetMessageId, dispatch])
 
   // 一般換 session 時 scroll to top
   useEffect(() => {
-    if (!pendingScrollRef.current) {
+    if (!targetMessageId) {
       containerRef.current?.parentElement?.scrollTo(0, 0)
     }
-  }, [messages])
+  }, [messages, targetMessageId])
 
-  // 搜尋跳轉：loading 結束後 scroll to target + pulse
+  // 搜尋跳轉：targetMessageId 設定後（含同 session 重複點擊），loading 結束時跳轉
   useEffect(() => {
-    const mid = pendingScrollRef.current
-    if (!mid || loading) return
-    pendingScrollRef.current = null
+    if (!targetMessageId || loading) return
+    dispatch({ type: 'CLEAR_TARGET_MESSAGE' })
 
-    const el = containerRef.current?.querySelector(`[data-message-id="${mid}"]`)
+    const el = containerRef.current?.querySelector(`[data-message-id="${targetMessageId}"]`)
     if (!(el instanceof HTMLElement)) return
 
     el.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -51,7 +41,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
       el.classList.remove(styles.highlightTarget)
       el.removeEventListener('animationend', onEnd)
     }
-  }, [loading])
+  }, [targetMessageId, loading, dispatch])
 
   const [exporting, setExporting] = useState(false)
 

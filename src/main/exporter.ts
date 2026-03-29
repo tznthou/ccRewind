@@ -52,6 +52,18 @@ function formatToolContent(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
+/** 產生足夠長的 backtick fence 來安全包裹 content（避免內容含 ``` 時破壞 Markdown） */
+function makeFence(content: string, lang?: string): string {
+  let ticks = 3
+  const re = /`{3,}/g
+  let m: RegExpExecArray | null
+  while ((m = re.exec(content)) !== null) {
+    ticks = Math.max(ticks, m[0].length + 1)
+  }
+  const fence = '`'.repeat(ticks)
+  return `${fence}${lang ?? ''}\n${content}\n${fence}`
+}
+
 // ── Markdown generation ──
 
 /** 純函式：將 session 資料轉為 Markdown 字串 */
@@ -92,22 +104,20 @@ export function sessionToMarkdown(data: ExportSessionData): string {
     const toolBlocks = extractToolBlocks(msg.contentJson)
     for (const block of toolBlocks) {
       if (block.type === 'tool_use') {
+        const content = formatToolContent(block.input)
         lines.push('<details>')
         lines.push(`<summary>Tool: ${block.name}</summary>`)
         lines.push('')
-        lines.push('```json')
-        lines.push(formatToolContent(block.input))
-        lines.push('```')
+        lines.push(makeFence(content, 'json'))
         lines.push('')
         lines.push('</details>')
         lines.push('')
       } else {
+        const content = formatToolContent(block.content)
         lines.push('<details>')
         lines.push(`<summary>Result: ${block.tool_use_id}</summary>`)
         lines.push('')
-        lines.push('```')
-        lines.push(formatToolContent(block.content))
-        lines.push('```')
+        lines.push(makeFence(content))
         lines.push('')
         lines.push('</details>')
         lines.push('')

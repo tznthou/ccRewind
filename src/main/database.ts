@@ -332,6 +332,7 @@ export class Database {
         JOIN sessions s ON s.id = m.session_id
         JOIN projects p ON p.id = s.project_id
         WHERE messages_fts MATCH ?
+          AND m.type NOT IN ('last-prompt', 'queue-operation')
       `
       const params: (string | null)[] = [query]
 

@@ -136,4 +136,30 @@ describe('sessionToMarkdown', () => {
     expect(md).toContain('| Project | 我的專案 |')
     expect(md).toContain('你好世界 🌍 こんにちは')
   })
+
+  it('tool payload containing triple backticks → fence extended safely', () => {
+    const codeWithBackticks = 'Here is code:\n```ts\nconsole.log("hi")\n```\nEnd.'
+    const contentJson = JSON.stringify([
+      { type: 'tool_result', tool_use_id: 'tu1', content: codeWithBackticks },
+    ])
+
+    const data = makeData({
+      messages: [
+        makeMessage({
+          sequence: 1,
+          type: 'assistant',
+          role: 'assistant',
+          contentText: null,
+          contentJson,
+          hasToolResult: true,
+        }),
+      ],
+    })
+
+    const md = sessionToMarkdown(data)
+
+    // 應使用 4+ backtick fence 來包裹含 ``` 的內容
+    expect(md).toMatch(/`{4,}\n/)
+    expect(md).toContain(codeWithBackticks)
+  })
 })
