@@ -78,7 +78,7 @@ export default function SessionList() {
               </div>
               <div className={styles.sessionMeta}>
                 <span>{formatDateTime(session.startedAt)}</span>
-                <span>{session.messageCount} 則</span>
+                <span>{session.archived ? '已封存 · ' : ''}{session.messageCount} 則</span>
               </div>
             </div>
           )

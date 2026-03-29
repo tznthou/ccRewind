@@ -17,11 +17,11 @@ export default function SearchBar() {
       const projectId = scope === 'project' ? selectedProjectId : null
       setSearching(true)
       try {
-        const results = await window.api.search(input.trim(), projectId)
-        dispatch({ type: 'SET_SEARCH', query: input.trim(), results })
+        const page = await window.api.search(input.trim(), projectId)
+        dispatch({ type: 'SET_SEARCH', query: input.trim(), results: page.results, hasMore: page.hasMore, projectId })
       } catch {
         // FTS5 查詢語法錯誤等 — 視為無結果
-        dispatch({ type: 'SET_SEARCH', query: input.trim(), results: [] })
+        dispatch({ type: 'SET_SEARCH', query: input.trim(), results: [], hasMore: false, projectId })
       } finally {
         setSearching(false)
       }

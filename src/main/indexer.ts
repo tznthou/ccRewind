@@ -42,8 +42,9 @@ export async function runIndexer(
   for (const project of projects) {
     for (const session of project.sessions) {
       scannedSessionIds.add(session.sessionId)
-      const existingMtime = existingMtimes.get(session.sessionId)
-      if (existingMtime === undefined || existingMtime !== session.fileMtime) {
+      const existing = existingMtimes.get(session.sessionId)
+      // 重新索引條件：新 session、mtime 變更、或 archived session 重新出現
+      if (!existing || existing.mtime !== session.fileMtime || existing.archived) {
         sessionsToIndex.push({
           ...session,
           projectId: project.projectId,
@@ -54,8 +55,8 @@ export async function runIndexer(
     }
   }
 
-  // 移除 DB 中存在但掃描不到的 stale session
-  db.removeStaleSessionsExcept(scannedSessionIds)
+  // 標記 DB 中存在但掃描不到的 session 為 archived
+  db.archiveStaleSessionsExcept(scannedSessionIds)
 
   // 3. INDEXING
   const total = sessionsToIndex.length
