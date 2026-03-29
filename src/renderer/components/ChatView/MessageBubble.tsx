@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { memo, type ReactNode } from 'react'
 import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
@@ -7,6 +7,19 @@ import styles from './MessageBubble.module.css'
 
 interface MessageBubbleProps {
   message: Message
+  searchQuery?: string
+}
+
+function highlightText(text: string, query: string): ReactNode {
+  if (!query) return text
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const regex = new RegExp(`(${escaped})`, 'gi')
+  const parts = text.split(regex)
+  if (parts.length === 1) return text
+  const lower = query.toLowerCase()
+  return parts.map((part, i) =>
+    part.toLowerCase() === lower ? <mark key={i}>{part}</mark> : part,
+  )
 }
 
 interface ToolUseBlock {
@@ -42,13 +55,16 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
   }
 }
 
-export default memo(function MessageBubble({ message }: MessageBubbleProps) {
+export default memo(function MessageBubble({ message, searchQuery = '' }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
 
   // last-prompt 不顯示
   if (message.type === 'last-prompt') return null
+
+  // 無可顯示內容（如僅含 thinking blocks）→ 不渲染空氣泡
+  if (!message.contentText && toolBlocks.length === 0) return null
 
   // queue-operation 顯示為系統提示
   if (isSystem) {
@@ -63,7 +79,7 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>
@@ -72,7 +88,7 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
       {message.contentText && (
         <div className={styles.content}>
           {isUser ? (
-            <p className={styles.plainText}>{message.contentText}</p>
+            <p className={styles.plainText}>{highlightText(message.contentText, searchQuery)}</p>
           ) : (
             <MarkdownRenderer content={message.contentText} />
           )}

@@ -1,29 +1,48 @@
 import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react'
+import type { SearchResult } from '../../shared/types'
 
 interface AppState {
   selectedProjectId: string | null
   selectedSessionId: string | null
+  searchQuery: string
+  searchResults: SearchResult[]
+  targetMessageId: number | null
 }
 
 type AppAction =
   | { type: 'SELECT_PROJECT'; projectId: string }
   | { type: 'SELECT_SESSION'; sessionId: string }
   | { type: 'CLEAR_SESSION' }
+  | { type: 'SET_SEARCH'; query: string; results: SearchResult[] }
+  | { type: 'CLEAR_SEARCH' }
+  | { type: 'NAVIGATE_TO_RESULT'; sessionId: string; messageId: number }
+  | { type: 'CLEAR_TARGET_MESSAGE' }
 
 const initialState: AppState = {
   selectedProjectId: null,
   selectedSessionId: null,
+  searchQuery: '',
+  searchResults: [],
+  targetMessageId: null,
 }
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SELECT_PROJECT':
-      // 切換專案時清除 session 選取
-      return { selectedProjectId: action.projectId, selectedSessionId: null }
+      // 切換專案時清除 session 選取 + 搜尋
+      return { ...initialState, selectedProjectId: action.projectId }
     case 'SELECT_SESSION':
-      return { ...state, selectedSessionId: action.sessionId }
+      return { ...state, selectedSessionId: action.sessionId, targetMessageId: null }
     case 'CLEAR_SESSION':
-      return { ...state, selectedSessionId: null }
+      return { ...state, selectedSessionId: null, targetMessageId: null }
+    case 'SET_SEARCH':
+      return { ...state, searchQuery: action.query, searchResults: action.results, targetMessageId: null }
+    case 'CLEAR_SEARCH':
+      return { ...state, searchQuery: '', searchResults: [], targetMessageId: null }
+    case 'NAVIGATE_TO_RESULT':
+      return { ...state, selectedSessionId: action.sessionId, targetMessageId: action.messageId }
+    case 'CLEAR_TARGET_MESSAGE':
+      return { ...state, targetMessageId: null }
   }
 }
 
