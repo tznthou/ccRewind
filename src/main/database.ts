@@ -705,8 +705,8 @@ export class Database {
   /** 搜尋 session 標題 / 標籤 / 檔案路徑 / 摘要 */
   searchSessions(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE): SessionSearchPage {
     limit = Math.min(limit, 100)
-    // FTS5 unicode61 以 / . 等為分詞符號，含這些字元的查詢需要用引號包裹
-    if (/[/.\\]/.test(query) && !query.startsWith('"')) {
+    // FTS5 unicode61 以 / . - 等為分詞符號，含這些字元的查詢需要用引號包裹
+    if (/[/.\\-]/.test(query) && !query.startsWith('"')) {
       query = `"${query}"`
     }
     try {

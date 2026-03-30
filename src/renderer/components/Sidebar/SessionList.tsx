@@ -7,9 +7,9 @@ import { formatDateTime } from '../../utils/formatTime'
 import styles from './Sidebar.module.css'
 
 const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
-  archive: 72,
-  timeline: 72,
-  terminal: 72,
+  archive: 80,
+  timeline: 80,
+  terminal: 80,
 }
 
 export default function SessionList() {

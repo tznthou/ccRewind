@@ -654,6 +654,20 @@ describe('sessions_fts (migration v6)', () => {
     expect(page.results[0].sessionId).toBe('sfts-a')
   })
 
+  it('searchSessions handles hyphenated tags like bug-fix', () => {
+    db.indexSession({
+      sessionId: 'sfts-hyp', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
+      title: 'Hyphen test', messageCount: 0, filePath: '/tmp/hyp.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'bug-fix,auth',
+      messages: [],
+    })
+
+    const page = db.searchSessions('bug-fix')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].tags).toContain('bug-fix')
+  })
+
   it('searchSessions handles file paths with / and .', () => {
     db.indexSession({
       sessionId: 'sfts-path', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
