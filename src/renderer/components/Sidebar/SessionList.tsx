@@ -7,9 +7,9 @@ import { formatDateTime } from '../../utils/formatTime'
 import styles from './Sidebar.module.css'
 
 const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
-  archive: 56,
-  timeline: 56,
-  terminal: 56,
+  archive: 72,
+  timeline: 72,
+  terminal: 72,
 }
 
 export default function SessionList() {
@@ -80,6 +80,18 @@ export default function SessionList() {
                 <span>{formatDateTime(session.startedAt)}</span>
                 <span>{session.archived ? '已封存 · ' : ''}{session.messageCount} 則</span>
               </div>
+              {(session.tags || session.filesTouched) && (
+                <div className={styles.sessionTags}>
+                  {session.tags?.split(',').slice(0, 3).map(tag => (
+                    <span key={tag} className={styles.tag}>{tag}</span>
+                  ))}
+                  {session.filesTouched && (
+                    <span className={styles.fileCount}>
+                      {session.filesTouched.split(',').length}{session.filesTouched.split(',').length >= 20 ? '+' : ''} files
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
           )
         })}

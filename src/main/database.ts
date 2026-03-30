@@ -29,6 +29,10 @@ export interface IndexSessionParams {
   fileMtime: string
   startedAt: string | null
   endedAt: string | null
+  summaryText?: string | null
+  tags?: string | null
+  filesTouched?: string | null
+  toolsUsed?: string | null
   messages: MessageInput[]
 }
 
@@ -162,6 +166,22 @@ const migrations: Migration[] = [
       if (!schema.includes('messages_old')) return // FK 已正確
 
       rebuildSideTables(db)
+    },
+  },
+  {
+    version: 5,
+    description: 'add session summary columns (summary_text, tags, files_touched, tools_used)',
+    up: (db) => {
+      const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
+      if (cols.some(c => c.name === 'summary_text')) return
+      db.exec(`
+        ALTER TABLE sessions ADD COLUMN summary_text TEXT;
+        ALTER TABLE sessions ADD COLUMN tags TEXT;
+        ALTER TABLE sessions ADD COLUMN files_touched TEXT;
+        ALTER TABLE sessions ADD COLUMN tools_used TEXT;
+      `)
+      // 清空 file_mtime 強制所有既有 session 在下次 indexer run 時 re-index
+      db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
 ]
@@ -353,7 +373,7 @@ export class Database {
 
   getSessions(projectId: string): SessionMeta[] {
     const rows = this.db.prepare(
-      'SELECT id, project_id, title, message_count, started_at, ended_at, archived FROM sessions WHERE project_id = ? ORDER BY started_at DESC',
+      'SELECT id, project_id, title, message_count, started_at, ended_at, archived, summary_text, tags, files_touched, tools_used FROM sessions WHERE project_id = ? ORDER BY started_at DESC',
     ).all(projectId) as Array<{
       id: string
       project_id: string
@@ -362,6 +382,10 @@ export class Database {
       started_at: string | null
       ended_at: string | null
       archived: number
+      summary_text: string | null
+      tags: string | null
+      files_touched: string | null
+      tools_used: string | null
     }>
 
     return rows.map(r => ({
@@ -372,6 +396,10 @@ export class Database {
       startedAt: r.started_at,
       endedAt: r.ended_at,
       archived: r.archived === 1,
+      summaryText: r.summary_text,
+      tags: r.tags,
+      filesTouched: r.files_touched,
+      toolsUsed: r.tools_used,
     }))
   }
 
@@ -432,12 +460,14 @@ export class Database {
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
       this.upsertProject(params.projectId, params.projectDisplayName)
       this.db.prepare(`
-        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at, summary_text, tags, files_touched, tools_used)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
         params.startedAt, params.endedAt,
+        params.summaryText ?? null, params.tags ?? null,
+        params.filesTouched ?? null, params.toolsUsed ?? null,
       )
       const insertMsg = this.db.prepare(`
         INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence)
