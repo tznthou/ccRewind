@@ -1,11 +1,13 @@
 import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react'
-import type { SearchResult } from '../../shared/types'
+import type { SearchResult, SessionSearchResult, SearchScope } from '../../shared/types'
 
 interface AppState {
   selectedProjectId: string | null
   selectedSessionId: string | null
   searchQuery: string
+  searchScope: SearchScope
   searchResults: SearchResult[]
+  sessionSearchResults: SessionSearchResult[]
   searchHasMore: boolean
   searchProjectId: string | null
   targetMessageId: number | null
@@ -16,7 +18,9 @@ type AppAction =
   | { type: 'SELECT_SESSION'; sessionId: string }
   | { type: 'CLEAR_SESSION' }
   | { type: 'SET_SEARCH'; query: string; results: SearchResult[]; hasMore: boolean; projectId: string | null }
+  | { type: 'SET_SESSION_SEARCH'; query: string; results: SessionSearchResult[]; hasMore: boolean; projectId: string | null }
   | { type: 'APPEND_SEARCH_RESULTS'; results: SearchResult[]; hasMore: boolean }
+  | { type: 'APPEND_SESSION_SEARCH_RESULTS'; results: SessionSearchResult[]; hasMore: boolean }
   | { type: 'CLEAR_SEARCH' }
   | { type: 'NAVIGATE_TO_RESULT'; sessionId: string; messageId: number }
   | { type: 'CLEAR_TARGET_MESSAGE' }
@@ -25,7 +29,9 @@ const initialState: AppState = {
   selectedProjectId: null,
   selectedSessionId: null,
   searchQuery: '',
+  searchScope: 'messages',
   searchResults: [],
+  sessionSearchResults: [],
   searchHasMore: false,
   searchProjectId: null,
   targetMessageId: null,
@@ -41,11 +47,15 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLEAR_SESSION':
       return { ...state, selectedSessionId: null, targetMessageId: null }
     case 'SET_SEARCH':
-      return { ...state, searchQuery: action.query, searchResults: action.results, searchHasMore: action.hasMore, searchProjectId: action.projectId, targetMessageId: null }
+      return { ...state, searchQuery: action.query, searchScope: 'messages', searchResults: action.results, sessionSearchResults: [], searchHasMore: action.hasMore, searchProjectId: action.projectId, targetMessageId: null }
+    case 'SET_SESSION_SEARCH':
+      return { ...state, searchQuery: action.query, searchScope: 'sessions', sessionSearchResults: action.results, searchResults: [], searchHasMore: action.hasMore, searchProjectId: action.projectId, targetMessageId: null }
     case 'APPEND_SEARCH_RESULTS':
       return { ...state, searchResults: [...state.searchResults, ...action.results], searchHasMore: action.hasMore }
+    case 'APPEND_SESSION_SEARCH_RESULTS':
+      return { ...state, sessionSearchResults: [...state.sessionSearchResults, ...action.results], searchHasMore: action.hasMore }
     case 'CLEAR_SEARCH':
-      return { ...state, searchQuery: '', searchResults: [], searchHasMore: false, searchProjectId: null, targetMessageId: null }
+      return { ...state, searchQuery: '', searchScope: 'messages', searchResults: [], sessionSearchResults: [], searchHasMore: false, searchProjectId: null, targetMessageId: null }
     case 'NAVIGATE_TO_RESULT':
       return { ...state, selectedSessionId: action.sessionId, targetMessageId: action.messageId }
     case 'CLEAR_TARGET_MESSAGE':

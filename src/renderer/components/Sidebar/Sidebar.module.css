@@ -158,6 +158,30 @@
   margin-top: 2px;
 }
 
+.sessionTags {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+.tag {
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.fileCount {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
 /* Indexer status */
 .indexerStatus {
   padding: var(--space-sm) var(--space-lg);

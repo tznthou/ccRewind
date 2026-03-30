@@ -3,13 +3,14 @@ import ProjectList from './ProjectList'
 import SessionList from './SessionList'
 import SearchBar from './SearchBar'
 import SearchResults from './SearchResults'
+import SessionSearchResults from './SessionSearchResults'
 import IndexerStatus from './IndexerStatus'
 import UpdateBanner from '../UpdateBanner/UpdateBanner'
 import logoUrl from '../../assets/logo@2x.webp'
 import styles from './Sidebar.module.css'
 
 export default function Sidebar() {
-  const { searchQuery } = useAppState()
+  const { searchQuery, searchScope } = useAppState()
 
   return (
     <div className={styles.container}>
@@ -36,7 +37,11 @@ export default function Sidebar() {
         <h2 id="session-heading" className={styles.sectionLabel}>
           {searchQuery ? '搜尋結果' : 'Sessions'}
         </h2>
-        {searchQuery ? <SearchResults /> : <SessionList />}
+        {searchQuery
+          ? searchScope === 'sessions'
+            ? <SessionSearchResults />
+            : <SearchResults />
+          : <SessionList />}
       </section>
 
       <IndexerStatus />

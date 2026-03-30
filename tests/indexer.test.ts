@@ -212,4 +212,62 @@ describe('runIndexer', () => {
 
     expect(db.getProjects()).toEqual([])
   })
+
+  it('indexer populates session summary fields', async () => {
+    const sessionWithTools = [
+      {
+        type: 'user', uuid: 'u1', timestamp: '2024-06-01T10:00:00.000Z',
+        sessionId: 'sum-001',
+        message: { role: 'user', content: 'fix the login error' },
+      },
+      {
+        type: 'assistant', uuid: 'a1', parentUuid: 'u1',
+        timestamp: '2024-06-01T10:00:05.000Z', sessionId: 'sum-001',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'text', text: 'Let me check.' },
+            { type: 'tool_use', id: 'toolu_01', name: 'Read', input: { file_path: '/src/auth.ts' } },
+          ],
+        },
+      },
+      {
+        type: 'assistant', uuid: 'a2', parentUuid: 'u1',
+        timestamp: '2024-06-01T10:00:10.000Z', sessionId: 'sum-001',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'tool_use', id: 'toolu_02', name: 'Edit', input: { file_path: '/src/auth.ts' } },
+          ],
+        },
+      },
+      {
+        type: 'user', uuid: 'u2', timestamp: '2024-06-01T10:01:00.000Z',
+        sessionId: 'sum-001',
+        message: { role: 'user', content: 'looks good, thanks' },
+      },
+    ]
+
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-sum', { 'sum-001': sessionWithTools })
+    await runIndexer(db, undefined, baseDir)
+
+    const sessions = db.getSessions('-Users-test-sum')
+    expect(sessions).toHaveLength(1)
+    const s = sessions[0]
+
+    // summaryText 包含 intent 和 conclusion
+    expect(s.summaryText).toContain('fix the login error')
+    expect(s.summaryText).toContain('looks good')
+
+    // tags 應包含 bug-fix（含 fix + error）
+    expect(s.tags).toContain('bug-fix')
+
+    // filesTouched 應包含 /src/auth.ts（去重）
+    expect(s.filesTouched).toBe('/src/auth.ts')
+
+    // toolsUsed 應有 Read 和 Edit
+    expect(s.toolsUsed).toContain('Read:')
+    expect(s.toolsUsed).toContain('Edit:')
+  })
 })

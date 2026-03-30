@@ -65,6 +65,12 @@
   margin: 0;
 }
 
+.separator {
+  color: var(--color-border);
+  font-size: var(--font-size-xs);
+  user-select: none;
+}
+
 /* Theme C — Terminal: mono input, dashed border */
 :global([data-theme="terminal"]) .input {
   font-family: var(--font-code);

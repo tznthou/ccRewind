@@ -464,3 +464,237 @@ describe('FTS5 search', () => {
     expect(page2.hasMore).toBe(false)
   })
 })
+
+describe('session summary columns (migration v5)', () => {
+  it('summary columns exist after migration', () => {
+    const cols = db.rawAll<{ name: string }>('PRAGMA table_info(sessions)').map(r => r.name)
+    expect(cols).toContain('summary_text')
+    expect(cols).toContain('tags')
+    expect(cols).toContain('files_touched')
+    expect(cols).toContain('tools_used')
+  })
+
+  it('indexSession with summary fields → getSessions returns them', () => {
+    db.indexSession({
+      sessionId: 'sum-001', projectId: 'proj-sum', projectDisplayName: '/test/sum',
+      title: 'Summary test', messageCount: 0, filePath: '/tmp/sum.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      summaryText: 'Intent: fix bug',
+      tags: 'bug-fix,auth',
+      filesTouched: '/src/a.ts,/src/b.ts',
+      toolsUsed: 'Read:5,Edit:3',
+      messages: [],
+    })
+
+    const sessions = db.getSessions('proj-sum')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].summaryText).toBe('Intent: fix bug')
+    expect(sessions[0].tags).toBe('bug-fix,auth')
+    expect(sessions[0].filesTouched).toBe('/src/a.ts,/src/b.ts')
+    expect(sessions[0].toolsUsed).toBe('Read:5,Edit:3')
+  })
+
+  it('indexSession without summary fields → NULLs (backward compat)', () => {
+    db.indexSession({
+      sessionId: 'nosum-001', projectId: 'proj-nosum', projectDisplayName: '/test/nosum',
+      title: 'No summary', messageCount: 0, filePath: '/tmp/nosum.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [],
+    })
+
+    const sessions = db.getSessions('proj-nosum')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].summaryText).toBeNull()
+    expect(sessions[0].tags).toBeNull()
+    expect(sessions[0].filesTouched).toBeNull()
+    expect(sessions[0].toolsUsed).toBeNull()
+  })
+
+  it('re-index updates summary fields', () => {
+    db.indexSession({
+      sessionId: 'resum-001', projectId: 'proj-resum', projectDisplayName: '/test/resum',
+      title: 'V1', messageCount: 0, filePath: '/tmp/resum.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      summaryText: 'old summary', tags: 'old-tag',
+      filesTouched: '/old.ts', toolsUsed: 'Read:1',
+      messages: [],
+    })
+
+    db.indexSession({
+      sessionId: 'resum-001', projectId: 'proj-resum', projectDisplayName: '/test/resum',
+      title: 'V2', messageCount: 0, filePath: '/tmp/resum.jsonl', fileSize: 100,
+      fileMtime: '2024-01-02T00:00:00.000Z', startedAt: null, endedAt: null,
+      summaryText: 'new summary', tags: 'new-tag',
+      filesTouched: '/new.ts', toolsUsed: 'Edit:2',
+      messages: [],
+    })
+
+    const sessions = db.getSessions('proj-resum')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].summaryText).toBe('new summary')
+    expect(sessions[0].tags).toBe('new-tag')
+  })
+})
+
+describe('getMessageContext', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'ctx-001', projectId: 'proj-ctx', projectDisplayName: '/test/ctx',
+      title: 'Context test', messageCount: 5, filePath: '/tmp/ctx.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'msg-0', sequence: 0 }),
+        msg({ type: 'assistant', role: 'assistant', contentText: 'msg-1', sequence: 1 }),
+        msg({ type: 'user', role: 'user', contentText: 'msg-2', sequence: 2 }),
+        msg({ type: 'assistant', role: 'assistant', contentText: 'msg-3', sequence: 3 }),
+        msg({ type: 'user', role: 'user', contentText: 'msg-4', sequence: 4 }),
+      ],
+    })
+  })
+
+  it('returns target + before + after messages', () => {
+    const allMsgs = db.getMessages('ctx-001')
+    const targetId = allMsgs[2].id // msg-2, sequence 2
+
+    const ctx = db.getMessageContext(targetId, 2)
+    expect(ctx.target).not.toBeNull()
+    expect(ctx.target!.contentText).toBe('msg-2')
+    expect(ctx.before).toHaveLength(2)
+    expect(ctx.before[0].contentText).toBe('msg-0')
+    expect(ctx.before[1].contentText).toBe('msg-1')
+    expect(ctx.after).toHaveLength(2)
+    expect(ctx.after[0].contentText).toBe('msg-3')
+    expect(ctx.after[1].contentText).toBe('msg-4')
+  })
+
+  it('clamps at session boundaries', () => {
+    const allMsgs = db.getMessages('ctx-001')
+    const firstId = allMsgs[0].id
+    const ctx = db.getMessageContext(firstId, 2)
+    expect(ctx.target).not.toBeNull()
+    expect(ctx.target!.contentText).toBe('msg-0')
+    expect(ctx.before).toHaveLength(0)
+    expect(ctx.after).toHaveLength(2)
+  })
+
+  it('nonexistent messageId → null target', () => {
+    const ctx = db.getMessageContext(99999, 2)
+    expect(ctx.target).toBeNull()
+    expect(ctx.before).toHaveLength(0)
+    expect(ctx.after).toHaveLength(0)
+  })
+})
+
+describe('sessions_fts (migration v6)', () => {
+  it('sessions_fts table exists', () => {
+    const tables = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+    ).map(r => r.name)
+    expect(tables).toContain('sessions_fts')
+  })
+
+  it('searchSessions matches by tags', () => {
+    db.indexSession({
+      sessionId: 'sfts-001', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
+      title: 'Auth fix session', messageCount: 0, filePath: '/tmp/sfts.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'bug-fix,auth', summaryText: 'Fixed login error', filesTouched: '/src/auth.ts',
+      messages: [],
+    })
+
+    const page = db.searchSessions('auth')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].sessionId).toBe('sfts-001')
+    expect(page.results[0].tags).toBe('bug-fix,auth')
+  })
+
+  it('searchSessions matches by file path', () => {
+    db.indexSession({
+      sessionId: 'sfts-002', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
+      title: 'Refactor', messageCount: 0, filePath: '/tmp/sfts2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'refactor', filesTouched: '/src/components/Sidebar.tsx',
+      messages: [],
+    })
+
+    const page = db.searchSessions('Sidebar')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].sessionId).toBe('sfts-002')
+  })
+
+  it('searchSessions matches by title', () => {
+    db.indexSession({
+      sessionId: 'sfts-003', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
+      title: 'Deploy pipeline setup', messageCount: 0, filePath: '/tmp/sfts3.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [],
+    })
+
+    const page = db.searchSessions('pipeline')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].sessionTitle).toBe('Deploy pipeline setup')
+  })
+
+  it('searchSessions with projectId filter', () => {
+    db.indexSession({
+      sessionId: 'sfts-a', projectId: 'proj-a', projectDisplayName: '/a',
+      title: 'Alpha unique', messageCount: 0, filePath: '/tmp/a.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'sfts-b', projectId: 'proj-b', projectDisplayName: '/b',
+      title: 'Beta unique', messageCount: 0, filePath: '/tmp/b.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [],
+    })
+
+    const page = db.searchSessions('unique', 'proj-a')
+    expect(page.results).toHaveLength(1)
+    expect(page.results[0].sessionId).toBe('sfts-a')
+  })
+
+  it('searchSessions handles file paths with / and .', () => {
+    db.indexSession({
+      sessionId: 'sfts-path', projectId: 'proj-sfts', projectDisplayName: '/test/sfts',
+      title: 'Path test', messageCount: 0, filePath: '/tmp/path.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      filesTouched: '/src/components/auth.ts',
+      messages: [],
+    })
+
+    // 含 / 的搜尋不應 throw，應自動包引號
+    const page = db.searchSessions('/src/components/auth.ts')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('re-index updates sessions_fts', () => {
+    db.indexSession({
+      sessionId: 'sfts-upd', projectId: 'proj-upd', projectDisplayName: '/upd',
+      title: 'Old title', messageCount: 0, filePath: '/tmp/upd.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'old-tag', messages: [],
+    })
+
+    // old title searchable
+    expect(db.searchSessions('Old').results.length).toBeGreaterThanOrEqual(1)
+
+    // re-index
+    db.indexSession({
+      sessionId: 'sfts-upd', projectId: 'proj-upd', projectDisplayName: '/upd',
+      title: 'New title', messageCount: 0, filePath: '/tmp/upd.jsonl', fileSize: 100,
+      fileMtime: '2024-01-02T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'new-tag', messages: [],
+    })
+
+    // new title searchable
+    const page = db.searchSessions('New')
+    expect(page.results.length).toBeGreaterThanOrEqual(1)
+    expect(page.results[0].sessionTitle).toBe('New title')
+
+    // old title no longer matches this session
+    const oldPage = db.searchSessions('Old')
+    const oldMatch = oldPage.results.find(r => r.sessionId === 'sfts-upd')
+    expect(oldMatch).toBeUndefined()
+  })
+})

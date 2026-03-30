@@ -140,3 +140,72 @@
   color: var(--color-text-muted);
   cursor: default;
 }
+
+.itemRow {
+  display: flex;
+  align-items: flex-start;
+}
+
+.contextToggle {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  padding: var(--space-xs) 2px var(--space-xs) 0;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.contextToggle:hover {
+  color: var(--color-text);
+}
+
+.contextPreview {
+  margin: 0 0 var(--space-xs) 1em;
+  padding: var(--space-xs) var(--space-sm);
+  border-left: 2px solid var(--color-border);
+  background: var(--color-bg);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+}
+
+.contextTarget {
+  font-size: var(--font-size-xs);
+  color: var(--color-text);
+  font-weight: 600;
+  padding: 2px 0;
+}
+
+.contextMsg {
+  display: flex;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.4;
+}
+
+.contextRole {
+  flex-shrink: 0;
+}
+
+.contextText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tagRow {
+  display: flex;
+  gap: 4px;
+  margin-bottom: var(--space-xs);
+  flex-wrap: wrap;
+}
+
+.tagBadge {
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}

@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, SearchPage } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -182,6 +182,33 @@ const migrations: Migration[] = [
       `)
       // 清空 file_mtime 強制所有既有 session 在下次 indexer run 時 re-index
       db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
+  {
+    version: 6,
+    description: 'add sessions_fts for session-level search (title, tags, files_touched, summary_text)',
+    up: (db) => {
+      const exists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='sessions_fts'",
+      ).get()
+      if (exists) return
+      db.exec(`
+        CREATE VIRTUAL TABLE sessions_fts USING fts5(
+          title,
+          tags,
+          files_touched,
+          summary_text,
+          content='sessions',
+          content_rowid='rowid',
+          tokenize='unicode61'
+        );
+      `)
+      // 回填既有 session 資料
+      db.exec(`
+        INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text)
+        SELECT rowid, COALESCE(title,''), COALESCE(tags,''), COALESCE(files_touched,''), COALESCE(summary_text,'')
+        FROM sessions;
+      `)
     },
   },
 ]
@@ -457,9 +484,17 @@ export class Database {
   indexSession(params: IndexSessionParams): void {
     const doIndex = this.db.transaction(() => {
       this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(params.sessionId)
+      // 清除 sessions_fts 中的舊資料（external content 模式需手動維護）
+      const oldSession = this.db.prepare('SELECT rowid, title, tags, files_touched, summary_text FROM sessions WHERE id = ?').get(params.sessionId) as
+        { rowid: number; title: string | null; tags: string | null; files_touched: string | null; summary_text: string | null } | undefined
+      if (oldSession) {
+        this.db.prepare(
+          "INSERT INTO sessions_fts(sessions_fts, rowid, title, tags, files_touched, summary_text) VALUES ('delete', ?, ?, ?, ?, ?)",
+        ).run(oldSession.rowid, oldSession.title ?? '', oldSession.tags ?? '', oldSession.files_touched ?? '', oldSession.summary_text ?? '')
+      }
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
       this.upsertProject(params.projectId, params.projectDisplayName)
-      this.db.prepare(`
+      const insertResult = this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at, summary_text, tags, files_touched, tools_used)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
@@ -469,6 +504,10 @@ export class Database {
         params.summaryText ?? null, params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
       )
+      // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
+      this.db.prepare(
+        'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text) VALUES (?, ?, ?, ?, ?)',
+      ).run(insertResult.lastInsertRowid, params.title ?? '', params.tags ?? '', params.filesTouched ?? '', params.summaryText ?? '')
       const insertMsg = this.db.prepare(`
         INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -539,6 +578,68 @@ export class Database {
     }))
   }
 
+  /** 取得指定訊息及其前後 range 則訊息（搜尋結果上下文預覽） */
+  getMessageContext(messageId: number, range = 2): MessageContext {
+    // 先取 target 的 session_id + sequence
+    const target = this.db.prepare(`
+      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
+             mc.content_json, m.has_tool_use, m.has_tool_result,
+             m.tool_names, m.timestamp, m.sequence
+      FROM messages m
+      LEFT JOIN message_content mc ON mc.message_id = m.id
+      WHERE m.id = ?
+    `).get(messageId) as {
+      id: number; session_id: string; type: string; role: string | null
+      content_text: string | null; content_json: string | null
+      has_tool_use: number; has_tool_result: number
+      tool_names: string | null; timestamp: string | null; sequence: number
+    } | undefined
+
+    if (!target) {
+      return { target: null, before: [], after: [] }
+    }
+
+    const mapRow = (r: typeof target): Message => ({
+      id: r.id,
+      sessionId: r.session_id,
+      type: r.type as Message['type'],
+      role: r.role as Message['role'],
+      contentText: r.content_text,
+      contentJson: r.content_json,
+      hasToolUse: r.has_tool_use === 1,
+      hasToolResult: r.has_tool_result === 1,
+      toolNames: r.tool_names ? r.tool_names.split(',') : null,
+      timestamp: r.timestamp,
+      sequence: r.sequence,
+    })
+
+    const beforeRows = this.db.prepare(`
+      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
+             mc.content_json, m.has_tool_use, m.has_tool_result,
+             m.tool_names, m.timestamp, m.sequence
+      FROM messages m
+      LEFT JOIN message_content mc ON mc.message_id = m.id
+      WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ?
+      ORDER BY m.sequence
+    `).all(target.session_id, target.sequence, target.sequence - range) as Array<typeof target>
+
+    const afterRows = this.db.prepare(`
+      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
+             mc.content_json, m.has_tool_use, m.has_tool_result,
+             m.tool_names, m.timestamp, m.sequence
+      FROM messages m
+      LEFT JOIN message_content mc ON mc.message_id = m.id
+      WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ?
+      ORDER BY m.sequence
+    `).all(target.session_id, target.sequence, target.sequence + range) as Array<typeof target>
+
+    return {
+      target: mapRow(target),
+      before: beforeRows.map(mapRow),
+      after: afterRows.map(mapRow),
+    }
+  }
+
   // ── FTS5 Search ──
 
   static readonly SEARCH_PAGE_SIZE = 30
@@ -597,6 +698,66 @@ export class Database {
       return { results, offset, hasMore }
     } catch {
       // FTS5 查詢失敗（語法錯誤、未關閉的引號等）→ 回傳空頁
+      return { results: [], offset, hasMore: false }
+    }
+  }
+
+  /** 搜尋 session 標題 / 標籤 / 檔案路徑 / 摘要 */
+  searchSessions(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE): SessionSearchPage {
+    limit = Math.min(limit, 100)
+    // FTS5 unicode61 以 / . 等為分詞符號，含這些字元的查詢需要用引號包裹
+    if (/[/.\\]/.test(query) && !query.startsWith('"')) {
+      query = `"${query}"`
+    }
+    try {
+      let sql = `
+        SELECT
+          s.id AS session_id,
+          s.title AS session_title,
+          s.project_id,
+          p.display_name AS project_name,
+          s.tags,
+          s.files_touched,
+          snippet(sessions_fts, -1, x'EE8080', x'EE8081', '...', 64) AS snippet
+        FROM sessions_fts
+        JOIN sessions s ON s.rowid = sessions_fts.rowid
+        JOIN projects p ON p.id = s.project_id
+        WHERE sessions_fts MATCH ?
+      `
+      const params: (string | number | null)[] = [query]
+
+      if (projectId) {
+        sql += ' AND s.project_id = ?'
+        params.push(projectId)
+      }
+
+      sql += ' ORDER BY rank LIMIT ? OFFSET ?'
+      params.push(limit + 1, offset)
+
+      const rows = this.db.prepare(sql).all(...params) as Array<{
+        session_id: string
+        session_title: string | null
+        project_id: string
+        project_name: string
+        tags: string | null
+        files_touched: string | null
+        snippet: string
+      }>
+
+      const hasMore = rows.length > limit
+      if (hasMore) rows.pop()
+      const results = rows.map(r => ({
+        sessionId: r.session_id,
+        sessionTitle: r.session_title,
+        projectId: r.project_id,
+        projectName: r.project_name,
+        tags: r.tags,
+        filesTouched: r.files_touched,
+        snippet: r.snippet,
+      }))
+
+      return { results, offset, hasMore }
+    } catch {
       return { results: [], offset, hasMore: false }
     }
   }

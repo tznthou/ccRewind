@@ -1,7 +1,7 @@
-import { useState, useMemo, useEffect, type ReactNode } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { formatTime } from '../../utils/formatTime'
-import type { SearchResult, GroupedSearchResult } from '../../../shared/types'
+import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
 import styles from './SearchResults.module.css'
 
 /** FTS5 snippet 使用 Unicode sentinel \uE000/\uE001 標記匹配位置，轉為 React <mark> 元素 */
@@ -39,11 +39,42 @@ function groupSearchResults(results: SearchResult[]): GroupedSearchResult[] {
   return groups
 }
 
+/** 單則訊息的精簡預覽 */
+function MessagePreview({ role, text }: { role: string | null; text: string | null }) {
+  if (!text) return null
+  const label = role === 'user' ? '👤' : '🤖'
+  const truncated = text.length > 80 ? text.slice(0, 80) + '…' : text
+  return (
+    <div className={styles.contextMsg}>
+      <span className={styles.contextRole}>{label}</span>
+      <span className={styles.contextText}>{truncated}</span>
+    </div>
+  )
+}
+
 export default function SearchResults() {
   const { searchResults, searchQuery, searchHasMore, searchProjectId } = useAppState()
   const dispatch = useAppDispatch()
   const [loading, setLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
+  const contextCacheRef = useRef(new Map<number, { before: Message[]; after: Message[] }>())
+  const [expandedContext, setExpandedContext] = useState<number | null>(null)
+
+  const toggleContext = useCallback(async (messageId: number) => {
+    if (expandedContext === messageId) {
+      setExpandedContext(null)
+      return
+    }
+    if (!contextCacheRef.current.has(messageId)) {
+      try {
+        const ctx = await window.api.getMessageContext(messageId, 2)
+        contextCacheRef.current.set(messageId, { before: ctx.before, after: ctx.after })
+      } catch {
+        return
+      }
+    }
+    setExpandedContext(messageId)
+  }, [expandedContext])
 
   const groups = useMemo(() => groupSearchResults(searchResults), [searchResults])
 
@@ -94,14 +125,38 @@ export default function SearchResults() {
               <div className={styles.groupBody}>
                 <div className={styles.projectName}>{g.projectName}</div>
                 {g.matches.map((m) => (
-                  <button
-                    key={m.messageId}
-                    className={styles.item}
-                    onClick={() => dispatch({ type: 'NAVIGATE_TO_RESULT', sessionId: g.sessionId, messageId: m.messageId })}
-                  >
-                    <div className={styles.snippet}>{renderSnippet(m.snippet)}</div>
-                    {m.timestamp && <span className={styles.time}>{formatTime(m.timestamp)}</span>}
-                  </button>
+                  <div key={m.messageId}>
+                    <div className={styles.itemRow}>
+                      <button
+                        className={styles.contextToggle}
+                        onClick={() => toggleContext(m.messageId)}
+                        aria-label="顯示上下文"
+                        title="顯示前後對話"
+                      >
+                        {expandedContext === m.messageId ? '▾' : '▸'}
+                      </button>
+                      <button
+                        className={styles.item}
+                        onClick={() => dispatch({ type: 'NAVIGATE_TO_RESULT', sessionId: g.sessionId, messageId: m.messageId })}
+                      >
+                        <div className={styles.snippet}>{renderSnippet(m.snippet)}</div>
+                        {m.timestamp && <span className={styles.time}>{formatTime(m.timestamp)}</span>}
+                      </button>
+                    </div>
+                    {expandedContext === m.messageId && contextCacheRef.current.has(m.messageId) && (
+                      <div className={styles.contextPreview}>
+                        {contextCacheRef.current.get(m.messageId)!.before.map(msg => (
+                          <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
+                        ))}
+                        <div className={styles.contextTarget}>
+                          {renderSnippet(m.snippet)}
+                        </div>
+                        {contextCacheRef.current.get(m.messageId)!.after.map(msg => (
+                          <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             )}

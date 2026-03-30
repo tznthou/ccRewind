@@ -2,6 +2,7 @@ import type { IndexerStatus, ParsedSession } from '../shared/types'
 import type { Database } from './database'
 import { scanProjects } from './scanner'
 import { parseSession } from './parser'
+import { summarizeSession } from './summarizer'
 
 export type ProgressCallback = (status: IndexerStatus) => void
 
@@ -79,6 +80,9 @@ export async function runIndexer(
       continue
     }
 
+    // 產生 session 摘要
+    const summary = summarizeSession(parsed.messages)
+
     // DB 寫入 — 失敗向上拋出（不應靜默）
     db.indexSession({
       sessionId: s.sessionId,
@@ -91,6 +95,10 @@ export async function runIndexer(
       fileMtime: s.fileMtime,
       startedAt: parsed.startedAt,
       endedAt: parsed.endedAt,
+      summaryText: summary.summaryText,
+      tags: summary.tags,
+      filesTouched: summary.filesTouched,
+      toolsUsed: summary.toolsUsed,
       messages: parsed.messages.map((msg, idx) => ({
         type: msg.type,
         role: msg.role,

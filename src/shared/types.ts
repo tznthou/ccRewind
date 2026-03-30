@@ -6,6 +6,14 @@ export interface Project {
   lastActivityAt: string | null
 }
 
+/** Session 自動摘要（heuristic） */
+export interface SessionSummary {
+  summaryText: string
+  tags: string
+  filesTouched: string
+  toolsUsed: string
+}
+
 /** Session 摘要 */
 export interface SessionMeta {
   id: string
@@ -15,6 +23,10 @@ export interface SessionMeta {
   startedAt: string | null
   endedAt: string | null
   archived: boolean
+  summaryText: string | null
+  tags: string | null
+  filesTouched: string | null
+  toolsUsed: string | null
 }
 
 /** 訊息 */
@@ -31,6 +43,16 @@ export interface Message {
   timestamp: string | null
   sequence: number
 }
+
+/** 訊息上下文（搜尋結果預覽用） */
+export interface MessageContext {
+  target: Message | null
+  before: Message[]
+  after: Message[]
+}
+
+/** 搜尋範圍 */
+export type SearchScope = 'messages' | 'sessions'
 
 /** 搜尋結果 */
 export interface SearchResult {
@@ -50,6 +72,24 @@ export interface SearchPage {
   hasMore: boolean
 }
 
+/** Session 層級搜尋結果 */
+export interface SessionSearchResult {
+  sessionId: string
+  sessionTitle: string | null
+  projectId: string
+  projectName: string
+  tags: string | null
+  filesTouched: string | null
+  snippet: string
+}
+
+/** Session 搜尋分頁回應 */
+export interface SessionSearchPage {
+  results: SessionSearchResult[]
+  offset: number
+  hasMore: boolean
+}
+
 /** 按 session 分組的搜尋結果 */
 export interface GroupedSearchResult {
   sessionId: string
@@ -65,6 +105,10 @@ export interface ElectronAPI {
   getSessions: (projectId: string) => Promise<SessionMeta[]>
   loadSession: (sessionId: string) => Promise<Message[]>
   search: (query: string, projectId?: string | null, offset?: number) => Promise<SearchPage>
+  /** 搜尋 session 標題 / 標籤 / 檔案 */
+  searchSessions: (query: string, projectId?: string | null, offset?: number) => Promise<SessionSearchPage>
+  /** 取得訊息上下文（搜尋預覽用） */
+  getMessageContext: (messageId: number, range?: number) => Promise<MessageContext>
   /** 匯出 session 為 Markdown 檔案 */
   exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */

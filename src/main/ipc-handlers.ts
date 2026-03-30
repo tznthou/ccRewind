@@ -26,6 +26,20 @@ export function registerIpcHandlers(db: Database): void {
     return db.search(query, pid, off)
   })
 
+  ipcMain.handle('search:sessions', (_event, query: unknown, projectId?: unknown, offset?: unknown) => {
+    if (typeof query !== 'string') throw new Error('Invalid query')
+    if (query.length > 500) throw new Error('Query too long')
+    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : String(projectId)
+    const off = typeof offset === 'number' ? offset : 0
+    return db.searchSessions(query, pid, off)
+  })
+
+  ipcMain.handle('message:context', (_event, messageId: unknown, range?: unknown) => {
+    if (typeof messageId !== 'number') throw new Error('Invalid messageId')
+    const r = typeof range === 'number' ? range : 2
+    return db.getMessageContext(messageId, r)
+  })
+
   ipcMain.handle('export:markdown', async (_event, sessionId: unknown) => {
     if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
     return exportSessionAsMarkdown(db, sessionId)
