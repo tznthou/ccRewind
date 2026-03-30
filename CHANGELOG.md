@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0] - 2026-03-30
+
+### Added
+
+- **Session auto-summary** (Phase 2-1): heuristic-based session summaries generated at index time — intent/conclusion text, auto-tags (bug-fix, refactor, testing, deployment, auth, ui, docs, config), files touched, and tool usage stats
+- **Search context preview** (Phase 2-2): expandable ▸ button on each search result showing 2 messages before/after the match, loaded on demand via `getMessageContext()` API
+- **Session-level search** (Phase 2-3): new "標籤/檔案" search mode that queries session title, tags, file paths, and summary text via dedicated `sessions_fts` FTS5 index
+- Search type toggle in SearchBar: switch between "對話" (message content) and "標籤/檔案" (session metadata)
+- `SessionSearchResults` component for session-level search display with tag badges
+- Session list now shows auto-tags (up to 3) and file count per session
+
+### Changed
+
+- **DB schema**: migration v5 adds `summary_text`, `tags`, `files_touched`, `tools_used` columns to `sessions` table; migration v6 adds `sessions_fts` FTS5 virtual table
+- Session list item height increased from 56px to 80px to accommodate tag row
+- Existing sessions are force re-indexed on upgrade (migration v5 clears `file_mtime`) to populate summary fields
+- FTS5 session search auto-quotes queries containing `/`, `.`, `-`, `\` for tokenizer compatibility
+
+### Fixed
+
+- Search results context preview uses `useRef` for cache to avoid unnecessary re-renders
+- `indexSession()` uses `lastInsertRowid` instead of redundant SELECT for FTS5 sync
+- File count badge shows "20+" when `filesTouched` is capped at 20 entries
+- Session tags and file count display even when only one is present (not gated on tags alone)
+
 ## [0.9.1] - 2026-03-30
 
 ### Added
