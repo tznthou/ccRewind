@@ -10,7 +10,16 @@ mac:
   target:
     - dmg
     - zip
-  artifactName: ${name}-${version}-${arch}.${ext}
+  artifactName: ${name}-${version}-mac-${arch}.${ext}
+win:
+  target:
+    - nsis
+    - zip
+  artifactName: ${name}-${version}-win-${arch}.${ext}
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
 npmRebuild: true
 asarUnpack:
   - node_modules/better-sqlite3
