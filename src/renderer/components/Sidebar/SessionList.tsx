@@ -85,11 +85,14 @@ export default function SessionList() {
                   {session.tags?.split(',').slice(0, 3).map(tag => (
                     <span key={tag} className={styles.tag}>{tag}</span>
                   ))}
-                  {session.filesTouched && (
-                    <span className={styles.fileCount}>
-                      {session.filesTouched.split(',').length}{session.filesTouched.split(',').length >= 20 ? '+' : ''} files
-                    </span>
-                  )}
+                  {session.filesTouched && (() => {
+                    const count = session.filesTouched!.split(',').length
+                    return (
+                      <span className={styles.fileCount}>
+                        {count}{count >= 20 ? '+' : ''} files
+                      </span>
+                    )
+                  })()}
                 </div>
               )}
             </div>
