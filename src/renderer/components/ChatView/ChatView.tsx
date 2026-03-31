@@ -3,6 +3,7 @@ import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
 import MessageBubble from './MessageBubble'
 import TokenBudgetPanel from '../TokenBudget/TokenBudgetPanel'
+import { useTokenHeat } from './TokenHeatGutter'
 import styles from './ChatView.module.css'
 
 interface ChatViewProps {
@@ -12,6 +13,7 @@ interface ChatViewProps {
 export default function ChatView({ sessionId }: ChatViewProps) {
   const { messages, loading, error } = useSession(sessionId)
   const { targetMessageId, searchQuery } = useAppState()
+  const heatMap = useTokenHeat(messages)
   const dispatch = useAppDispatch()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -81,7 +83,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
         </button>
       </div>
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} />
+        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heatMap={heatMap} />
       ))}
     </div>
   )

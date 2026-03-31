@@ -3,11 +3,15 @@ import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import { formatTime } from '../../utils/formatTime'
+import { getHeatStyle } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
+
+type HeatInfo = { intensity: number; cacheGood: boolean }
 
 interface MessageBubbleProps {
   message: Message
   searchQuery?: string
+  heatMap?: Map<number, HeatInfo>
 }
 
 function highlightText(text: string, query: string): ReactNode {
@@ -55,10 +59,11 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
   }
 }
 
-export default memo(function MessageBubble({ message, searchQuery = '' }: MessageBubbleProps) {
+export default memo(function MessageBubble({ message, searchQuery = '', heatMap }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
+  const heatStyle = !isUser ? getHeatStyle(heatMap?.get(message.id)) : undefined
 
   // last-prompt 不顯示
   if (message.type === 'last-prompt') return null
@@ -79,7 +84,7 @@ export default memo(function MessageBubble({ message, searchQuery = '' }: Messag
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} tabIndex={-1}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} tabIndex={-1} style={heatStyle}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>

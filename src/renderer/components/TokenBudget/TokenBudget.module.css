@@ -80,6 +80,21 @@
   font-weight: 400;
 }
 
+/* ── Charts row layout ── */
+
+.chartsRow {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: var(--space-md);
+  align-items: start;
+}
+
+@media (max-width: 700px) {
+  .chartsRow {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── ContextGrowthChart ── */
 
 .chartContainer {
@@ -127,4 +142,39 @@
   background: var(--color-bg);
   color: var(--color-text);
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ── TokenBreakdown ── */
+
+.legendText {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.chartSubtitle {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ── CostHeatBar ── */
+
+.heatBar {
+  display: flex;
+  gap: 1px;
+  height: 24px;
+  align-items: stretch;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.heatCell {
+  flex: 1;
+  min-width: 2px;
+  cursor: default;
+  transition: opacity 0.15s;
+}
+
+.heatCell:hover {
+  opacity: 0.8;
 }

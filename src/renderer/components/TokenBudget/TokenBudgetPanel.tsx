@@ -2,6 +2,8 @@ import { useCallback, useState } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
 import TokenSummaryCard from './TokenSummaryCard'
 import ContextGrowthChart from './ContextGrowthChart'
+import TokenBreakdown from './TokenBreakdown'
+import CostHeatBar from './CostHeatBar'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -49,7 +51,11 @@ function TokenBudgetInner({ sessionId }: Props) {
           {!loading && !error && stats && stats.turns.length > 0 && (
             <>
               <TokenSummaryCard stats={stats} />
-              <ContextGrowthChart turns={stats.turns} />
+              <div className={styles.chartsRow}>
+                <ContextGrowthChart turns={stats.turns} />
+                <TokenBreakdown stats={stats} />
+              </div>
+              <CostHeatBar turns={stats.turns} />
             </>
           )}
         </div>
