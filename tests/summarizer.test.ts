@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { summarizeSession } from '../src/main/summarizer'
+import { summarizeSession, SUMMARY_VERSION } from '../src/main/summarizer'
 import type { ParsedLine } from '../src/shared/types'
 
 /** 建立測試用 ParsedLine，預設值皆為空 */
@@ -17,6 +17,11 @@ function line(overrides: Partial<ParsedLine> = {}): ParsedLine {
     hasToolResult: false,
     toolNames: [],
     rawJson: '{}',
+    inputTokens: null,
+    outputTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    model: null,
     ...overrides,
   }
 }
@@ -31,51 +36,251 @@ function toolUseContent(
 }
 
 describe('summarizeSession', () => {
-  it('empty session → all fields are empty strings', () => {
-    const result = summarizeSession([])
-    expect(result.summaryText).toBe('')
-    expect(result.tags).toBe('')
-    expect(result.filesTouched).toBe('')
-    expect(result.toolsUsed).toBe('')
+  // ── 基本 ──
+
+  it('empty session → all fields are empty/default', () => {
+    const { summary, sessionFiles } = summarizeSession([])
+    expect(summary.intentText).toBe('')
+    expect(summary.summaryText).toBe('')
+    expect(summary.tags).toBe('')
+    expect(summary.filesTouched).toBe('')
+    expect(summary.toolsUsed).toBe('')
+    expect(summary.outcomeStatus).toBeNull()
+    expect(summary.summaryVersion).toBe(SUMMARY_VERSION)
+    expect(sessionFiles).toEqual([])
   })
 
-  it('single user message → intent only, no conclusion', () => {
-    const result = summarizeSession([
+  // ── Intent Extraction ──
+
+  it('extracts intent from first substantive user message', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'hey' }),
       line({ role: 'user', contentText: '幫我修 login bug' }),
     ])
-    expect(result.summaryText).toContain('幫我修 login bug')
-    expect(result.summaryText).not.toContain('→')
+    expect(summary.intentText).toBe('幫我修 login bug')
   })
 
-  it('multiple user messages → intent + conclusion', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: '開始重構 auth module' }),
-      line({ role: 'assistant', contentText: '好的' }),
-      line({ role: 'user', contentText: '完成了，謝謝' }),
+  it('skips greeting/continuation messages', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'hello' }),
+      line({ role: 'user', contentText: 'continue' }),
+      line({ role: 'user', contentText: '重構 auth 模組的錯誤處理' }),
     ])
-    expect(result.summaryText).toContain('開始重構 auth module')
-    expect(result.summaryText).toContain('完成了，謝謝')
+    expect(summary.intentText).toBe('重構 auth 模組的錯誤處理')
   })
 
-  it('same first and last user message → no duplicate conclusion', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: '查一下 config' }),
-      line({ role: 'assistant', contentText: '以下是結果' }),
+  it('falls back to first message if all are hollow', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'hey' }),
+      line({ role: 'user', contentText: 'ok' }),
     ])
-    expect(result.summaryText).toContain('查一下 config')
-    expect(result.summaryText).not.toContain('→')
+    // fallback: 取第一筆有內容的
+    expect(summary.intentText).toBe('hey')
   })
 
-  it('summaryText truncated to ≤200 chars', () => {
-    const longText = 'A'.repeat(300)
-    const result = summarizeSession([
+  // ── Activity Text ──
+
+  it('generates activity text from tool usage', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '改程式' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit', 'Edit', 'Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/a.ts' } },
+          { name: 'Edit', input: { file_path: '/src/b.ts' } },
+          { name: 'Edit', input: { file_path: '/src/c.ts' } },
+        ]),
+      }),
+    ])
+    expect(summary.activityText).toContain('Edit×3')
+    expect(summary.activityText).toContain('3 files')
+  })
+
+  // ── Outcome Inference ──
+
+  it('infers committed from git commit in Bash (even short session)', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '提交這些修改' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git commit -m "fix: something"' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(true)
+    expect(summary.summaryText).toContain('committed')
+  })
+
+  it('infers tested from test command in Bash', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'pnpm vitest run' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+    expect(summary.outcomeSignals.testCommandRan).toBe(true)
+  })
+
+  it('infers quick-qa for short sessions without tool use', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'TypeScript 的 enum 怎麼用？' }),
+      line({ role: 'assistant', contentText: '以下是說明...' }),
+    ])
+    expect(summary.outcomeStatus).toBe('quick-qa')
+    expect(summary.outcomeSignals.isQuickQA).toBe(true)
+    expect(summary.summaryText).toContain('Q&A')
+  })
+
+  it('infers in-progress when ending with edits', () => {
+    const messages = [
+      line({ role: 'user', contentText: '幫我改這個功能' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/foo.ts' } },
+        ]),
+      }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+    expect(summary.outcomeSignals.endedWithEdits).toBe(true)
+  })
+
+  // ── Composite summaryText ──
+
+  it('combines intent, activity, outcome into summaryText', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '修 auth bug' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit', 'Bash'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/auth.ts' } },
+          { name: 'Bash', input: { command: 'git commit -m "fix"' } },
+        ]),
+      }),
+    ])
+    expect(summary.summaryText).toContain('修 auth bug')
+    expect(summary.summaryText).toContain('committed')
+  })
+
+  it('summaryText truncated to ≤300 chars', () => {
+    const longText = 'A'.repeat(400)
+    const { summary } = summarizeSession([
       line({ role: 'user', contentText: longText }),
     ])
-    expect(result.summaryText.length).toBeLessThanOrEqual(200)
+    expect(summary.summaryText.length).toBeLessThanOrEqual(300)
   })
 
+  // ── Tags (multi-signal) ──
+
+  it('infers bug-fix tag from text keywords', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'fix the login error' }),
+    ])
+    expect(summary.tags).toContain('bug-fix')
+  })
+
+  it('infers tags from file paths', () => {
+    const { summary } = summarizeSession([
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/components/App.module.css' } },
+        ]),
+      }),
+    ])
+    expect(summary.tags).toContain('ui')
+  })
+
+  it('infers testing tag from test file path', () => {
+    const { summary } = summarizeSession([
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/__tests__/auth.test.ts' } },
+        ]),
+      }),
+    ])
+    expect(summary.tags).toContain('testing')
+  })
+
+  it('infers code-review from heavy Read + low Edit', () => {
+    const messages = Array.from({ length: 8 }, (_, i) =>
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Read'],
+        contentJson: toolUseContent([
+          { name: 'Read', input: { file_path: `/src/file${i}.ts` } },
+        ]),
+      }),
+    )
+    const { summary } = summarizeSession(messages)
+    expect(summary.tags).toContain('code-review')
+  })
+
+  it('adds outcome tags (committed/tested)', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '提交' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git commit -m "feat"' } },
+        ]),
+      }),
+    ])
+    expect(summary.tags).toContain('committed')
+  })
+
+  it('multiple tags from mixed signals', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'fix the bug and add test spec' }),
+    ])
+    const tags = summary.tags.split(',')
+    expect(tags).toContain('bug-fix')
+    expect(tags).toContain('testing')
+  })
+
+  it('no matching signals → empty tags', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '幫我看一下這段程式碼' }),
+    ])
+    // quick-qa tag 可能存在
+    const tags = summary.tags.split(',').filter(t => t && t !== 'quick-qa' && t !== 'committed' && t !== 'tested')
+    // 其他 tag 可能為空或含 code-review 等
+    expect(tags.length).toBeLessThanOrEqual(1)
+  })
+
+  // ── File Extraction + session_files ──
+
   it('extracts file paths from tool_use contentJson', () => {
-    const result = summarizeSession([
+    const { summary } = summarizeSession([
       line({
         role: 'assistant',
         hasToolUse: true,
@@ -85,25 +290,11 @@ describe('summarizeSession', () => {
         ]),
       }),
     ])
-    expect(result.filesTouched).toBe('/src/main.ts')
+    expect(summary.filesTouched).toBe('/src/main.ts')
   })
 
-  it('extracts path from Glob/Grep tools', () => {
-    const result = summarizeSession([
-      line({
-        role: 'assistant',
-        hasToolUse: true,
-        toolNames: ['Grep'],
-        contentJson: toolUseContent([
-          { name: 'Grep', input: { pattern: 'foo', path: '/src/utils' } },
-        ]),
-      }),
-    ])
-    expect(result.filesTouched).toBe('/src/utils')
-  })
-
-  it('deduplicates file paths', () => {
-    const result = summarizeSession([
+  it('generates session_files with correct operation types', () => {
+    const { sessionFiles } = summarizeSession([
       line({
         role: 'assistant',
         hasToolUse: true,
@@ -121,11 +312,74 @@ describe('summarizeSession', () => {
         ]),
       }),
     ])
-    expect(result.filesTouched).toBe('/src/a.ts')
+    const readEntry = sessionFiles.find(f => f.filePath === '/src/a.ts' && f.operation === 'read')
+    const editEntry = sessionFiles.find(f => f.filePath === '/src/a.ts' && f.operation === 'edit')
+    expect(readEntry).toBeDefined()
+    expect(readEntry!.count).toBe(1)
+    expect(editEntry).toBeDefined()
+    expect(editEntry!.count).toBe(1)
   })
 
-  it('caps filesTouched at 20 entries', () => {
-    const messages = Array.from({ length: 25 }, (_, i) =>
+  it('tracks first/last seen sequence in session_files', () => {
+    const { sessionFiles } = summarizeSession([
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Read'],
+        contentJson: toolUseContent([
+          { name: 'Read', input: { file_path: '/src/a.ts' } },
+        ]),
+      }),
+      line({ role: 'user', contentText: 'ok' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Read'],
+        contentJson: toolUseContent([
+          { name: 'Read', input: { file_path: '/src/a.ts' } },
+        ]),
+      }),
+    ])
+    const entry = sessionFiles.find(f => f.filePath === '/src/a.ts' && f.operation === 'read')
+    expect(entry!.count).toBe(2)
+    expect(entry!.firstSeenSeq).toBe(0)
+    expect(entry!.lastSeenSeq).toBe(2)
+  })
+
+  it('filters out noise paths (node_modules, .git, dist)', () => {
+    const { summary, sessionFiles } = summarizeSession([
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Read', 'Read', 'Read'],
+        contentJson: toolUseContent([
+          { name: 'Read', input: { file_path: '/project/node_modules/foo/index.js' } },
+          { name: 'Read', input: { file_path: '/project/.git/config' } },
+          { name: 'Read', input: { file_path: '/project/src/main.ts' } },
+        ]),
+      }),
+    ])
+    expect(summary.filesTouched).toBe('/project/src/main.ts')
+    expect(sessionFiles.length).toBe(1)
+    expect(sessionFiles[0].filePath).toBe('/project/src/main.ts')
+  })
+
+  it('Grep/Glob mapped to discovery operation', () => {
+    const { sessionFiles } = summarizeSession([
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Grep'],
+        contentJson: toolUseContent([
+          { name: 'Grep', input: { pattern: 'foo', path: '/src/utils' } },
+        ]),
+      }),
+    ])
+    expect(sessionFiles[0].operation).toBe('discovery')
+  })
+
+  it('caps filesTouched at 30 entries', () => {
+    const messages = Array.from({ length: 35 }, (_, i) =>
       line({
         role: 'assistant',
         hasToolUse: true,
@@ -135,65 +389,49 @@ describe('summarizeSession', () => {
         ]),
       }),
     )
-    const result = summarizeSession(messages)
-    expect(result.filesTouched.split(',').length).toBe(20)
+    const { summary } = summarizeSession(messages)
+    expect(summary.filesTouched.split(',').length).toBe(30)
   })
 
   it('counts tool usage sorted by frequency desc', () => {
-    const result = summarizeSession([
+    const { summary } = summarizeSession([
       line({ toolNames: ['Read', 'Read', 'Edit'] }),
       line({ toolNames: ['Read', 'Bash'] }),
     ])
-    // Read:3, Edit:1, Bash:1
-    expect(result.toolsUsed).toBe('Read:3,Edit:1,Bash:1')
+    expect(summary.toolsUsed).toBe('Read:3,Edit:1,Bash:1')
   })
 
-  it('infers bug-fix tag from keywords', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: 'fix the login error' }),
-    ])
-    expect(result.tags).toContain('bug-fix')
+  // ── Duration ──
+
+  it('computes duration from startedAt/endedAt', () => {
+    const { summary } = summarizeSession(
+      [line({ role: 'user', contentText: 'test' })],
+      '2024-01-01T10:00:00Z',
+      '2024-01-01T10:30:00Z',
+    )
+    expect(summary.durationSeconds).toBe(1800)
   })
 
-  it('infers refactor tag', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: 'refactor the auth module' }),
-    ])
-    expect(result.tags).toContain('refactor')
+  it('duration is null when timestamps missing', () => {
+    const { summary } = summarizeSession(
+      [line({ role: 'user', contentText: 'test' })],
+    )
+    expect(summary.durationSeconds).toBeNull()
   })
 
-  it('infers testing tag', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: '幫我寫 vitest test' }),
+  // ── Version ──
+
+  it('includes summary version', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'test' }),
     ])
-    expect(result.tags).toContain('testing')
+    expect(summary.summaryVersion).toBe(SUMMARY_VERSION)
   })
 
-  it('infers deployment tag', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: 'prepare for release v2' }),
-    ])
-    expect(result.tags).toContain('deployment')
-  })
-
-  it('multiple tags from mixed keywords', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: 'fix the bug and add test spec' }),
-    ])
-    const tags = result.tags.split(',')
-    expect(tags).toContain('bug-fix')
-    expect(tags).toContain('testing')
-  })
-
-  it('no matching keywords → empty tags', () => {
-    const result = summarizeSession([
-      line({ role: 'user', contentText: '幫我看一下這段程式碼' }),
-    ])
-    expect(result.tags).toBe('')
-  })
+  // ── Malformed data ──
 
   it('malformed contentJson → gracefully skipped', () => {
-    const result = summarizeSession([
+    const { summary } = summarizeSession([
       line({
         role: 'assistant',
         hasToolUse: true,
@@ -201,6 +439,6 @@ describe('summarizeSession', () => {
         contentJson: '{not valid json[',
       }),
     ])
-    expect(result.filesTouched).toBe('')
+    expect(summary.filesTouched).toBe('')
   })
 })

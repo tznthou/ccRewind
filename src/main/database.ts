@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -22,6 +22,15 @@ export interface MessageInput {
   model: string | null
 }
 
+/** session_files 寫入用型別 */
+export interface SessionFileInput {
+  filePath: string
+  operation: FileOperation
+  count: number
+  firstSeenSeq: number
+  lastSeenSeq: number
+}
+
 /** indexSession 的參數型別 */
 export interface IndexSessionParams {
   sessionId: string
@@ -35,9 +44,15 @@ export interface IndexSessionParams {
   startedAt: string | null
   endedAt: string | null
   summaryText?: string | null
+  intentText?: string | null
+  outcomeStatus?: OutcomeStatus
+  outcomeSignals?: string | null
+  durationSeconds?: number | null
+  summaryVersion?: number | null
   tags?: string | null
   filesTouched?: string | null
   toolsUsed?: string | null
+  sessionFiles?: SessionFileInput[]
   messages: MessageInput[]
 }
 
@@ -235,6 +250,38 @@ const migrations: Migration[] = [
       db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
+  {
+    version: 8,
+    description: 'Phase 3: structured summary + session_files reverse index',
+    up: (db) => {
+      const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
+      if (!cols.some(c => c.name === 'intent_text')) {
+        db.exec(`
+          ALTER TABLE sessions ADD COLUMN intent_text TEXT;
+          ALTER TABLE sessions ADD COLUMN outcome_status TEXT;
+          ALTER TABLE sessions ADD COLUMN outcome_signals TEXT;
+          ALTER TABLE sessions ADD COLUMN duration_seconds INTEGER;
+          ALTER TABLE sessions ADD COLUMN summary_version INTEGER;
+        `)
+      }
+      // session_files 反向索引表
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS session_files (
+          session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          operation TEXT NOT NULL,
+          count INTEGER DEFAULT 1,
+          first_seen_seq INTEGER,
+          last_seen_seq INTEGER,
+          PRIMARY KEY (session_id, file_path, operation)
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_files_path ON session_files(file_path);
+        CREATE INDEX IF NOT EXISTS idx_session_files_session ON session_files(session_id);
+      `)
+      // 清空 file_mtime 強制全量 re-index
+      db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -351,8 +398,20 @@ export class Database {
         raw_json TEXT
       );
 
+      CREATE TABLE IF NOT EXISTS session_files (
+        session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        operation TEXT NOT NULL,
+        count INTEGER DEFAULT 1,
+        first_seen_seq INTEGER,
+        last_seen_seq INTEGER,
+        PRIMARY KEY (session_id, file_path, operation)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sequence);
       CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, started_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_session_files_path ON session_files(file_path);
+      CREATE INDEX IF NOT EXISTS idx_session_files_session ON session_files(session_id);
     `)
 
     // FTS5 虛擬表不支援 IF NOT EXISTS，先查 sqlite_master
@@ -466,7 +525,10 @@ export class Database {
 
   getSessions(projectId: string): SessionMeta[] {
     const rows = this.db.prepare(
-      'SELECT id, project_id, title, message_count, started_at, ended_at, archived, summary_text, tags, files_touched, tools_used, total_input_tokens, total_output_tokens FROM sessions WHERE project_id = ? ORDER BY started_at DESC',
+      `SELECT id, project_id, title, message_count, started_at, ended_at, archived,
+              summary_text, intent_text, outcome_status, duration_seconds, summary_version,
+              tags, files_touched, tools_used, total_input_tokens, total_output_tokens
+       FROM sessions WHERE project_id = ? ORDER BY started_at DESC`,
     ).all(projectId) as Array<{
       id: string
       project_id: string
@@ -476,6 +538,10 @@ export class Database {
       ended_at: string | null
       archived: number
       summary_text: string | null
+      intent_text: string | null
+      outcome_status: string | null
+      duration_seconds: number | null
+      summary_version: number | null
       tags: string | null
       files_touched: string | null
       tools_used: string | null
@@ -492,6 +558,10 @@ export class Database {
       endedAt: r.ended_at,
       archived: r.archived === 1,
       summaryText: r.summary_text,
+      intentText: r.intent_text,
+      outcomeStatus: (r.outcome_status as OutcomeStatus) ?? null,
+      durationSeconds: r.duration_seconds,
+      summaryVersion: r.summary_version,
       tags: r.tags,
       filesTouched: r.files_touched,
       toolsUsed: r.tools_used,
@@ -562,6 +632,7 @@ export class Database {
           "INSERT INTO sessions_fts(sessions_fts, rowid, title, tags, files_touched, summary_text) VALUES ('delete', ?, ?, ?, ?, ?)",
         ).run(oldSession.rowid, oldSession.title ?? '', oldSession.tags ?? '', oldSession.files_touched ?? '', oldSession.summary_text ?? '')
       }
+      this.db.prepare('DELETE FROM session_files WHERE session_id = ?').run(params.sessionId)
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
       this.upsertProject(params.projectId, params.projectDisplayName)
       // 計算 token 彙總
@@ -572,13 +643,18 @@ export class Database {
         if (m.outputTokens != null) totalOutput += m.outputTokens
       }
       const insertResult = this.db.prepare(`
-        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at, summary_text, tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at,
+          summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, summary_version,
+          tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
         params.startedAt, params.endedAt,
-        params.summaryText ?? null, params.tags ?? null,
+        params.summaryText ?? null, params.intentText ?? null,
+        params.outcomeStatus ?? null, params.outcomeSignals ?? null,
+        params.durationSeconds ?? null, params.summaryVersion ?? null,
+        params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
         totalInput || null, totalOutput || null,
       )
@@ -586,6 +662,16 @@ export class Database {
       this.db.prepare(
         'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text) VALUES (?, ?, ?, ?, ?)',
       ).run(insertResult.lastInsertRowid, params.title ?? '', params.tags ?? '', params.filesTouched ?? '', params.summaryText ?? '')
+      // 寫入 session_files
+      if (params.sessionFiles && params.sessionFiles.length > 0) {
+        const insertFile = this.db.prepare(`
+          INSERT INTO session_files (session_id, file_path, operation, count, first_seen_seq, last_seen_seq)
+          VALUES (?, ?, ?, ?, ?, ?)
+        `)
+        for (const f of params.sessionFiles) {
+          insertFile.run(params.sessionId, f.filePath, f.operation, f.count, f.firstSeenSeq, f.lastSeenSeq)
+        }
+      }
       const insertMsg = this.db.prepare(`
         INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -861,5 +947,69 @@ export class Database {
       primaryModel,
       turns,
     }
+  }
+
+  // ── Session Files (Reverse Index) ──
+
+  /** 反向查詢：某檔案出現在哪些 session（按時間倒序） */
+  getFileHistory(filePath: string): Array<{
+    sessionId: string
+    sessionTitle: string | null
+    projectId: string
+    projectName: string
+    operation: FileOperation
+    count: number
+    startedAt: string | null
+  }> {
+    const rows = this.db.prepare(`
+      SELECT sf.session_id, s.title AS session_title, s.project_id, p.display_name AS project_name,
+             sf.operation, sf.count, s.started_at
+      FROM session_files sf
+      JOIN sessions s ON s.id = sf.session_id
+      JOIN projects p ON p.id = s.project_id
+      WHERE sf.file_path = ?
+      ORDER BY s.started_at DESC
+    `).all(filePath) as Array<{
+      session_id: string
+      session_title: string | null
+      project_id: string
+      project_name: string
+      operation: FileOperation
+      count: number
+      started_at: string | null
+    }>
+    return rows.map(r => ({
+      sessionId: r.session_id,
+      sessionTitle: r.session_title,
+      projectId: r.project_id,
+      projectName: r.project_name,
+      operation: r.operation,
+      count: r.count,
+      startedAt: r.started_at,
+    }))
+  }
+
+  /** 正向查詢：某 session 操作了哪些檔案 */
+  getSessionFiles(sessionId: string): SessionFile[] {
+    const rows = this.db.prepare(`
+      SELECT session_id, file_path, operation, count, first_seen_seq, last_seen_seq
+      FROM session_files WHERE session_id = ?
+      ORDER BY last_seen_seq DESC
+    `).all(sessionId) as Array<{
+      session_id: string
+      file_path: string
+      operation: string
+      count: number
+      first_seen_seq: number
+      last_seen_seq: number
+    }>
+    return rows.map(r => ({
+      sessionId: r.session_id,
+      filePath: r.file_path,
+      operation: r.operation as FileOperation,
+      count: r.count,
+      firstSeenSeq: r.first_seen_seq,
+      lastSeenSeq: r.last_seen_seq,
+    }))
   }
 }

@@ -3,7 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
-import { formatDateTime } from '../../utils/formatTime'
+import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
 
@@ -106,7 +106,12 @@ export default function SessionList() {
                 {session.title ?? session.id.slice(0, 8)}
               </div>
               <div className={styles.sessionMeta}>
-                <span>{formatDateTime(session.startedAt)}</span>
+                <span>
+                  {formatDateTime(session.startedAt)}
+                  {session.durationSeconds != null && session.durationSeconds > 0 && (
+                    <span className={styles.durationBadge}> · {formatDuration(session.durationSeconds)}</span>
+                  )}
+                </span>
                 <span>
                   {session.archived ? '已封存 · ' : ''}{session.messageCount} 則
                   {session.totalInputTokens != null && session.totalInputTokens > 0 && (
@@ -114,16 +119,21 @@ export default function SessionList() {
                   )}
                 </span>
               </div>
-              {(session.tags || session.filesTouched) && (
+              {(session.tags || session.filesTouched || session.outcomeStatus) && (
                 <div className={styles.sessionTags}>
-                  {session.tags?.split(',').slice(0, 3).map(tag => (
+                  {session.outcomeStatus && (
+                    <span className={`${styles.tag} ${styles.outcomeTag}`} data-outcome={session.outcomeStatus}>
+                      {session.outcomeStatus}
+                    </span>
+                  )}
+                  {session.tags?.split(',').filter(t => t !== 'committed' && t !== 'tested').slice(0, 3).map(tag => (
                     <span key={tag} className={styles.tag}>{tag}</span>
                   ))}
                   {session.filesTouched && (() => {
                     const count = session.filesTouched!.split(',').length
                     return (
                       <span className={styles.fileCount}>
-                        {count}{count >= 20 ? '+' : ''} files
+                        {count}{count >= 30 ? '+' : ''} files
                       </span>
                     )
                   })()}

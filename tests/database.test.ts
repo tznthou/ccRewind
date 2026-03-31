@@ -717,3 +717,133 @@ describe('sessions_fts (migration v6)', () => {
     expect(oldMatch).toBeUndefined()
   })
 })
+
+describe('Phase 3: session_files reverse index', () => {
+  it('session_files table exists with correct schema', () => {
+    const tables = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
+    ).map(r => r.name)
+    expect(tables).toContain('session_files')
+
+    const indexes = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_session_files%'",
+    ).map(r => r.name)
+    expect(indexes).toContain('idx_session_files_path')
+    expect(indexes).toContain('idx_session_files_session')
+  })
+
+  it('indexSession writes session_files', () => {
+    db.indexSession({
+      sessionId: 'sf-001', projectId: 'proj-sf', projectDisplayName: '/test/sf',
+      title: 'File test', messageCount: 0, filePath: '/tmp/sf.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/a.ts', operation: 'edit', count: 3, firstSeenSeq: 1, lastSeenSeq: 5 },
+        { filePath: '/src/b.ts', operation: 'read', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+      ],
+      messages: [],
+    })
+
+    const files = db.getSessionFiles('sf-001')
+    expect(files).toHaveLength(2)
+    const editFile = files.find(f => f.filePath === '/src/a.ts')!
+    expect(editFile.operation).toBe('edit')
+    expect(editFile.count).toBe(3)
+    expect(editFile.firstSeenSeq).toBe(1)
+    expect(editFile.lastSeenSeq).toBe(5)
+  })
+
+  it('getFileHistory returns sessions that touched a file', () => {
+    db.indexSession({
+      sessionId: 'fh-001', projectId: 'proj-fh', projectDisplayName: '/test/fh',
+      title: 'Session A', messageCount: 0, filePath: '/tmp/fh1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z',
+      startedAt: '2024-01-01T10:00:00.000Z', endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/shared.ts', operation: 'edit', count: 2, firstSeenSeq: 0, lastSeenSeq: 3 },
+      ],
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'fh-002', projectId: 'proj-fh', projectDisplayName: '/test/fh',
+      title: 'Session B', messageCount: 0, filePath: '/tmp/fh2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-02T00:00:00.000Z',
+      startedAt: '2024-01-02T10:00:00.000Z', endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/shared.ts', operation: 'read', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+      ],
+      messages: [],
+    })
+
+    const history = db.getFileHistory('/src/shared.ts')
+    expect(history).toHaveLength(2)
+    // 倒序：最新的先
+    expect(history[0].sessionId).toBe('fh-002')
+    expect(history[0].operation).toBe('read')
+    expect(history[1].sessionId).toBe('fh-001')
+    expect(history[1].operation).toBe('edit')
+  })
+
+  it('re-index clears old session_files', () => {
+    db.indexSession({
+      sessionId: 'sf-reindex', projectId: 'proj-sf', projectDisplayName: '/test/sf',
+      title: 'V1', messageCount: 0, filePath: '/tmp/sfr.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/old.ts', operation: 'edit', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+      ],
+      messages: [],
+    })
+
+    db.indexSession({
+      sessionId: 'sf-reindex', projectId: 'proj-sf', projectDisplayName: '/test/sf',
+      title: 'V2', messageCount: 0, filePath: '/tmp/sfr.jsonl', fileSize: 100,
+      fileMtime: '2024-01-02T00:00:00.000Z', startedAt: null, endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/new.ts', operation: 'write', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+      ],
+      messages: [],
+    })
+
+    const files = db.getSessionFiles('sf-reindex')
+    expect(files).toHaveLength(1)
+    expect(files[0].filePath).toBe('/src/new.ts')
+    expect(files[0].operation).toBe('write')
+
+    // old file should not appear in reverse lookup
+    const oldHistory = db.getFileHistory('/src/old.ts')
+    expect(oldHistory).toHaveLength(0)
+  })
+})
+
+describe('Phase 3: structured summary fields', () => {
+  it('sessions table has Phase 3 columns', () => {
+    const cols = db.rawAll<{ name: string }>('PRAGMA table_info(sessions)').map(r => r.name)
+    expect(cols).toContain('intent_text')
+    expect(cols).toContain('outcome_status')
+    expect(cols).toContain('outcome_signals')
+    expect(cols).toContain('duration_seconds')
+    expect(cols).toContain('summary_version')
+  })
+
+  it('indexSession with Phase 3 fields → getSessions returns them', () => {
+    db.indexSession({
+      sessionId: 'p3-001', projectId: 'proj-p3', projectDisplayName: '/test/p3',
+      title: 'Phase 3 test', messageCount: 0, filePath: '/tmp/p3.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      intentText: 'Fix auth bug',
+      outcomeStatus: 'committed',
+      outcomeSignals: '{"gitCommitInvoked":true}',
+      durationSeconds: 1800,
+      summaryVersion: 1,
+      messages: [],
+    })
+
+    const sessions = db.getSessions('proj-p3')
+    expect(sessions).toHaveLength(1)
+    expect(sessions[0].intentText).toBe('Fix auth bug')
+    expect(sessions[0].outcomeStatus).toBe('committed')
+    expect(sessions[0].durationSeconds).toBe(1800)
+    expect(sessions[0].summaryVersion).toBe(1)
+  })
+})

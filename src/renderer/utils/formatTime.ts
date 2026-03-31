@@ -13,3 +13,13 @@ export function formatTime(iso: string | null): string {
   const d = new Date(iso)
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
+
+export function formatDuration(seconds: number | null): string {
+  if (seconds == null || seconds <= 0) return ''
+  if (seconds < 60) return `${seconds}s`
+  const mins = Math.floor(seconds / 60)
+  if (mins < 60) return `${mins}m`
+  const hours = Math.floor(mins / 60)
+  const remainMins = mins % 60
+  return remainMins > 0 ? `${hours}h${remainMins}m` : `${hours}h`
+}

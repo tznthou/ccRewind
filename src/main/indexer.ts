@@ -80,8 +80,8 @@ export async function runIndexer(
       continue
     }
 
-    // 產生 session 摘要
-    const summary = summarizeSession(parsed.messages)
+    // 產生 session 摘要 + session_files
+    const { summary, sessionFiles } = summarizeSession(parsed.messages, parsed.startedAt, parsed.endedAt)
 
     // DB 寫入 — 失敗向上拋出（不應靜默）
     db.indexSession({
@@ -96,9 +96,15 @@ export async function runIndexer(
       startedAt: parsed.startedAt,
       endedAt: parsed.endedAt,
       summaryText: summary.summaryText,
+      intentText: summary.intentText || null,
+      outcomeStatus: summary.outcomeStatus,
+      outcomeSignals: JSON.stringify(summary.outcomeSignals),
+      durationSeconds: summary.durationSeconds,
+      summaryVersion: summary.summaryVersion,
       tags: summary.tags,
       filesTouched: summary.filesTouched,
       toolsUsed: summary.toolsUsed,
+      sessionFiles,
       messages: parsed.messages.map((msg, idx) => ({
         type: msg.type,
         role: msg.role,

@@ -3,6 +3,7 @@ out/
 dist/
 *.db
 .DS_Store
+.vscode/
 .claude
 .claude/RESUME.md
 mockups/

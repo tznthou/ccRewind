@@ -256,9 +256,10 @@ describe('runIndexer', () => {
     expect(sessions).toHaveLength(1)
     const s = sessions[0]
 
-    // summaryText 包含 intent 和 conclusion
+    // summaryText 包含 intent（Phase 3: 結構化摘要，不再包含最後 user message 原文）
     expect(s.summaryText).toContain('fix the login error')
-    expect(s.summaryText).toContain('looks good')
+    // intentText 應獨立存在
+    expect(s.intentText).toContain('fix the login error')
 
     // tags 應包含 bug-fix（含 fix + error）
     expect(s.tags).toContain('bug-fix')

@@ -6,12 +6,51 @@ export interface Project {
   lastActivityAt: string | null
 }
 
-/** Session 自動摘要（heuristic） */
+/** Outcome 觀察信號（可回溯的原始 signal） */
+export interface OutcomeSignals {
+  gitCommitInvoked: boolean
+  testCommandRan: boolean
+  /** session 最後幾輪是否仍在 Edit/Write */
+  endedWithEdits: boolean
+  /** session 輪數少且無 tool_use */
+  isQuickQA: boolean
+}
+
+/** Outcome 推斷狀態 */
+export type OutcomeStatus = 'committed' | 'tested' | 'in-progress' | 'quick-qa' | null
+
+/** Session 自動摘要（heuristic v2） */
 export interface SessionSummary {
+  /** 結構化意圖文字（跳過 greeting，找第一句實質內容） */
+  intentText: string
+  /** 動作概要（"Edit×8, 5 個檔案"） */
+  activityText: string
+  /** outcome 推斷狀態 */
+  outcomeStatus: OutcomeStatus
+  /** outcome 原始信號（可回溯） */
+  outcomeSignals: OutcomeSignals
+  /** 組合式摘要文字（intent → activity → outcome） */
   summaryText: string
   tags: string
   filesTouched: string
   toolsUsed: string
+  /** 摘要引擎版本（規則迭代時安全 backfill） */
+  summaryVersion: number
+  /** session 持續秒數 */
+  durationSeconds: number | null
+}
+
+/** session_files 表的操作類型：mutation（改動）vs discovery（搜尋/瀏覽） */
+export type FileOperation = 'read' | 'edit' | 'write' | 'discovery'
+
+/** session_files 表的單筆記錄 */
+export interface SessionFile {
+  sessionId: string
+  filePath: string
+  operation: FileOperation
+  count: number
+  firstSeenSeq: number
+  lastSeenSeq: number
 }
 
 /** Session 摘要 */
@@ -24,6 +63,14 @@ export interface SessionMeta {
   endedAt: string | null
   archived: boolean
   summaryText: string | null
+  /** 結構化意圖文字（Phase 3） */
+  intentText: string | null
+  /** outcome 推斷狀態（Phase 3） */
+  outcomeStatus: OutcomeStatus
+  /** session 持續秒數（Phase 3） */
+  durationSeconds: number | null
+  /** 摘要引擎版本（Phase 3） */
+  summaryVersion: number | null
   tags: string | null
   filesTouched: string | null
   toolsUsed: string | null
