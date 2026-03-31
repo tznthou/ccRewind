@@ -40,6 +40,11 @@ export function registerIpcHandlers(db: Database): void {
     return db.getMessageContext(messageId, r)
   })
 
+  ipcMain.handle('session:token-stats', (_event, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    return db.getSessionTokenStats(sessionId)
+  })
+
   ipcMain.handle('export:markdown', async (_event, sessionId: unknown) => {
     if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
     return exportSessionAsMarkdown(db, sessionId)

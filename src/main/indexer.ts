@@ -110,6 +110,11 @@ export async function runIndexer(
         timestamp: msg.timestamp,
         sequence: idx,
         rawJson: msg.rawJson,
+        inputTokens: msg.inputTokens,
+        outputTokens: msg.outputTokens,
+        cacheReadTokens: msg.cacheReadTokens,
+        cacheCreationTokens: msg.cacheCreationTokens,
+        model: msg.model,
       })),
     })
   }

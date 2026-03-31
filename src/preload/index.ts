@@ -8,6 +8,7 @@ const api: ElectronAPI = {
   search: (query, projectId, offset) => ipcRenderer.invoke('search:query', query, projectId, offset),
   searchSessions: (query, projectId, offset) => ipcRenderer.invoke('search:sessions', query, projectId, offset),
   getMessageContext: (messageId, range) => ipcRenderer.invoke('message:context', messageId, range),
+  getSessionTokenStats: (sessionId) => ipcRenderer.invoke('session:token-stats', sessionId),
   exportMarkdown: (sessionId) => ipcRenderer.invoke('export:markdown', sessionId),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   getUpdateState: () => ipcRenderer.invoke('updates:get-state'),

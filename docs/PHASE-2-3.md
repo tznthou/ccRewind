@@ -2,7 +2,8 @@
 
 > Phase 1 ✅：表拆分、資料保全、分頁、分組
 > Phase 2 ✅：Session heuristic 摘要、搜尋上下文預覽、scope 擴展
-> Phase 3 🔜：LLM 智慧摘要（BYOK）
+> Phase 2.5 🔜：Context Budget 視覺化（token 成本透視）
+> Phase 3 📋：LLM 智慧摘要（BYOK）
 > Phase 4 📋：知識庫（決策鏈追蹤、統計儀表板、語意搜尋）
 
 ---
@@ -18,6 +19,33 @@
 - **2-3. 搜尋 scope 擴展**：FTS5 索引涵蓋 title / tags / files_touched / summary_text
 
 > 現況：heuristic 摘要品質有限（截斷文字 + keyword matching），Phase 3 將用 LLM 升級。
+
+---
+
+## Phase 2.5 🔜 Context Budget 視覺化
+
+**目標**：讓使用者一眼看出每個 session「token 花在哪、被誰吃掉」——context window 的成本透視鏡。
+
+**為什麼插在這裡**：不依賴 LLM（Phase 3），只需解析 JSONL 已有的 `message.usage` 欄位。改動範圍明確（parser → schema → 前端圖表），可獨立交付。且圖表基礎建設（recharts）可被 Phase 4 統計儀表板復用。
+
+**靈感來源**：[claude-code-organizer](https://github.com/mcpware/claude-code-organizer) 的 Context Budget 功能——顯示設定項目佔多少 token。我們做的是**對話層級**的 token 分析，定位不同。
+
+> 詳細規格：[docs/CONTEXT-BUDGET-SPEC.md](CONTEXT-BUDGET-SPEC.md)
+
+### 改動範圍摘要
+
+- **Parser** — `parseLine()` 從 `message.usage` 抽取 token 欄位
+- **Types** — `ParsedLine` / `Message` 加 token + model 欄位
+- **Migration v7** — messages 加 token 欄位、sessions 加彙總欄位
+- **前端** — 新增 recharts、Context Budget 面板（面積圖 + 圓餅圖 + 成本熱力條）
+- **IPC** — 新增 `getSessionTokenStats` API
+
+### 驗收
+
+- Session 詳情頁可展開 Context Budget 面板
+- 面積圖顯示 context 隨對話輪次的成長趨勢
+- 能識別出 token spike（例如大量 tool_result 灌入）
+- Session 列表可依 total token 排序
 
 ---
 

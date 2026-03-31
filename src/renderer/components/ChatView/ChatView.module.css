@@ -7,8 +7,10 @@
 
 .toolbar {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: flex-start;
   padding-bottom: var(--space-sm);
+  gap: var(--space-sm);
 }
 
 .exportButton {

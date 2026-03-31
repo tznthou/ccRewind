@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -15,6 +15,11 @@ export interface MessageInput {
   timestamp: string | null
   sequence: number
   rawJson: string | null
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheCreationTokens: number | null
+  model: string | null
 }
 
 /** indexSession 的參數型別 */
@@ -211,7 +216,68 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 7,
+    description: 'add token usage columns to messages and sessions (Phase 2.5 Context Budget)',
+    up: (db) => {
+      const msgCols = db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>
+      if (msgCols.some(c => c.name === 'input_tokens')) return
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN input_tokens INTEGER;
+        ALTER TABLE messages ADD COLUMN output_tokens INTEGER;
+        ALTER TABLE messages ADD COLUMN cache_read_tokens INTEGER;
+        ALTER TABLE messages ADD COLUMN cache_creation_tokens INTEGER;
+        ALTER TABLE messages ADD COLUMN model TEXT;
+        ALTER TABLE sessions ADD COLUMN total_input_tokens INTEGER;
+        ALTER TABLE sessions ADD COLUMN total_output_tokens INTEGER;
+      `)
+      // 清空 file_mtime 強制 re-index，讓既有 session 填入 token 資料
+      db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
 ]
+
+/** DB SELECT messages 的原始行型別 */
+interface MessageRow {
+  id: number
+  session_id: string
+  type: string
+  role: string | null
+  content_text: string | null
+  content_json: string | null
+  has_tool_use: number
+  has_tool_result: number
+  tool_names: string | null
+  timestamp: string | null
+  sequence: number
+  input_tokens: number | null
+  output_tokens: number | null
+  cache_read_tokens: number | null
+  cache_creation_tokens: number | null
+  model: string | null
+}
+
+/** MessageRow → Message 轉換 */
+function mapMessageRow(r: MessageRow): Message {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    type: r.type as Message['type'],
+    role: r.role as Message['role'],
+    contentText: r.content_text,
+    contentJson: r.content_json,
+    hasToolUse: r.has_tool_use === 1,
+    hasToolResult: r.has_tool_result === 1,
+    toolNames: r.tool_names ? r.tool_names.split(',') : null,
+    timestamp: r.timestamp,
+    sequence: r.sequence,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    cacheReadTokens: r.cache_read_tokens,
+    cacheCreationTokens: r.cache_creation_tokens,
+    model: r.model,
+  }
+}
 
 export class Database {
   private db: BetterSqlite3.Database
@@ -400,7 +466,7 @@ export class Database {
 
   getSessions(projectId: string): SessionMeta[] {
     const rows = this.db.prepare(
-      'SELECT id, project_id, title, message_count, started_at, ended_at, archived, summary_text, tags, files_touched, tools_used FROM sessions WHERE project_id = ? ORDER BY started_at DESC',
+      'SELECT id, project_id, title, message_count, started_at, ended_at, archived, summary_text, tags, files_touched, tools_used, total_input_tokens, total_output_tokens FROM sessions WHERE project_id = ? ORDER BY started_at DESC',
     ).all(projectId) as Array<{
       id: string
       project_id: string
@@ -413,6 +479,8 @@ export class Database {
       tags: string | null
       files_touched: string | null
       tools_used: string | null
+      total_input_tokens: number | null
+      total_output_tokens: number | null
     }>
 
     return rows.map(r => ({
@@ -427,6 +495,8 @@ export class Database {
       tags: r.tags,
       filesTouched: r.files_touched,
       toolsUsed: r.tools_used,
+      totalInputTokens: r.total_input_tokens,
+      totalOutputTokens: r.total_output_tokens,
     }))
   }
 
@@ -494,23 +564,31 @@ export class Database {
       }
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
       this.upsertProject(params.projectId, params.projectDisplayName)
+      // 計算 token 彙總
+      let totalInput = 0
+      let totalOutput = 0
+      for (const m of params.messages) {
+        if (m.inputTokens != null) totalInput += m.inputTokens
+        if (m.outputTokens != null) totalOutput += m.outputTokens
+      }
       const insertResult = this.db.prepare(`
-        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at, summary_text, tags, files_touched, tools_used)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at, summary_text, tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
         params.startedAt, params.endedAt,
         params.summaryText ?? null, params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
+        totalInput || null, totalOutput || null,
       )
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(
         'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text) VALUES (?, ?, ?, ?, ?)',
       ).run(insertResult.lastInsertRowid, params.title ?? '', params.tags ?? '', params.filesTouched ?? '', params.summaryText ?? '')
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -524,6 +602,7 @@ export class Database {
           m.hasToolUse ? 1 : 0, m.hasToolResult ? 1 : 0,
           m.toolNames.length > 0 ? m.toolNames.join(',') : null,
           m.timestamp, m.sequence,
+          m.inputTokens, m.outputTokens, m.cacheReadTokens, m.cacheCreationTokens, m.model,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
@@ -538,105 +617,52 @@ export class Database {
     doIndex()
   }
 
-  // ── Messages ──
+  // ── Messages ─���
 
   getMessages(sessionId: string): Message[] {
     const rows = this.db.prepare(`
       SELECT m.id, m.session_id, m.type, m.role, m.content_text,
              mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence
+             m.tool_names, m.timestamp, m.sequence,
+             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
       WHERE m.session_id = ?
       ORDER BY m.sequence
-    `).all(sessionId) as Array<{
-      id: number
-      session_id: string
-      type: string
-      role: string | null
-      content_text: string | null
-      content_json: string | null
-      has_tool_use: number
-      has_tool_result: number
-      tool_names: string | null
-      timestamp: string | null
-      sequence: number
-    }>
+    `).all(sessionId) as Array<MessageRow>
 
-    return rows.map(r => ({
-      id: r.id,
-      sessionId: r.session_id,
-      type: r.type as Message['type'],
-      role: r.role as Message['role'],
-      contentText: r.content_text,
-      contentJson: r.content_json,
-      hasToolUse: r.has_tool_use === 1,
-      hasToolResult: r.has_tool_result === 1,
-      toolNames: r.tool_names ? r.tool_names.split(',') : null,
-      timestamp: r.timestamp,
-      sequence: r.sequence,
-    }))
+    return rows.map(mapMessageRow)
   }
 
   /** 取得指定訊息及其前後 range 則訊息（搜尋結果上下文預覽） */
   getMessageContext(messageId: number, range = 2): MessageContext {
-    // 先取 target 的 session_id + sequence
-    const target = this.db.prepare(`
+    const msgSelect = `
       SELECT m.id, m.session_id, m.type, m.role, m.content_text,
              mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence
+             m.tool_names, m.timestamp, m.sequence,
+             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
-      WHERE m.id = ?
-    `).get(messageId) as {
-      id: number; session_id: string; type: string; role: string | null
-      content_text: string | null; content_json: string | null
-      has_tool_use: number; has_tool_result: number
-      tool_names: string | null; timestamp: string | null; sequence: number
-    } | undefined
+    `
+
+    const target = this.db.prepare(`${msgSelect} WHERE m.id = ?`).get(messageId) as MessageRow | undefined
 
     if (!target) {
       return { target: null, before: [], after: [] }
     }
 
-    const mapRow = (r: typeof target): Message => ({
-      id: r.id,
-      sessionId: r.session_id,
-      type: r.type as Message['type'],
-      role: r.role as Message['role'],
-      contentText: r.content_text,
-      contentJson: r.content_json,
-      hasToolUse: r.has_tool_use === 1,
-      hasToolResult: r.has_tool_result === 1,
-      toolNames: r.tool_names ? r.tool_names.split(',') : null,
-      timestamp: r.timestamp,
-      sequence: r.sequence,
-    })
+    const beforeRows = this.db.prepare(
+      `${msgSelect} WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ? ORDER BY m.sequence`,
+    ).all(target.session_id, target.sequence, target.sequence - range) as MessageRow[]
 
-    const beforeRows = this.db.prepare(`
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-      WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ?
-      ORDER BY m.sequence
-    `).all(target.session_id, target.sequence, target.sequence - range) as Array<typeof target>
-
-    const afterRows = this.db.prepare(`
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-      WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ?
-      ORDER BY m.sequence
-    `).all(target.session_id, target.sequence, target.sequence + range) as Array<typeof target>
+    const afterRows = this.db.prepare(
+      `${msgSelect} WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ? ORDER BY m.sequence`,
+    ).all(target.session_id, target.sequence, target.sequence + range) as MessageRow[]
 
     return {
-      target: mapRow(target),
-      before: beforeRows.map(mapRow),
-      after: afterRows.map(mapRow),
+      target: mapMessageRow(target),
+      before: beforeRows.map(mapMessageRow),
+      after: afterRows.map(mapMessageRow),
     }
   }
 
@@ -759,6 +785,75 @@ export class Database {
       return { results, offset, hasMore }
     } catch {
       return { results: [], offset, hasMore: false }
+    }
+  }
+
+  // ── Token Stats ──
+
+  getSessionTokenStats(sessionId: string): SessionTokenStats {
+    const rows = this.db.prepare(`
+      SELECT sequence, timestamp,
+             input_tokens, output_tokens,
+             cache_read_tokens, cache_creation_tokens,
+             has_tool_use, tool_names, model
+      FROM messages
+      WHERE session_id = ? AND input_tokens IS NOT NULL
+      ORDER BY sequence
+    `).all(sessionId) as Array<{
+      sequence: number
+      timestamp: string | null
+      input_tokens: number
+      output_tokens: number
+      cache_read_tokens: number
+      cache_creation_tokens: number
+      has_tool_use: number
+      tool_names: string | null
+      model: string | null
+    }>
+
+    let totalInput = 0
+    let totalOutput = 0
+    let totalCacheRead = 0
+    let totalCacheCreation = 0
+    const modelCounts = new Map<string, number>()
+
+    const turns: SessionTokenStats['turns'] = rows.map(r => {
+      totalInput += r.input_tokens
+      totalOutput += r.output_tokens
+      totalCacheRead += r.cache_read_tokens
+      totalCacheCreation += r.cache_creation_tokens
+      if (r.model) modelCounts.set(r.model, (modelCounts.get(r.model) ?? 0) + 1)
+
+      return {
+        sequence: r.sequence,
+        timestamp: r.timestamp,
+        inputTokens: r.input_tokens,
+        outputTokens: r.output_tokens,
+        cacheReadTokens: r.cache_read_tokens,
+        cacheCreationTokens: r.cache_creation_tokens,
+        contextTotal: r.input_tokens,
+        hasToolUse: r.has_tool_use === 1,
+        toolNames: r.tool_names ? r.tool_names.split(',') : [],
+        model: r.model,
+      }
+    })
+
+    const models = [...modelCounts.keys()]
+    let primaryModel: string | null = null
+    let maxCount = 0
+    for (const [m, c] of modelCounts) {
+      if (c > maxCount) { primaryModel = m; maxCount = c }
+    }
+
+    return {
+      totalInputTokens: totalInput,
+      totalOutputTokens: totalOutput,
+      totalCacheReadTokens: totalCacheRead,
+      totalCacheCreationTokens: totalCacheCreation,
+      cacheHitRate: totalInput > 0 ? totalCacheRead / totalInput : 0,
+      models,
+      primaryModel,
+      turns,
     }
   }
 }

@@ -27,6 +27,9 @@ export interface SessionMeta {
   tags: string | null
   filesTouched: string | null
   toolsUsed: string | null
+  /** Token 彙總（Phase 2.5） */
+  totalInputTokens: number | null
+  totalOutputTokens: number | null
 }
 
 /** 訊息 */
@@ -42,6 +45,35 @@ export interface Message {
   toolNames: string[] | null
   timestamp: string | null
   sequence: number
+  /** Token usage（僅 assistant 訊息有值） */
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheCreationTokens: number | null
+  model: string | null
+}
+
+/** Session Token 統計（Context Budget 視覺化用） */
+export interface SessionTokenStats {
+  totalInputTokens: number
+  totalOutputTokens: number
+  totalCacheReadTokens: number
+  totalCacheCreationTokens: number
+  cacheHitRate: number
+  models: string[]
+  primaryModel: string | null
+  turns: Array<{
+    sequence: number
+    timestamp: string | null
+    inputTokens: number
+    outputTokens: number
+    cacheReadTokens: number
+    cacheCreationTokens: number
+    contextTotal: number
+    hasToolUse: boolean
+    toolNames: string[]
+    model: string | null
+  }>
 }
 
 /** 訊息上下文（搜尋結果預覽用） */
@@ -109,6 +141,8 @@ export interface ElectronAPI {
   searchSessions: (query: string, projectId?: string | null, offset?: number) => Promise<SessionSearchPage>
   /** 取得訊息上下文（搜尋預覽用） */
   getMessageContext: (messageId: number, range?: number) => Promise<MessageContext>
+  /** 取得 session token 統計（Context Budget 用） */
+  getSessionTokenStats: (sessionId: string) => Promise<SessionTokenStats>
   /** 匯出 session 為 Markdown 檔案 */
   exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
@@ -172,6 +206,12 @@ export interface ParsedLine {
   hasToolResult: boolean
   toolNames: string[]
   rawJson: string
+  /** Token usage（僅 assistant 訊息有值） */
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheCreationTokens: number | null
+  model: string | null
 }
 
 /** 整個 session 解析結果 */

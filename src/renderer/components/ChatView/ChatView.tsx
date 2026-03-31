@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
 import MessageBubble from './MessageBubble'
+import TokenBudgetPanel from '../TokenBudget/TokenBudgetPanel'
 import styles from './ChatView.module.css'
 
 interface ChatViewProps {
@@ -70,6 +71,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   return (
     <div ref={containerRef} className={styles.chatView}>
       <div className={styles.toolbar}>
+        <TokenBudgetPanel sessionId={sessionId} />
         <button
           className={styles.exportButton}
           onClick={handleExport}

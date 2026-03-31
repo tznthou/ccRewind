@@ -54,6 +54,33 @@ export function parseContent(content: unknown): ContentResult {
   }
 }
 
+/** 安全轉換為整數，非數字回傳 null */
+function toInt(v: unknown): number | null {
+  return typeof v === 'number' ? Math.floor(v) : null
+}
+
+/** 從 message.usage 抽取 token 資料 */
+function parseUsage(message: Record<string, unknown>): {
+  inputTokens: number | null
+  outputTokens: number | null
+  cacheReadTokens: number | null
+  cacheCreationTokens: number | null
+} {
+  const usage = message.usage as Record<string, unknown> | undefined
+  if (!usage || typeof usage !== 'object') {
+    return { inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheCreationTokens: null }
+  }
+  const base = toInt(usage.input_tokens) ?? 0
+  const cacheRead = toInt(usage.cache_read_input_tokens) ?? 0
+  const cacheCreation = toInt(usage.cache_creation_input_tokens) ?? 0
+  return {
+    inputTokens: base + cacheRead + cacheCreation,
+    outputTokens: toInt(usage.output_tokens) ?? 0,
+    cacheReadTokens: cacheRead,
+    cacheCreationTokens: cacheCreation,
+  }
+}
+
 /** 解析單行 JSONL，失敗回傳 null */
 export function parseLine(line: string): ParsedLine | null {
   if (!line.trim()) return null
@@ -79,6 +106,11 @@ export function parseLine(line: string): ParsedLine | null {
   let hasToolUse = false
   let hasToolResult = false
   let toolNames: string[] = []
+  let inputTokens: number | null = null
+  let outputTokens: number | null = null
+  let cacheReadTokens: number | null = null
+  let cacheCreationTokens: number | null = null
+  let model: string | null = null
 
   const message = obj.message as Record<string, unknown> | undefined
   if (message && typeof message === 'object') {
@@ -91,6 +123,14 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolResult = result.hasToolResult
     toolNames = result.toolNames
     contentJson = message.content != null ? JSON.stringify(message.content) : null
+
+    // Token usage（僅 assistant 訊息有值）
+    const tokenData = parseUsage(message)
+    inputTokens = tokenData.inputTokens
+    outputTokens = tokenData.outputTokens
+    cacheReadTokens = tokenData.cacheReadTokens
+    cacheCreationTokens = tokenData.cacheCreationTokens
+    model = typeof message.model === 'string' ? message.model : null
   } else if (typeof obj.content === 'string') {
     // queue-operation 等 type 的 prompt 存在頂層 content 欄位
     contentText = obj.content as string
@@ -109,6 +149,11 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolResult,
     toolNames,
     rawJson: line,
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    model,
   }
 }
 

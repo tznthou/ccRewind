@@ -19,6 +19,11 @@ function msg(overrides: Partial<MessageInput> & { type: string; sequence: number
     toolNames: [],
     timestamp: null,
     rawJson: null,
+    inputTokens: null,
+    outputTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    model: null,
     ...overrides,
   }
 }
