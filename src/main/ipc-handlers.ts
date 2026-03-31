@@ -36,7 +36,7 @@ export function registerIpcHandlers(db: Database): void {
 
   ipcMain.handle('message:context', (_event, messageId: unknown, range?: unknown) => {
     if (typeof messageId !== 'number') throw new Error('Invalid messageId')
-    const r = typeof range === 'number' ? range : 2
+    const r = typeof range === 'number' ? Math.min(Math.max(range, 0), 10) : 2
     return db.getMessageContext(messageId, r)
   })
 
