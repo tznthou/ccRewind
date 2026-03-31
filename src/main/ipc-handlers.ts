@@ -4,6 +4,11 @@ import type { IndexerStatus } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
+/** 將 unknown 轉為 optional string（IPC 參數驗證用） */
+function parseOptionalString(v: unknown): string | null {
+  return v != null && typeof v === 'string' ? v : null
+}
+
 /** 註冊所有 IPC handlers（invoke/handle 模式） */
 export function registerIpcHandlers(db: Database): void {
   ipcMain.handle('projects:list', () => db.getProjects())
@@ -71,7 +76,7 @@ export function registerIpcHandlers(db: Database): void {
   // ── Phase 3.5: 統計儀表板 ──
 
   ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
-    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    const pid = parseOptionalString(projectId)
     const d = typeof days === 'number' ? days : 30
     return db.getUsageStats(pid, d)
   })
@@ -79,17 +84,17 @@ export function registerIpcHandlers(db: Database): void {
   ipcMain.handle('stats:projects', () => db.getProjectStats())
 
   ipcMain.handle('stats:tools', (_event, projectId?: unknown) => {
-    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    const pid = parseOptionalString(projectId)
     return db.getToolDistribution(pid)
   })
 
   ipcMain.handle('stats:tags', (_event, projectId?: unknown) => {
-    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    const pid = parseOptionalString(projectId)
     return db.getTagDistribution(pid)
   })
 
   ipcMain.handle('stats:patterns', (_event, projectId?: unknown) => {
-    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    const pid = parseOptionalString(projectId)
     return db.getWorkPatterns(pid)
   })
 

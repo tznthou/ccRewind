@@ -16,9 +16,13 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
 
   useEffect(() => {
     setLoading(true)
+    setEntries([])
+    let cancelled = false
     window.api.getFileHistory(filePath)
-      .then(setEntries)
-      .finally(() => setLoading(false))
+      .then(data => { if (!cancelled) setEntries(data) })
+      .catch(() => { /* IPC error — graceful degrade to empty */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [filePath])
 
   const handleNavigate = (sessionId: string) => {

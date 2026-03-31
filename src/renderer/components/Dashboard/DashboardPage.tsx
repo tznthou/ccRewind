@@ -32,32 +32,39 @@ export default function DashboardPage() {
   const [patterns, setPatterns] = useState<WorkPatterns | null>(null)
   const [loading, setLoading] = useState(true)
 
+  // Load project list once (also populates projectStats for initial render)
+  useEffect(() => {
+    window.api.getProjectStats()
+      .then(ps => {
+        setProjectStats(ps)
+        setProjects(ps.map(p => ({ id: p.projectId, name: p.displayName })))
+      })
+      .catch(() => { /* graceful degrade */ })
+  }, [])
+
   const loadData = useCallback(async () => {
     setLoading(true)
+    let cancelled = false
     try {
-      const [u, ps, t, tg, wp] = await Promise.all([
+      const [u, t, tg, wp] = await Promise.all([
         window.api.getUsageStats(projectFilter, range),
-        window.api.getProjectStats(),
         window.api.getToolDistribution(projectFilter),
         window.api.getTagDistribution(projectFilter),
         window.api.getWorkPatterns(projectFilter),
       ])
-      setUsage(u)
-      setProjectStats(ps)
-      setTools(t)
-      setTags(tg)
-      setPatterns(wp)
+      if (!cancelled) {
+        setUsage(u)
+        setTools(t)
+        setTags(tg)
+        setPatterns(wp)
+      }
+    } catch {
+      /* IPC error — graceful degrade */
     } finally {
-      setLoading(false)
+      if (!cancelled) setLoading(false)
     }
+    return () => { cancelled = true }
   }, [projectFilter, range])
-
-  // Load project list once
-  useEffect(() => {
-    window.api.getProjectStats().then(ps => {
-      setProjects(ps.map(p => ({ id: p.projectId, name: p.displayName })))
-    })
-  }, [])
 
   useEffect(() => { loadData() }, [loadData])
 

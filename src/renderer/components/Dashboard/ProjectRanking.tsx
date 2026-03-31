@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import type { ProjectStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
 import { lastSegment } from '../../utils/pathDisplay'
@@ -8,11 +9,13 @@ interface Props {
 }
 
 export default function ProjectRanking({ data }: Props) {
+  const maxSessions = useMemo(() =>
+    data.length > 0 ? Math.max(...data.map(d => d.sessionCount)) : 0,
+  [data])
+
   if (data.length === 0) {
     return <div className={styles.empty}>No projects</div>
   }
-
-  const maxSessions = Math.max(...data.map(d => d.sessionCount))
 
   return (
     <div className={styles.rankingList}>

@@ -17,9 +17,13 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
   useEffect(() => {
     setLoading(true)
     setExpanded(false)
+    setRelated([])
+    let cancelled = false
     window.api.getRelatedSessions(sessionId, 5)
-      .then(setRelated)
-      .finally(() => setLoading(false))
+      .then(data => { if (!cancelled) setRelated(data) })
+      .catch(() => { /* IPC error — graceful degrade to hidden */ })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [sessionId])
 
   if (loading || related.length === 0) return null
