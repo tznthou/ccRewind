@@ -3,8 +3,8 @@
 > Phase 1 ✅：表拆分、資料保全、分頁、分組
 > Phase 2 ✅：Session heuristic 摘要、搜尋上下文預覽、scope 擴展
 > Phase 2.5 ✅：Context Budget 視覺化（token 成本透視）
-> Phase 2.6 🔜：Token Insights Engine（圖表解讀層）（v1.2.0）
-> Phase 3 📋：摘要品質升級 + 檔案反向索引（v1.3.0）
+> Phase 2.6 ✅：Token Insights Engine（圖表解讀層）（v1.2.0）
+> Phase 3 ✅：摘要品質升級 + 檔案反向索引（v1.3.0）
 > Phase 3.5 📋：統計儀表板 + 跨 Session 考古 UI（v1.4.0）
 > Phase 4 📋：自動更新（待 code signing）（v1.5.0+）
 > 未定 📋：LLM 智慧摘要（待合規路徑明朗）
@@ -52,7 +52,7 @@
 
 ---
 
-## Phase 2.6 🔜 Token Insights Engine（v1.2.0）
+## Phase 2.6 ✅ Token Insights Engine（v1.2.0）
 
 **目標**：讓 Token Budget 面板從「展示數據」升級為「解讀數據」——用 heuristic 規則自動產生可行動的洞察，解答使用者的三個核心問題：「這數字好不好？」「為什麼？」「我該怎麼做？」
 
@@ -96,7 +96,7 @@
 
 ---
 
-## Phase 3 📋 摘要品質升級 + 檔案反向索引（v1.3.0）
+## Phase 3 ✅ 摘要品質升級 + 檔案反向索引（v1.3.0）
 
 **目標**：雙軌並行——(A) 把 heuristic 摘要推到天花板；(B) 建立檔案反向索引資料層，為跨 Session 考古打地基。
 

@@ -103,7 +103,7 @@ export default function SessionList() {
               onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dispatch({ type: 'SELECT_SESSION', sessionId: session.id }) } }}
             >
               <div className={styles.sessionTitle}>
-                {session.title ?? session.id.slice(0, 8)}
+                {session.intentText || session.title || session.id.slice(0, 8)}
               </div>
               <div className={styles.sessionMeta}>
                 <span>

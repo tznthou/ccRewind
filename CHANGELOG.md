@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-03-31
+
+### Added
+
+- **Structured summary engine** (Phase 3-A): session summaries upgraded from raw text truncation to template-based generation with three components:
+  - **Intent extraction**: skips greetings/continuations ("hey", "ok", "continue"), finds the first substantive user message as session intent
+  - **Activity summary**: generated from tool usage stats (e.g., "Edit×8, 5 files")
+  - **Outcome inference**: two-layer system — observed signals (`gitCommitInvoked`, `testCommandRan`, `endedWithEdits`) feed into inferred status (`committed`/`tested`/`in-progress`/`quick-qa`); conservative: only labels on high confidence
+- **Multi-signal tag engine**: expanded from 8 regex rules to 20+ text patterns, plus path-based inference (`.css` → ui, `test/` → testing), tool-pattern inference (heavy Read + low Edit → code-review), and outcome tags
+- **Session files reverse index** (Phase 3-B): `session_files(session_id, file_path, operation, count, first_seen_seq, last_seen_seq)` table with mutation vs discovery operation types (read/edit/write vs discovery for grep/glob)
+- `getFileHistory(filePath)` API: reverse lookup — which sessions touched a given file, ordered by time
+- `getSessionFiles(sessionId)` API: forward lookup — which files a session operated on, with operation type
+- Noise path filtering: `node_modules/`, `.git/`, `dist/`, `build/`, `.next/`, `.cache/`, `.vite/`, `coverage/` excluded from file index
+- Session duration display in sidebar (`12m`, `1h30m`)
+- Outcome status badge in sidebar with color-coded tags (committed=green, tested=blue, in-progress=yellow, quick-qa=purple)
+- `summary_version` field for safe rule iteration and backfill tracking
+- `formatDuration()` utility for human-readable duration formatting
+
+### Changed
+
+- **DB schema**: migration v8 adds `intent_text`, `outcome_status`, `outcome_signals`, `duration_seconds`, `summary_version` to `sessions` table; creates `session_files` table with composite primary key and path/session indexes
+- Session list title now shows `intentText` (smart extraction) instead of raw `title` (naive truncation), falling back to `title` when intent is empty
+- Existing sessions are force re-indexed on upgrade (migration v8 clears `file_mtime`) to populate new fields
+- `summarizeSession()` return type changed from flat `SessionSummary` to `{ summary, sessionFiles }` to co-produce reverse index data
+- `filesTouched` cap increased from 20 to 30 entries
+- Outcome inference evaluates concrete signals (commit/test) before quick-qa check, preventing short but productive sessions from being misclassified
+
 ## [1.2.0] - 2026-03-31
 
 ### Added
