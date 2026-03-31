@@ -12,17 +12,21 @@ function TokenBudgetInner({ sessionId }: Props) {
   const [expanded, setExpanded] = useState(false)
   const [stats, setStats] = useState<SessionTokenStats | null>(null)
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleToggle = useCallback(() => {
     setExpanded(prev => {
       const next = !prev
-      if (next && !stats) {
+      if (next && !stats && !error) {
         setLoading(true)
-        window.api.getSessionTokenStats(sessionId).then(setStats).finally(() => setLoading(false))
+        window.api.getSessionTokenStats(sessionId)
+          .then(setStats)
+          .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load token stats'))
+          .finally(() => setLoading(false))
       }
       return next
     })
-  }, [sessionId, stats])
+  }, [sessionId, stats, error])
 
   return (
     <div className={styles.panel}>
@@ -36,10 +40,13 @@ function TokenBudgetInner({ sessionId }: Props) {
       {expanded && (
         <div className={styles.panelContent}>
           {loading && <div className={styles.loading}>Loading token stats...</div>}
-          {!loading && stats && stats.turns.length === 0 && (
+          {!loading && error && (
+            <div className={styles.error}>{error}</div>
+          )}
+          {!loading && !error && stats && stats.turns.length === 0 && (
             <div className={styles.empty}>No token data available for this session</div>
           )}
-          {!loading && stats && stats.turns.length > 0 && (
+          {!loading && !error && stats && stats.turns.length > 0 && (
             <>
               <TokenSummaryCard stats={stats} />
               <ContextGrowthChart turns={stats.turns} />

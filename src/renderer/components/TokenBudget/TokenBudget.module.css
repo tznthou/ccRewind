@@ -37,6 +37,13 @@
   padding: var(--space-lg) 0;
 }
 
+.error {
+  color: var(--color-error);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-lg) 0;
+}
+
 /* ── TokenSummaryCard ── */
 
 .summaryGrid {
