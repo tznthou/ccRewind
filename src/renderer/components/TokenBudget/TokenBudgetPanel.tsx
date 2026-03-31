@@ -1,9 +1,11 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
 import TokenSummaryCard from './TokenSummaryCard'
 import ContextGrowthChart from './ContextGrowthChart'
 import TokenBreakdown from './TokenBreakdown'
 import CostHeatBar from './CostHeatBar'
+import InsightsPanel from './InsightsPanel'
+import { generateInsights } from './insightEngine'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -29,6 +31,11 @@ function TokenBudgetInner({ sessionId }: Props) {
       return next
     })
   }, [sessionId, stats, error])
+
+  const insights = useMemo(
+    () => stats ? generateInsights(stats) : [],
+    [stats],
+  )
 
   return (
     <div className={styles.panel}>
@@ -56,6 +63,7 @@ function TokenBudgetInner({ sessionId }: Props) {
                 <TokenBreakdown stats={stats} />
               </div>
               <CostHeatBar turns={stats.turns} />
+              {insights.length > 0 && <InsightsPanel insights={insights} />}
             </>
           )}
         </div>
