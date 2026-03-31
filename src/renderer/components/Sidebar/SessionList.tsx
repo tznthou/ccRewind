@@ -1,10 +1,13 @@
-import { useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { formatDateTime } from '../../utils/formatTime'
+import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
+
+type SortKey = 'time' | 'tokens'
 
 const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
   archive: 80,
@@ -19,9 +22,20 @@ export default function SessionList() {
   const { sessions, loading, error } = useSessions(selectedProjectId)
   const parentRef = useRef<HTMLDivElement>(null)
   const itemHeight = SESSION_ITEM_HEIGHT[theme]
+  const [sortKey, setSortKey] = useState<SortKey>('time')
+
+  const sortedSessions = useMemo(() => {
+    if (sortKey === 'tokens') {
+      return [...sessions].sort((a, b) =>
+        ((b.totalInputTokens ?? 0) + (b.totalOutputTokens ?? 0))
+        - ((a.totalInputTokens ?? 0) + (a.totalOutputTokens ?? 0)),
+      )
+    }
+    return sessions // already sorted by time from hook
+  }, [sessions, sortKey])
 
   const virtualizer = useVirtualizer({
-    count: sessions.length,
+    count: sortedSessions.length,
     getScrollElement: () => parentRef.current,
     estimateSize: () => itemHeight,
     overscan: 5,
@@ -44,6 +58,21 @@ export default function SessionList() {
   }
 
   return (
+    <>
+      <div className={styles.sortToggle}>
+        <button
+          className={`${styles.sortButton} ${sortKey === 'time' ? styles.sortActive : ''}`}
+          onClick={() => setSortKey('time')}
+        >
+          Time
+        </button>
+        <button
+          className={`${styles.sortButton} ${sortKey === 'tokens' ? styles.sortActive : ''}`}
+          onClick={() => setSortKey('tokens')}
+        >
+          Tokens
+        </button>
+      </div>
     <div ref={parentRef} className={styles.sessionListContainer} role="listbox" aria-label="Session 列表">
       <div
         style={{
@@ -53,7 +82,7 @@ export default function SessionList() {
         }}
       >
         {virtualizer.getVirtualItems().map((virtualItem) => {
-          const session = sessions[virtualItem.index]
+          const session = sortedSessions[virtualItem.index]
           const isSelected = session.id === selectedSessionId
           return (
             <div
@@ -78,7 +107,12 @@ export default function SessionList() {
               </div>
               <div className={styles.sessionMeta}>
                 <span>{formatDateTime(session.startedAt)}</span>
-                <span>{session.archived ? '已封存 · ' : ''}{session.messageCount} 則</span>
+                <span>
+                  {session.archived ? '已封存 · ' : ''}{session.messageCount} 則
+                  {session.totalInputTokens != null && session.totalInputTokens > 0 && (
+                    <span className={styles.tokenBadge}> · {formatTokens((session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0))}</span>
+                  )}
+                </span>
               </div>
               {(session.tags || session.filesTouched) && (
                 <div className={styles.sessionTags}>
@@ -100,5 +134,6 @@ export default function SessionList() {
         })}
       </div>
     </div>
+    </>
   )
 }
