@@ -140,10 +140,15 @@ function assessCacheEfficiency(stats: SessionTokenStats): Insight[] {
 function detectOutputHotSpots(turns: SessionTokenStats['turns']): Insight[] {
   if (turns.length < 3) return []
 
-  const avgOutput = turns.reduce((s, t) => s + t.outputTokens, 0) / turns.length
-  if (avgOutput === 0) return []
+  let totalOutput = 0
+  let max = turns[0]
+  for (const t of turns) {
+    totalOutput += t.outputTokens
+    if (t.outputTokens > max.outputTokens) max = t
+  }
 
-  const max = turns.reduce((best, t) => t.outputTokens > best.outputTokens ? t : best, turns[0])
+  const avgOutput = totalOutput / turns.length
+  if (avgOutput === 0) return []
 
   if (max.outputTokens > avgOutput * 3 && max.outputTokens > 2_000) {
     return [{
@@ -168,18 +173,17 @@ function analyzeGrowthRate(turns: SessionTokenStats['turns']): Insight[] {
 
   const mid = Math.floor(turns.length / 2)
 
-  // Calculate average delta per turn for each half
-  const firstHalfDeltas: number[] = []
+  let firstHalfSum = 0
   for (let i = 1; i <= mid; i++) {
-    firstHalfDeltas.push(turns[i].inputTokens - turns[i - 1].inputTokens)
+    firstHalfSum += turns[i].inputTokens - turns[i - 1].inputTokens
   }
-  const secondHalfDeltas: number[] = []
+  let secondHalfSum = 0
   for (let i = mid + 1; i < turns.length; i++) {
-    secondHalfDeltas.push(turns[i].inputTokens - turns[i - 1].inputTokens)
+    secondHalfSum += turns[i].inputTokens - turns[i - 1].inputTokens
   }
 
-  const avgFirst = firstHalfDeltas.reduce((s, d) => s + d, 0) / firstHalfDeltas.length
-  const avgSecond = secondHalfDeltas.reduce((s, d) => s + d, 0) / secondHalfDeltas.length
+  const avgFirst = firstHalfSum / mid
+  const avgSecond = secondHalfSum / (turns.length - mid - 1)
 
   if (avgFirst <= 0) return []
 
