@@ -15,7 +15,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - TokenBudgetPanel: expandable panel in ChatView toolbar with toggle button
 - TokenSummaryCard: 4-cell grid showing Total Input, Total Output, Cache Hit Rate, and Model(s) with multi-model percentage display
 - ContextGrowthChart: recharts stacked area chart (New Input / Cache Creation / Cache Read) with 200K/1M context limit reference line toggle
+- TokenBreakdown: donut pie chart showing Cache Read / Cache Creation / New Input / Output token type proportions
+- CostHeatBar: horizontal heat bar visualizing per-turn output token intensity with automatic binning for sessions >200 turns
+- TokenHeatGutter: inset box-shadow heat indicator on assistant message bubbles — green for good cache hits, red for high context delta
+- Session list token badge: total token count (input + output) displayed next to message count
+- Session list sort toggle: switch between Time (default) and Tokens ordering
 - Shared `formatTokens()` utility for consistent token number formatting across components
+- Shared `TOKEN_COLORS` and `CHART_TOOLTIP_STYLE` constants for chart visual consistency
 
 ### Changed
 
@@ -23,12 +29,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Existing sessions are force re-indexed on upgrade (migration v7 clears `file_mtime`) to populate token fields
 - ChatView toolbar layout changed from `flex-end` to `space-between` to accommodate Token Budget button
 - Extracted `MessageRow` type and `mapMessageRow()` helper in database.ts to reduce duplication across `getMessages()` and `getMessageContext()`
+- TokenBudgetPanel layout: ContextGrowthChart and TokenBreakdown displayed side-by-side in grid, CostHeatBar below
+- MessageBubble receives resolved `HeatInfo` instead of full Map for better `memo` stability
 
 ### Fixed
 
 - FTS5 search query injection: internal double quotes now escaped before wrapping (`fts5QuoteIfNeeded`), applied consistently to both `search()` and `searchSessions()`
 - IPC `message:context` range parameter clamped to [0, 10] to prevent unbounded DB scans
 - TokenBudgetPanel handles IPC errors gracefully with error state display instead of blank expanded panel
+- CostHeatBar: no longer shows fake `max: 1` when all turns have zero output tokens
+- Token heat gutter uses inset `box-shadow` instead of `border-left` to avoid overriding theme-specific assistant borders (timeline/terminal)
+- `Math.max(...spread)` replaced with `reduce` in TokenHeatGutter and CostHeatBar to prevent stack overflow on large sessions
 
 ## [1.0.0] - 2026-03-30
 
