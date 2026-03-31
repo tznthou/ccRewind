@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-03-31
+
+### Added
+
+- **Token Insights Engine** (Phase 2.6): heuristic rules that automatically interpret Token Budget charts, turning raw data into actionable insights
+- `insightEngine.ts`: 5 insight rules — Context Spike detection, Context Limit warning, Cache Efficiency assessment, Output Hot Spot detection, Growth Rate analysis
+- `InsightsPanel` component: severity-coded insight list (critical/warning/info/good) with expand/collapse for 3+ insights
+- Insights integrated into TokenBudgetPanel below CostHeatBar
+
+### Changed
+
+- **Roadmap restructured** (PHASE-2-3.md): Phase 4 (cross-session archaeology) split and pulled forward into v1.3.0–v1.4.0; auto-updater deferred to v1.5.0+ pending code signing
+
 ## [1.1.0] - 2026-03-31
 
 ### Added
