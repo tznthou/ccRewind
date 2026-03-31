@@ -108,6 +108,16 @@ function buildActivityText(toolCounts: Map<string, number>, fileCount: number): 
 
 // ── Outcome Inference ──
 
+const GIT_COMMIT_RE = /\bgit\s+commit\b/
+const TEST_COMMAND_RE = /\b(npm\s+test|npx\s+vitest|pnpm\s+(test|vitest)|pytest|jest|cargo\s+test|go\s+test)\b/
+
+const OUTCOME_LABELS: Record<string, string> = {
+  'committed': '→ committed',
+  'tested': '→ tested',
+  'in-progress': '→ in-progress',
+  'quick-qa': '(Q&A)',
+}
+
 /** 從最後幾輪的 tool 模式推斷 outcome */
 function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals: OutcomeSignals } {
   const signals: OutcomeSignals = {
@@ -130,10 +140,10 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
         if (name !== 'Bash') continue
         const input = b.input as Record<string, unknown> | undefined
         const command = (input?.command as string) ?? ''
-        if (/\bgit\s+commit\b/.test(command)) {
+        if (GIT_COMMIT_RE.test(command)) {
           signals.gitCommitInvoked = true
         }
-        if (/\b(npm\s+test|npx\s+vitest|pnpm\s+(test|vitest)|pytest|jest|cargo\s+test|go\s+test)\b/.test(command)) {
+        if (TEST_COMMAND_RE.test(command)) {
           signals.testCommandRan = true
         }
       }
@@ -191,19 +201,26 @@ const TEXT_TAG_RULES: Array<{ pattern: RegExp; tag: string }> = [
   { pattern: /\b(i18n|l10n|translate|locale|language)\b/, tag: 'i18n' },
 ]
 
+/** 路徑 → 標籤推斷規則（module-level 避免每次呼叫重建 regex） */
+const PATH_TAG_RULES: Array<{ test: (p: string) => boolean; tag: string }> = [
+  { test: (p) => /\.(css|scss|sass|less|styled)/.test(p) || /\/styles?\//.test(p), tag: 'ui' },
+  { test: (p) => /\.(test|spec)\.(ts|tsx|js|jsx)/.test(p) || /\/__tests__\//.test(p) || /\/tests?\//.test(p), tag: 'testing' },
+  { test: (p) => /migration/.test(p) || /\.sql$/.test(p), tag: 'database' },
+  { test: (p) => /docker|compose/.test(p) || /\.dockerfile$/i.test(p), tag: 'infra' },
+  { test: (p) => /\.md$/.test(p) || /readme/i.test(p) || /changelog/i.test(p), tag: 'docs' },
+  { test: (p) => /\.(json|ya?ml|toml|ini|env)$/.test(p) && !/package-lock|yarn\.lock/.test(p), tag: 'config' },
+  { test: (p) => /auth|login/.test(p), tag: 'auth' },
+  { test: (p) => /route|api|endpoint/.test(p), tag: 'api' },
+]
+
 /** 從檔案路徑推斷標籤 */
 function tagsFromPaths(filePaths: string[]): Set<string> {
   const tags = new Set<string>()
   for (const p of filePaths) {
     const lower = p.toLowerCase()
-    if (/\.(css|scss|sass|less|styled)/.test(lower) || /\/styles?\//.test(lower)) tags.add('ui')
-    if (/\.(test|spec)\.(ts|tsx|js|jsx)/.test(lower) || /\/__tests__\//.test(lower) || /\/tests?\//.test(lower)) tags.add('testing')
-    if (/migration/.test(lower) || /\.sql$/.test(lower)) tags.add('database')
-    if (/docker|compose/.test(lower) || /\.dockerfile$/i.test(lower)) tags.add('infra')
-    if (/\.md$/.test(lower) || /readme/i.test(lower) || /changelog/i.test(lower)) tags.add('docs')
-    if (/\.(json|ya?ml|toml|ini|env)$/.test(lower) && !/package-lock|yarn\.lock/.test(lower)) tags.add('config')
-    if (/auth|login/.test(lower)) tags.add('auth')
-    if (/route|api|endpoint/.test(lower)) tags.add('api')
+    for (const rule of PATH_TAG_RULES) {
+      if (rule.test(lower)) tags.add(rule.tag)
+    }
   }
   return tags
 }
@@ -410,13 +427,7 @@ export function summarizeSession(
   if (intentText) summaryParts.push(intentText)
   if (activityText) summaryParts.push(activityText)
   if (outcomeStatus) {
-    const outcomeLabels: Record<string, string> = {
-      'committed': '→ committed',
-      'tested': '→ tested',
-      'in-progress': '→ in-progress',
-      'quick-qa': '(Q&A)',
-    }
-    summaryParts.push(outcomeLabels[outcomeStatus] ?? '')
+    summaryParts.push(OUTCOME_LABELS[outcomeStatus] ?? '')
   }
   const summaryText = truncate(summaryParts.filter(Boolean).join(' | '), MAX_SUMMARY_LEN)
 
