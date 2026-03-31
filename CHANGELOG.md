@@ -5,6 +5,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-04-01
+
+### Added
+
+- **Statistics Dashboard** (Phase 3.5-A): cross-session analytics accessible via title bar toggle button
+  - **Usage Trend**: dual-axis area chart showing daily session count and token consumption, with 7D/30D/90D/All range selector
+  - **Project Activity**: ranked list of projects by session count and token usage, with proportional bar indicator
+  - **Tool Distribution**: donut pie chart aggregating tool usage (Read, Edit, Bash, etc.) across all sessions
+  - **Tag Distribution**: donut pie chart showing tag frequency (bug-fix, refactor, testing, etc.)
+  - **Work Pattern Heatmap**: 24-hour activity heatmap with average session duration display
+  - Project filter dropdown: all charts respond to project selection (except Project Activity which hides when filtered)
+- **Cross-Session Archaeology UI** (Phase 3.5-B): file-centric navigation and session discovery
+  - **File History Drawer**: slide-in timeline showing every session that touched a file, with operation type badges (edit/write/read/discovery) and click-to-navigate
+  - **Related Sessions Panel**: Jaccard similarity-based recommendations at the bottom of ChatView, showing shared files and match percentage
+  - **File Chips**: expandable file list in ChatView toolbar — click any file to open its cross-session history
+- `getUsageStats()` API: daily session count and token aggregation with project filter and date range
+- `getProjectStats()` API: project ranking by session count and total tokens
+- `getToolDistribution()` API: tool usage aggregation from CSV-encoded `tools_used` field
+- `getTagDistribution()` API: tag frequency aggregation from CSV-encoded `tags` field
+- `getWorkPatterns()` API: hourly session histogram and average duration
+- `getRelatedSessions()` API: Jaccard coefficient similarity based on `session_files` reverse index, batched query (no N+1)
+- IPC handles for all new APIs: `files:history`, `files:session`, `session:related`, `stats:usage`, `stats:projects`, `stats:tools`, `stats:tags`, `stats:patterns`
+- `DistributionPieChart` reusable component for donut charts with configurable colors and labels
+- `pathDisplay.ts` utility: cross-platform `basename()` and `lastSegment()` for renderer-safe path display
+- `ViewMode` state (`sessions` | `dashboard`) in AppContext with title bar toggle
+- `fileHistoryPath` state in AppContext for app-level FileHistoryDrawer management
+
+### Changed
+
+- ChatView toolbar restructured: export button wrapped in `toolbarActions` container alongside new files toggle
+- All async `useEffect` hooks now include cancellation flags and `.catch()` error handling for graceful degradation
+- `getFileHistory()` return type unified to `FileHistoryEntry` interface (was inline anonymous type)
+- IPC optional parameter parsing extracted to `parseOptionalString()` helper (4 duplications removed)
+
 ## [1.3.0] - 2026-03-31
 
 ### Added
