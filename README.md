@@ -119,7 +119,9 @@ Session 列表的每筆項目旁顯示 token 總量（如 1.2M），並可點擊
 graph TB
     subgraph Main Process
         FS[檔案掃描器<br>~/.claude/projects/] --> JP[JSONL Parser]
-        JP --> DB[(SQLite + FTS5)]
+        JP --> SM[摘要引擎<br>意圖+outcome+標籤]
+        JP --> DB[(SQLite + FTS5<br>+ session_files)]
+        SM --> DB
         DB --> IPC[IPC Handlers]
         EX[Markdown 匯出器] --> IPC
     end
@@ -145,7 +147,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖（Context Budget） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 143 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 161 個測試，透過 Electron 執行 |
 
 ---
 
@@ -191,9 +193,9 @@ ccRewind/
 │   │   ├── index.ts           # 應用程式入口
 │   │   ├── scanner.ts         # 專案 / Session 檔案掃描
 │   │   ├── parser.ts          # JSONL 解析器
-│   │   ├── database.ts        # SQLite + FTS5 管理（含 sessions_fts）
+│   │   ├── database.ts        # SQLite + FTS5 管理（含 sessions_fts + session_files 反向索引）
 │   │   ├── indexer.ts         # 增量索引器
-│   │   ├── summarizer.ts      # Session 自動摘要（heuristic）
+│   │   ├── summarizer.ts      # 結構化摘要引擎（意圖提取 + outcome 推斷 + 多信號標籤 + session_files）
 │   │   ├── exporter.ts        # Markdown 匯出
 │   │   ├── updater.ts         # GitHub Release 更新偵測
 │   │   └── ipc-handlers.ts    # IPC 通訊處理
@@ -208,11 +210,11 @@ ccRewind/
 │   │   │   ├── ThemeSwitcher/ # 三主題切換按鈕
 │   │   │   └── UpdateBanner/  # 更新通知橫幅
 │   │   ├── hooks/             # useSession, useSessions, useProjects
-│   │   ├── utils/             # formatTokens, formatTime
+│   │   ├── utils/             # formatTokens, formatTime, formatDuration
 │   │   └── context/           # AppContext + ThemeContext（主題持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（143 個）
+├── tests/                     # Vitest 測試（161 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
