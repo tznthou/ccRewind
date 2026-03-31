@@ -18,6 +18,23 @@ A conversation replay and archaeology tool for Claude Code. Lightweight, read-on
   <img src="docs/preview-brand.webp" alt="ccRewind Branding" width="480" />
 </p>
 
+### Three Themes × Context Budget Dashboard
+
+Switch between three visual themes with one click. Built-in token usage dashboard lets you review conversations in style.
+
+<table>
+  <tr>
+    <td align="center"><strong>📂 Archive</strong></td>
+    <td align="center"><strong>🕐 Timeline</strong></td>
+    <td align="center"><strong>💻 Terminal</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/theme-archive.webp" alt="Archive theme — warm-toned file cabinet style with Context Budget dashboard" width="320" /></td>
+    <td><img src="docs/theme-timeline.webp" alt="Timeline theme — cool-toned timeline style with Context Budget dashboard" width="320" /></td>
+    <td><img src="docs/theme-terminal.webp" alt="Terminal theme — dark terminal style with Context Budget dashboard" width="320" /></td>
+  </tr>
+</table>
+
 ---
 
 ## Core Concept
@@ -210,8 +227,11 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 |-------|--------|-------|
 | 1 | ✅ Done | Foundation: table splitting, data preservation, pagination, grouping |
 | 2 | ✅ Done | Session summary (heuristic), search context preview, scope expansion |
-| 3 | 🔜 Planned | LLM smart summaries: BYOK with GPT-4o mini batch processing |
-| 4 | 📋 Future | Knowledge base: decision chain tracking, stats dashboard, semantic search |
+| 2.5 | ✅ Done | Context Budget: token usage tracking, area chart, pie chart, heat bar, sorting |
+| 2.7 | 🔜 Planned | In-app auto-update (electron-updater) |
+| 3 | 📋 Planned | Summary quality upgrade: heuristic ceiling (tag expansion, tool pattern inference, smart extraction) |
+| 3.5 | 📋 Planned | Stats dashboard: conversation frequency, tool distribution, project activity |
+| 4 | 📋 Future | Cross-session archaeology: file history tracking, related session recommendations, project timeline |
 
 ---
 

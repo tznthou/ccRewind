@@ -27,12 +27,12 @@ export default function TokenBreakdown({ stats }: Props) {
       <div className={styles.chartHeader}>
         <span className={styles.chartTitle}>Token Breakdown</span>
       </div>
-      <ResponsiveContainer width="100%" height={200}>
+      <ResponsiveContainer width="100%" height={230}>
         <PieChart>
           <Pie
             data={data}
             cx="50%"
-            cy="50%"
+            cy="45%"
             innerRadius={50}
             outerRadius={80}
             paddingAngle={2}
