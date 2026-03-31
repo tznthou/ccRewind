@@ -1,7 +1,11 @@
 import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react'
 import type { SearchResult, SessionSearchResult, SearchScope } from '../../shared/types'
 
+export type ViewMode = 'sessions' | 'dashboard'
+
 interface AppState {
+  viewMode: ViewMode
+  fileHistoryPath: string | null
   selectedProjectId: string | null
   selectedSessionId: string | null
   searchQuery: string
@@ -14,6 +18,9 @@ interface AppState {
 }
 
 type AppAction =
+  | { type: 'SET_VIEW_MODE'; mode: ViewMode }
+  | { type: 'OPEN_FILE_HISTORY'; filePath: string }
+  | { type: 'CLOSE_FILE_HISTORY' }
   | { type: 'SELECT_PROJECT'; projectId: string }
   | { type: 'SELECT_SESSION'; sessionId: string }
   | { type: 'CLEAR_SESSION' }
@@ -26,6 +33,8 @@ type AppAction =
   | { type: 'CLEAR_TARGET_MESSAGE' }
 
 const initialState: AppState = {
+  viewMode: 'sessions',
+  fileHistoryPath: null,
   selectedProjectId: null,
   selectedSessionId: null,
   searchQuery: '',
@@ -39,6 +48,12 @@ const initialState: AppState = {
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
+    case 'SET_VIEW_MODE':
+      return { ...state, viewMode: action.mode }
+    case 'OPEN_FILE_HISTORY':
+      return { ...state, fileHistoryPath: action.filePath }
+    case 'CLOSE_FILE_HISTORY':
+      return { ...state, fileHistoryPath: null }
     case 'SELECT_PROJECT':
       // 切換專案時清除 session 選取 + 搜尋
       return { ...initialState, selectedProjectId: action.projectId }

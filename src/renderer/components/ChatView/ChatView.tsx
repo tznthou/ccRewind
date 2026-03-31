@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
+import type { SessionFile } from '../../../shared/types'
+import { basename } from '../../utils/pathDisplay'
 import MessageBubble from './MessageBubble'
 import TokenBudgetPanel from '../TokenBudget/TokenBudgetPanel'
+import RelatedSessionsPanel from '../Archaeology/RelatedSessionsPanel'
 import { useTokenHeat } from './TokenHeatGutter'
 import styles from './ChatView.module.css'
 
@@ -48,6 +51,18 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   }, [targetMessageId, loading, dispatch])
 
   const [exporting, setExporting] = useState(false)
+  const [sessionFiles, setSessionFiles] = useState<SessionFile[]>([])
+  const [showFiles, setShowFiles] = useState(false)
+
+  useEffect(() => {
+    setShowFiles(false)
+    setSessionFiles([])
+    let cancelled = false
+    window.api.getSessionFiles(sessionId).then(files => {
+      if (!cancelled) setSessionFiles(files)
+    })
+    return () => { cancelled = true }
+  }, [sessionId])
 
   const handleExport = useCallback(async () => {
     setExporting(true)
@@ -74,17 +89,43 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     <div ref={containerRef} className={styles.chatView}>
       <div className={styles.toolbar}>
         <TokenBudgetPanel sessionId={sessionId} />
-        <button
-          className={styles.exportButton}
-          onClick={handleExport}
-          disabled={exporting || messages.length === 0}
-        >
-          {exporting ? 'Exporting...' : 'Export Markdown'}
-        </button>
+        <div className={styles.toolbarActions}>
+          {sessionFiles.length > 0 && (
+            <button
+              className={styles.filesToggle}
+              onClick={() => setShowFiles(v => !v)}
+            >
+              {sessionFiles.length} files {showFiles ? '\u25B4' : '\u25BE'}
+            </button>
+          )}
+          <button
+            className={styles.exportButton}
+            onClick={handleExport}
+            disabled={exporting || messages.length === 0}
+          >
+            {exporting ? 'Exporting...' : 'Export Markdown'}
+          </button>
+        </div>
       </div>
+      {showFiles && sessionFiles.length > 0 && (
+        <div className={styles.filesChips}>
+          {sessionFiles.map(f => (
+            <button
+              key={`${f.filePath}-${f.operation}`}
+              className={styles.fileChip}
+              data-op={f.operation}
+              onClick={() => dispatch({ type: 'OPEN_FILE_HISTORY', filePath: f.filePath })}
+              title={`${f.filePath} (${f.operation} ×${f.count})`}
+            >
+              {basename(f.filePath)}
+            </button>
+          ))}
+        </div>
+      )}
       {messages.map((msg) => (
         <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
       ))}
+      <RelatedSessionsPanel sessionId={sessionId} />
     </div>
   )
 }

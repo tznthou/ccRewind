@@ -11,7 +11,37 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 6px;
   padding-right: 12px;
+}
+
+.viewToggle {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.viewToggle:hover {
+  color: var(--color-text);
+  background: var(--color-bg-hover);
+}
+
+.viewToggleActive {
+  color: var(--color-accent);
+}
+
+.mainFull {
+  grid-column: 1 / -1;
 }
 
 .sidebar {

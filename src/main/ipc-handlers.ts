@@ -50,6 +50,49 @@ export function registerIpcHandlers(db: Database): void {
     return exportSessionAsMarkdown(db, sessionId)
   })
 
+  // ── Phase 3.5: 檔案考古 ──
+
+  ipcMain.handle('files:history', (_event, filePath: unknown) => {
+    if (typeof filePath !== 'string') throw new Error('Invalid filePath')
+    return db.getFileHistory(filePath)
+  })
+
+  ipcMain.handle('files:session', (_event, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    return db.getSessionFiles(sessionId)
+  })
+
+  ipcMain.handle('session:related', (_event, sessionId: unknown, limit?: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    const l = typeof limit === 'number' ? Math.min(Math.max(limit, 1), 20) : 5
+    return db.getRelatedSessions(sessionId, l)
+  })
+
+  // ── Phase 3.5: 統計儀表板 ──
+
+  ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
+    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    const d = typeof days === 'number' ? days : 30
+    return db.getUsageStats(pid, d)
+  })
+
+  ipcMain.handle('stats:projects', () => db.getProjectStats())
+
+  ipcMain.handle('stats:tools', (_event, projectId?: unknown) => {
+    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    return db.getToolDistribution(pid)
+  })
+
+  ipcMain.handle('stats:tags', (_event, projectId?: unknown) => {
+    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    return db.getTagDistribution(pid)
+  })
+
+  ipcMain.handle('stats:patterns', (_event, projectId?: unknown) => {
+    const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : null
+    return db.getWorkPatterns(pid)
+  })
+
   // ── 更新檢查 ──
 
   ipcMain.handle('updates:check', () => checkForUpdates())

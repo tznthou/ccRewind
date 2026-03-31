@@ -1,0 +1,203 @@
+/* ── Dashboard Page ── */
+
+.dashboard {
+  padding: var(--space-lg);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-lg);
+}
+
+.title {
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.controls {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.filterSelect {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.rangeGroup {
+  display: flex;
+  gap: 2px;
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.rangeButton {
+  padding: 4px 10px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.rangeButton:hover {
+  color: var(--color-text);
+}
+
+.rangeActive {
+  background: var(--color-bg);
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Grid layout ── */
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+}
+
+@media (max-width: 800px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: var(--color-bg-sidebar);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+}
+
+.cardWide {
+  grid-column: 1 / -1;
+}
+
+.cardTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-md);
+}
+
+/* ── Loading / Empty ── */
+
+.loading,
+.empty {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-xl) 0;
+}
+
+/* ── Project Ranking ── */
+
+.rankingList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.rankingItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.rankingItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.rankingBar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-accent);
+  transition: width 0.3s ease;
+}
+
+.rankingName {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.rankingValue {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+/* ── Work Pattern Heatmap ── */
+
+.heatmapRow {
+  display: flex;
+  gap: 2px;
+  align-items: stretch;
+}
+
+.heatmapCell {
+  flex: 1;
+  height: 32px;
+  border-radius: 3px;
+  cursor: default;
+  transition: opacity 0.15s;
+  position: relative;
+}
+
+.heatmapCell:hover {
+  opacity: 0.8;
+}
+
+.heatmapLabels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.durationStat {
+  margin-top: var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+
+.durationValue {
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--color-text);
+}
+
+/* ── Legend / Tooltip shared ── */
+
+.legendText {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}

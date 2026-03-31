@@ -847,3 +847,296 @@ describe('Phase 3: structured summary fields', () => {
     expect(sessions[0].summaryVersion).toBe(1)
   })
 })
+
+// ── Phase 3.5: Dashboard Stats ──
+
+describe('Phase 3.5: getUsageStats', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'usage-001', projectId: 'proj-u', projectDisplayName: '/test/u',
+      title: 'Day 1 session', messageCount: 1, filePath: '/tmp/u1.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T10:00:00.000Z', endedAt: '2024-03-01T11:00:00.000Z',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 1000, outputTokens: 500 })],
+    })
+    db.indexSession({
+      sessionId: 'usage-002', projectId: 'proj-u', projectDisplayName: '/test/u',
+      title: 'Day 1 session 2', messageCount: 1, filePath: '/tmp/u2.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T14:00:00.000Z', endedAt: '2024-03-01T15:00:00.000Z',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 2000, outputTokens: 800 })],
+    })
+    db.indexSession({
+      sessionId: 'usage-003', projectId: 'proj-u2', projectDisplayName: '/test/u2',
+      title: 'Day 2 session', messageCount: 1, filePath: '/tmp/u3.jsonl', fileSize: 0,
+      fileMtime: '2024-03-02T00:00:00.000Z',
+      startedAt: '2024-03-02T10:00:00.000Z', endedAt: '2024-03-02T11:00:00.000Z',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 500, outputTokens: 200 })],
+    })
+  })
+
+  it('returns daily aggregation across all projects', () => {
+    const stats = db.getUsageStats(null, 0) // days=0 → no date filter
+    expect(stats.length).toBeGreaterThanOrEqual(2)
+    const day1 = stats.find(s => s.date === '2024-03-01')!
+    expect(day1.sessionCount).toBe(2)
+    expect(day1.totalTokens).toBe(4300) // (1000+500) + (2000+800)
+  })
+
+  it('filters by projectId', () => {
+    const stats = db.getUsageStats('proj-u', 0)
+    expect(stats).toHaveLength(1)
+    expect(stats[0].date).toBe('2024-03-01')
+    expect(stats[0].sessionCount).toBe(2)
+  })
+})
+
+describe('Phase 3.5: getProjectStats', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'ps-001', projectId: 'proj-a', projectDisplayName: '/project/alpha',
+      title: 'A1', messageCount: 1, filePath: '/tmp/a1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z',
+      startedAt: '2024-01-01T10:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 1000, outputTokens: 500 })],
+    })
+    db.indexSession({
+      sessionId: 'ps-002', projectId: 'proj-a', projectDisplayName: '/project/alpha',
+      title: 'A2', messageCount: 1, filePath: '/tmp/a2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-02T00:00:00.000Z',
+      startedAt: '2024-01-02T10:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 2000, outputTokens: 1000 })],
+    })
+    db.indexSession({
+      sessionId: 'ps-003', projectId: 'proj-b', projectDisplayName: '/project/beta',
+      title: 'B1', messageCount: 0, filePath: '/tmp/b1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z',
+      startedAt: '2024-01-01T10:00:00.000Z', endedAt: null,
+      messages: [],
+    })
+  })
+
+  it('returns projects sorted by session count', () => {
+    const stats = db.getProjectStats()
+    expect(stats.length).toBeGreaterThanOrEqual(2)
+    expect(stats[0].projectId).toBe('proj-a')
+    expect(stats[0].sessionCount).toBe(2)
+    expect(stats[0].totalTokens).toBe(4500) // (1000+500)+(2000+1000)
+    expect(stats[1].projectId).toBe('proj-b')
+    expect(stats[1].sessionCount).toBe(1)
+  })
+})
+
+describe('Phase 3.5: getToolDistribution', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'td-001', projectId: 'proj-td', projectDisplayName: '/test/td',
+      title: 'Tool test 1', messageCount: 0, filePath: '/tmp/td1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      toolsUsed: 'Read:5,Edit:3,Bash:2',
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'td-002', projectId: 'proj-td', projectDisplayName: '/test/td',
+      title: 'Tool test 2', messageCount: 0, filePath: '/tmp/td2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      toolsUsed: 'Read:10,Write:1',
+      messages: [],
+    })
+  })
+
+  it('aggregates tool counts across sessions', () => {
+    const dist = db.getToolDistribution()
+    expect(dist.length).toBeGreaterThanOrEqual(3)
+
+    const read = dist.find(d => d.name === 'Read')!
+    expect(read.count).toBe(15) // 5 + 10
+
+    const edit = dist.find(d => d.name === 'Edit')!
+    expect(edit.count).toBe(3)
+
+    // sorted by count desc
+    expect(dist[0].name).toBe('Read')
+  })
+
+  it('filters by projectId', () => {
+    db.indexSession({
+      sessionId: 'td-003', projectId: 'proj-other', projectDisplayName: '/other',
+      title: 'Other', messageCount: 0, filePath: '/tmp/td3.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      toolsUsed: 'Grep:100',
+      messages: [],
+    })
+
+    const dist = db.getToolDistribution('proj-td')
+    const grep = dist.find(d => d.name === 'Grep')
+    expect(grep).toBeUndefined()
+  })
+})
+
+describe('Phase 3.5: getTagDistribution', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'tag-001', projectId: 'proj-tag', projectDisplayName: '/test/tag',
+      title: 'Tag test 1', messageCount: 0, filePath: '/tmp/tag1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'bug-fix,auth,testing',
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'tag-002', projectId: 'proj-tag', projectDisplayName: '/test/tag',
+      title: 'Tag test 2', messageCount: 0, filePath: '/tmp/tag2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      tags: 'bug-fix,refactor',
+      messages: [],
+    })
+  })
+
+  it('aggregates tag counts across sessions', () => {
+    const dist = db.getTagDistribution()
+    const bugFix = dist.find(d => d.name === 'bug-fix')!
+    expect(bugFix.count).toBe(2) // appears in both sessions
+
+    const auth = dist.find(d => d.name === 'auth')!
+    expect(auth.count).toBe(1)
+
+    // sorted by count desc
+    expect(dist[0].name).toBe('bug-fix')
+  })
+})
+
+describe('Phase 3.5: getWorkPatterns', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'wp-001', projectId: 'proj-wp', projectDisplayName: '/test/wp',
+      title: 'Morning session', messageCount: 0, filePath: '/tmp/wp1.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z',
+      startedAt: '2024-01-01T09:30:00.000Z', endedAt: null,
+      durationSeconds: 3600,
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'wp-002', projectId: 'proj-wp', projectDisplayName: '/test/wp',
+      title: 'Morning session 2', messageCount: 0, filePath: '/tmp/wp2.jsonl', fileSize: 0,
+      fileMtime: '2024-01-02T00:00:00.000Z',
+      startedAt: '2024-01-02T09:00:00.000Z', endedAt: null,
+      durationSeconds: 1800,
+      messages: [],
+    })
+    db.indexSession({
+      sessionId: 'wp-003', projectId: 'proj-wp', projectDisplayName: '/test/wp',
+      title: 'Evening session', messageCount: 0, filePath: '/tmp/wp3.jsonl', fileSize: 0,
+      fileMtime: '2024-01-03T00:00:00.000Z',
+      startedAt: '2024-01-03T21:00:00.000Z', endedAt: null,
+      durationSeconds: 900,
+      messages: [],
+    })
+  })
+
+  it('returns 24 hours with counts', () => {
+    const patterns = db.getWorkPatterns()
+    expect(patterns.hourly).toHaveLength(24)
+
+    const hour9 = patterns.hourly.find(h => h.hour === 9)!
+    expect(hour9.count).toBe(2) // two sessions at 09:xx
+
+    const hour21 = patterns.hourly.find(h => h.hour === 21)!
+    expect(hour21.count).toBe(1)
+
+    // hours with no sessions should be 0
+    const hour3 = patterns.hourly.find(h => h.hour === 3)!
+    expect(hour3.count).toBe(0)
+  })
+
+  it('returns average duration', () => {
+    const patterns = db.getWorkPatterns()
+    // (3600 + 1800 + 900) / 3 = 2100
+    expect(patterns.avgDurationSeconds).toBe(2100)
+  })
+})
+
+describe('Phase 3.5: getRelatedSessions', () => {
+  beforeEach(() => {
+    // Session A: files x, y, z
+    db.indexSession({
+      sessionId: 'rel-a', projectId: 'proj-rel', projectDisplayName: '/test/rel',
+      title: 'Session A', messageCount: 0, filePath: '/tmp/ra.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z',
+      startedAt: '2024-01-01T10:00:00.000Z', endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/x.ts', operation: 'edit', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+        { filePath: '/src/y.ts', operation: 'edit', count: 1, firstSeenSeq: 1, lastSeenSeq: 1 },
+        { filePath: '/src/z.ts', operation: 'read', count: 1, firstSeenSeq: 2, lastSeenSeq: 2 },
+      ],
+      messages: [],
+    })
+    // Session B: files x, y (2/3 overlap with A → Jaccard = 2/3)
+    db.indexSession({
+      sessionId: 'rel-b', projectId: 'proj-rel', projectDisplayName: '/test/rel',
+      title: 'Session B', messageCount: 0, filePath: '/tmp/rb.jsonl', fileSize: 0,
+      fileMtime: '2024-01-02T00:00:00.000Z',
+      startedAt: '2024-01-02T10:00:00.000Z', endedAt: null,
+      intentText: 'Fix auth',
+      outcomeStatus: 'committed',
+      sessionFiles: [
+        { filePath: '/src/x.ts', operation: 'edit', count: 2, firstSeenSeq: 0, lastSeenSeq: 3 },
+        { filePath: '/src/y.ts', operation: 'read', count: 1, firstSeenSeq: 1, lastSeenSeq: 1 },
+      ],
+      messages: [],
+    })
+    // Session C: files x, w (1/4 overlap with A → Jaccard = 1/4)
+    db.indexSession({
+      sessionId: 'rel-c', projectId: 'proj-rel', projectDisplayName: '/test/rel',
+      title: 'Session C', messageCount: 0, filePath: '/tmp/rc.jsonl', fileSize: 0,
+      fileMtime: '2024-01-03T00:00:00.000Z',
+      startedAt: '2024-01-03T10:00:00.000Z', endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/x.ts', operation: 'read', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+        { filePath: '/src/w.ts', operation: 'edit', count: 1, firstSeenSeq: 1, lastSeenSeq: 1 },
+      ],
+      messages: [],
+    })
+    // Session D: no shared files with A
+    db.indexSession({
+      sessionId: 'rel-d', projectId: 'proj-rel', projectDisplayName: '/test/rel',
+      title: 'Session D', messageCount: 0, filePath: '/tmp/rd.jsonl', fileSize: 0,
+      fileMtime: '2024-01-04T00:00:00.000Z',
+      startedAt: '2024-01-04T10:00:00.000Z', endedAt: null,
+      sessionFiles: [
+        { filePath: '/src/unrelated.ts', operation: 'edit', count: 1, firstSeenSeq: 0, lastSeenSeq: 0 },
+      ],
+      messages: [],
+    })
+  })
+
+  it('returns related sessions sorted by Jaccard desc', () => {
+    const related = db.getRelatedSessions('rel-a')
+    expect(related).toHaveLength(2) // B and C, not D
+
+    expect(related[0].sessionId).toBe('rel-b')
+    expect(related[0].jaccard).toBe(0.667) // 2/3 rounded to 3 decimals
+    expect(related[0].sharedFiles).toContain('/src/x.ts')
+    expect(related[0].sharedFiles).toContain('/src/y.ts')
+    expect(related[0].intentText).toBe('Fix auth')
+    expect(related[0].outcomeStatus).toBe('committed')
+
+    expect(related[1].sessionId).toBe('rel-c')
+    expect(related[1].jaccard).toBe(0.25) // 1/4
+  })
+
+  it('respects limit parameter', () => {
+    const related = db.getRelatedSessions('rel-a', 1)
+    expect(related).toHaveLength(1)
+    expect(related[0].sessionId).toBe('rel-b')
+  })
+
+  it('returns empty for session with no files', () => {
+    db.indexSession({
+      sessionId: 'rel-empty', projectId: 'proj-rel', projectDisplayName: '/test/rel',
+      title: 'Empty', messageCount: 0, filePath: '/tmp/re.jsonl', fileSize: 0,
+      fileMtime: '2024-01-05T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [],
+    })
+    expect(db.getRelatedSessions('rel-empty')).toEqual([])
+  })
+})

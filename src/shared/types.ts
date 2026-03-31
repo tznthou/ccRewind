@@ -178,6 +178,59 @@ export interface GroupedSearchResult {
   matches: Array<{ messageId: number; snippet: string; timestamp: string | null }>
 }
 
+// ── Phase 3.5: Dashboard Stats ──
+
+/** 每日使用統計 */
+export interface DailyUsage {
+  date: string
+  sessionCount: number
+  totalTokens: number
+}
+
+/** 專案統計 */
+export interface ProjectStats {
+  projectId: string
+  displayName: string
+  sessionCount: number
+  totalTokens: number
+  lastActivity: string | null
+}
+
+/** 分佈項目（tool / tag） */
+export interface DistributionItem {
+  name: string
+  count: number
+}
+
+/** 工作模式統計 */
+export interface WorkPatterns {
+  hourly: Array<{ hour: number; count: number }>
+  avgDurationSeconds: number | null
+}
+
+/** 相關 Session（Jaccard 相似度） */
+export interface RelatedSession {
+  sessionId: string
+  sessionTitle: string | null
+  projectName: string
+  intentText: string | null
+  outcomeStatus: OutcomeStatus
+  jaccard: number
+  sharedFiles: string[]
+  startedAt: string | null
+}
+
+/** 檔案歷史條目 */
+export interface FileHistoryEntry {
+  sessionId: string
+  sessionTitle: string | null
+  projectId: string
+  projectName: string
+  operation: FileOperation
+  count: number
+  startedAt: string | null
+}
+
 /** Renderer 透過 contextBridge 取得的 API */
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>
@@ -192,6 +245,22 @@ export interface ElectronAPI {
   getSessionTokenStats: (sessionId: string) => Promise<SessionTokenStats>
   /** 匯出 session 為 Markdown 檔案 */
   exportMarkdown: (sessionId: string) => Promise<'saved' | 'cancelled'>
+  /** 檔案歷史（跨 session） */
+  getFileHistory: (filePath: string) => Promise<FileHistoryEntry[]>
+  /** Session 操作的檔案清單 */
+  getSessionFiles: (sessionId: string) => Promise<SessionFile[]>
+  /** 使用趨勢統計 */
+  getUsageStats: (projectId?: string | null, days?: number) => Promise<DailyUsage[]>
+  /** 專案統計排名 */
+  getProjectStats: () => Promise<ProjectStats[]>
+  /** 工具分佈 */
+  getToolDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
+  /** 標籤分佈 */
+  getTagDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
+  /** 工作模式 */
+  getWorkPatterns: (projectId?: string | null) => Promise<WorkPatterns>
+  /** 相關 Session（Jaccard 相似度） */
+  getRelatedSessions: (sessionId: string, limit?: number) => Promise<RelatedSession[]>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
   /** 檢查更新（回傳最新狀態） */

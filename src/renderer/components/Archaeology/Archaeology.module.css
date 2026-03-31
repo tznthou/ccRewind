@@ -1,0 +1,264 @@
+/* ── FileHistoryDrawer ── */
+
+.drawerOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.3);
+  z-index: 100;
+}
+
+.drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(480px, 90vw);
+  background: var(--color-bg);
+  border-left: 1px solid var(--color-border);
+  z-index: 101;
+  display: flex;
+  flex-direction: column;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.1);
+}
+
+.drawerHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-md) var(--space-lg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.drawerTitle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.drawerPath {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  word-break: break-all;
+  margin-top: var(--space-xs);
+}
+
+.closeButton {
+  padding: 4px;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+}
+
+.closeButton:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.drawerBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md) var(--space-lg);
+}
+
+/* ── Timeline entries ── */
+
+.timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 20px;
+}
+
+.timeline::before {
+  content: '';
+  position: absolute;
+  left: 7px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--color-border);
+}
+
+.timelineEntry {
+  position: relative;
+  padding: var(--space-sm) var(--space-md);
+  padding-left: var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.timelineEntry:hover {
+  background: var(--color-bg-hover);
+}
+
+.timelineEntry::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 14px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+}
+
+.timelineEntry[data-op="edit"]::before {
+  border-color: #f59e0b;
+  background: #fef3c7;
+}
+
+.timelineEntry[data-op="write"]::before {
+  border-color: #22c55e;
+  background: #dcfce7;
+}
+
+.timelineEntry[data-op="read"]::before {
+  border-color: #3b82f6;
+  background: #dbeafe;
+}
+
+.entryDate {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+}
+
+.entryTitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.entryMeta {
+  display: flex;
+  gap: var(--space-sm);
+  margin-top: 2px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.opBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: var(--font-size-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.opBadge[data-op="edit"] {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+}
+
+.opBadge[data-op="write"] {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.opBadge[data-op="read"] {
+  background: rgba(59, 130, 246, 0.15);
+  color: #2563eb;
+}
+
+.opBadge[data-op="discovery"] {
+  background: rgba(139, 92, 246, 0.15);
+  color: #7c3aed;
+}
+
+/* ── RelatedSessionsPanel ── */
+
+.relatedPanel {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg-sidebar);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.relatedHeader {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  margin-bottom: var(--space-sm);
+}
+
+.relatedList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.relatedCard {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s;
+  border: 1px solid transparent;
+}
+
+.relatedCard:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-border);
+}
+
+.relatedCardBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.relatedCardTitle {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.relatedCardMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+
+.jaccardBadge {
+  flex-shrink: 0;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  font-weight: 500;
+  background: rgba(59, 130, 246, 0.1);
+  color: #3b82f6;
+}
+
+.sharedFiles {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.empty {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  padding: var(--space-md) 0;
+}

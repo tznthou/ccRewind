@@ -55,6 +55,63 @@
   font-size: var(--font-size-base);
 }
 
+/* ── Toolbar actions row ── */
+
+.toolbarActions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.filesToggle {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-xs);
+  font-family: var(--font-sans);
+  color: var(--color-text-muted);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.filesToggle:hover {
+  color: var(--color-text);
+  border-color: var(--color-text-muted);
+}
+
+/* ── File chips ── */
+
+.filesChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-bottom: var(--space-sm);
+}
+
+.fileChip {
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.fileChip:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.fileChip[data-op="edit"] { border-left: 2px solid #f59e0b; }
+.fileChip[data-op="write"] { border-left: 2px solid #22c55e; }
+.fileChip[data-op="read"] { border-left: 2px solid #3b82f6; }
+.fileChip[data-op="discovery"] { border-left: 2px solid #8b5cf6; }
+
 .highlightTarget {
   animation: highlightPulse 1.5s ease-out;
 }

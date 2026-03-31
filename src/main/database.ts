@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, RelatedSession, FileHistoryEntry } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -952,15 +952,7 @@ export class Database {
   // ── Session Files (Reverse Index) ──
 
   /** 反向查詢：某檔案出現在哪些 session（按時間倒序） */
-  getFileHistory(filePath: string): Array<{
-    sessionId: string
-    sessionTitle: string | null
-    projectId: string
-    projectName: string
-    operation: FileOperation
-    count: number
-    startedAt: string | null
-  }> {
+  getFileHistory(filePath: string): FileHistoryEntry[] {
     const rows = this.db.prepare(`
       SELECT sf.session_id, s.title AS session_title, s.project_id, p.display_name AS project_name,
              sf.operation, sf.count, s.started_at
@@ -1011,5 +1003,245 @@ export class Database {
       firstSeenSeq: r.first_seen_seq,
       lastSeenSeq: r.last_seen_seq,
     }))
+  }
+
+  // ── Phase 3.5: Dashboard Stats ──
+
+  /** 每日使用趨勢（session 數 + token 消耗） */
+  getUsageStats(projectId?: string | null, days = 30): DailyUsage[] {
+    let sql = `
+      SELECT date(started_at) AS date,
+             COUNT(*) AS session_count,
+             COALESCE(SUM(total_input_tokens), 0) + COALESCE(SUM(total_output_tokens), 0) AS total_tokens
+      FROM sessions
+      WHERE started_at IS NOT NULL AND archived = 0
+    `
+    const params: (string | number)[] = []
+
+    if (days > 0) {
+      sql += ` AND started_at >= date('now', ?)`
+      params.push(`-${days} days`)
+    }
+    if (projectId) {
+      sql += ' AND project_id = ?'
+      params.push(projectId)
+    }
+
+    sql += ' GROUP BY date(started_at) ORDER BY date(started_at)'
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      date: string
+      session_count: number
+      total_tokens: number
+    }>
+    return rows.map(r => ({
+      date: r.date,
+      sessionCount: r.session_count,
+      totalTokens: r.total_tokens,
+    }))
+  }
+
+  /** 專案統計排名（session 數、token、最後活動） */
+  getProjectStats(): ProjectStats[] {
+    const rows = this.db.prepare(`
+      SELECT s.project_id, p.display_name,
+             COUNT(*) AS session_count,
+             COALESCE(SUM(s.total_input_tokens), 0) + COALESCE(SUM(s.total_output_tokens), 0) AS total_tokens,
+             MAX(s.started_at) AS last_activity
+      FROM sessions s
+      JOIN projects p ON p.id = s.project_id
+      WHERE s.archived = 0
+      GROUP BY s.project_id
+      ORDER BY session_count DESC
+    `).all() as Array<{
+      project_id: string
+      display_name: string
+      session_count: number
+      total_tokens: number
+      last_activity: string | null
+    }>
+
+    return rows.map(r => ({
+      projectId: r.project_id,
+      displayName: r.display_name,
+      sessionCount: r.session_count,
+      totalTokens: r.total_tokens,
+      lastActivity: r.last_activity,
+    }))
+  }
+
+  /** 工具分佈（從 tools_used CSV 欄位聚合） */
+  getToolDistribution(projectId?: string | null): DistributionItem[] {
+    let sql = 'SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0'
+    const params: string[] = []
+    if (projectId) {
+      sql += ' AND project_id = ?'
+      params.push(projectId)
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{ tools_used: string }>
+    const counts = new Map<string, number>()
+
+    for (const row of rows) {
+      // 格式：Read:5,Edit:3,Bash:2
+      for (const entry of row.tools_used.split(',')) {
+        const colonIdx = entry.lastIndexOf(':')
+        if (colonIdx > 0) {
+          const name = entry.slice(0, colonIdx)
+          const count = parseInt(entry.slice(colonIdx + 1), 10)
+          if (!isNaN(count)) {
+            counts.set(name, (counts.get(name) ?? 0) + count)
+          }
+        }
+      }
+    }
+
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }
+
+  /** 標籤分佈（從 tags CSV 欄位聚合） */
+  getTagDistribution(projectId?: string | null): DistributionItem[] {
+    let sql = 'SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0'
+    const params: string[] = []
+    if (projectId) {
+      sql += ' AND project_id = ?'
+      params.push(projectId)
+    }
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{ tags: string }>
+    const counts = new Map<string, number>()
+
+    for (const row of rows) {
+      for (const tag of row.tags.split(',')) {
+        const trimmed = tag.trim()
+        if (trimmed) {
+          counts.set(trimmed, (counts.get(trimmed) ?? 0) + 1)
+        }
+      }
+    }
+
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+  }
+
+  /** 工作模式（時段分佈 + 平均 session 長度） */
+  getWorkPatterns(projectId?: string | null): WorkPatterns {
+    let hourSql = `
+      SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
+      FROM sessions
+      WHERE started_at IS NOT NULL AND archived = 0
+    `
+    let durationSql = `
+      SELECT AVG(duration_seconds) AS avg_duration
+      FROM sessions
+      WHERE duration_seconds IS NOT NULL AND archived = 0
+    `
+    const params: string[] = []
+
+    if (projectId) {
+      hourSql += ' AND project_id = ?'
+      durationSql += ' AND project_id = ?'
+      params.push(projectId)
+    }
+
+    hourSql += ' GROUP BY hour ORDER BY hour'
+
+    const hourRows = this.db.prepare(hourSql).all(...params) as Array<{ hour: number; count: number }>
+    const durationRow = this.db.prepare(durationSql).all(...params) as Array<{ avg_duration: number | null }>
+
+    // 補齊 24 小時
+    const hourMap = new Map(hourRows.map(r => [r.hour, r.count]))
+    const hourly: WorkPatterns['hourly'] = []
+    for (let h = 0; h < 24; h++) {
+      hourly.push({ hour: h, count: hourMap.get(h) ?? 0 })
+    }
+
+    return {
+      hourly,
+      avgDurationSeconds: durationRow[0]?.avg_duration != null
+        ? Math.round(durationRow[0].avg_duration)
+        : null,
+    }
+  }
+
+  /** 相關 Session 推薦（基於檔案 Jaccard 相似度） */
+  getRelatedSessions(sessionId: string, limit = 5): RelatedSession[] {
+    // 1. 取得目標 session 的檔案集合
+    const targetFiles = this.db.prepare(
+      'SELECT DISTINCT file_path FROM session_files WHERE session_id = ?',
+    ).all(sessionId) as Array<{ file_path: string }>
+
+    if (targetFiles.length === 0) return []
+
+    const targetSet = new Set(targetFiles.map(r => r.file_path))
+
+    // 2. 找出共享至少一個檔案的候選 session
+    const placeholders = targetFiles.map(() => '?').join(',')
+    const candidates = this.db.prepare(`
+      SELECT DISTINCT sf.session_id, s.title, s.intent_text, s.outcome_status, s.started_at,
+             p.display_name AS project_name
+      FROM session_files sf
+      JOIN sessions s ON s.id = sf.session_id
+      JOIN projects p ON p.id = s.project_id
+      WHERE sf.file_path IN (${placeholders})
+        AND sf.session_id != ?
+        AND s.archived = 0
+    `).all(...targetFiles.map(r => r.file_path), sessionId) as Array<{
+      session_id: string
+      title: string | null
+      intent_text: string | null
+      outcome_status: string | null
+      started_at: string | null
+      project_name: string
+    }>
+
+    if (candidates.length === 0) return []
+
+    // 3. 批量取得所有候選 session 的檔案集合（一次查詢，避免 N+1）
+    const candidateIds = [...new Set(candidates.map(c => c.session_id))]
+    const candidateMap = new Map(candidates.map(c => [c.session_id, c]))
+
+    const cidPlaceholders = candidateIds.map(() => '?').join(',')
+    const allCandidateFiles = this.db.prepare(
+      `SELECT session_id, file_path FROM session_files WHERE session_id IN (${cidPlaceholders})`,
+    ).all(...candidateIds) as Array<{ session_id: string; file_path: string }>
+
+    // 按 session 分組
+    const candidateFileSets = new Map<string, Set<string>>()
+    for (const row of allCandidateFiles) {
+      let s = candidateFileSets.get(row.session_id)
+      if (!s) { s = new Set(); candidateFileSets.set(row.session_id, s) }
+      s.add(row.file_path)
+    }
+
+    const results: RelatedSession[] = []
+
+    for (const cid of candidateIds) {
+      const cSet = candidateFileSets.get(cid) ?? new Set()
+      const intersection = [...targetSet].filter(f => cSet.has(f))
+      const union = new Set([...targetSet, ...cSet])
+      const jaccard = intersection.length / union.size
+
+      if (jaccard > 0) {
+        const meta = candidateMap.get(cid)!
+        results.push({
+          sessionId: cid,
+          sessionTitle: meta.title,
+          projectName: meta.project_name,
+          intentText: meta.intent_text,
+          outcomeStatus: (meta.outcome_status as OutcomeStatus) ?? null,
+          jaccard: Math.round(jaccard * 1000) / 1000,
+          sharedFiles: intersection,
+          startedAt: meta.started_at,
+        })
+      }
+    }
+
+    return results
+      .sort((a, b) => b.jaccard - a.jaccard)
+      .slice(0, limit)
   }
 }
