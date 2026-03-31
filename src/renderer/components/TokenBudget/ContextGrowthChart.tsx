@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
+import { TOKEN_COLORS, CHART_TOOLTIP_STYLE } from './chartConstants'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -64,12 +65,7 @@ export default function ContextGrowthChart({ turns }: Props) {
           <Tooltip
             formatter={(value) => formatTokens(Number(value))}
             labelFormatter={(label) => `Turn ${label}`}
-            contentStyle={{
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              fontSize: 12,
-            }}
+            contentStyle={CHART_TOOLTIP_STYLE}
           />
           <ReferenceLine
             y={limit.value}
@@ -81,8 +77,8 @@ export default function ContextGrowthChart({ turns }: Props) {
             type="monotone"
             dataKey="newInput"
             stackId="ctx"
-            stroke="#0c4a6e"
-            fill="#0c4a6e"
+            stroke={TOKEN_COLORS.newInput}
+            fill={TOKEN_COLORS.newInput}
             name="New Input"
             isAnimationActive={!disableAnimation}
           />
@@ -90,8 +86,8 @@ export default function ContextGrowthChart({ turns }: Props) {
             type="monotone"
             dataKey="cacheCreation"
             stackId="ctx"
-            stroke="#0891b2"
-            fill="#0891b2"
+            stroke={TOKEN_COLORS.cacheCreation}
+            fill={TOKEN_COLORS.cacheCreation}
             name="Cache Creation"
             isAnimationActive={!disableAnimation}
           />
@@ -99,8 +95,8 @@ export default function ContextGrowthChart({ turns }: Props) {
             type="monotone"
             dataKey="cacheRead"
             stackId="ctx"
-            stroke="#67e8f9"
-            fill="#67e8f9"
+            stroke={TOKEN_COLORS.cacheRead}
+            fill={TOKEN_COLORS.cacheRead}
             fillOpacity={0.6}
             name="Cache Read"
             isAnimationActive={!disableAnimation}

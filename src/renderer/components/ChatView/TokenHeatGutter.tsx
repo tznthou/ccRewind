@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import type { Message } from '../../../shared/types'
 
-interface HeatInfo {
+export interface HeatInfo {
   /** 0–1 intensity based on context delta */
   intensity: number
   /** true if cache hit rate is good (>50%) */
@@ -27,7 +27,7 @@ export function useTokenHeat(messages: Message[]): Map<number, HeatInfo> {
       deltas.push(Math.max(0, curr - prev))
     }
 
-    const maxDelta = Math.max(...deltas, 1)
+    const maxDelta = deltas.reduce((a, b) => Math.max(a, b), 1)
 
     for (let i = 0; i < assistantMsgs.length; i++) {
       const msg = assistantMsgs[i]

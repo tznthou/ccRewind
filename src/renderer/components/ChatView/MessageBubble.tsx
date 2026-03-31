@@ -3,15 +3,13 @@ import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import { formatTime } from '../../utils/formatTime'
-import { getHeatStyle } from './TokenHeatGutter'
+import { getHeatStyle, type HeatInfo } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
-
-type HeatInfo = { intensity: number; cacheGood: boolean }
 
 interface MessageBubbleProps {
   message: Message
   searchQuery?: string
-  heatMap?: Map<number, HeatInfo>
+  heat?: HeatInfo
 }
 
 function highlightText(text: string, query: string): ReactNode {
@@ -59,11 +57,11 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
   }
 }
 
-export default memo(function MessageBubble({ message, searchQuery = '', heatMap }: MessageBubbleProps) {
+export default memo(function MessageBubble({ message, searchQuery = '', heat }: MessageBubbleProps) {
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
-  const heatStyle = !isUser ? getHeatStyle(heatMap?.get(message.id)) : undefined
+  const heatStyle = !isUser ? getHeatStyle(heat) : undefined
 
   // last-prompt 不顯示
   if (message.type === 'last-prompt') return null

@@ -11,7 +11,7 @@ const MAX_CELLS = 200
 
 export default function CostHeatBar({ turns }: Props) {
   const { cells, maxOutput } = useMemo(() => {
-    const max = Math.max(...turns.map(t => t.outputTokens), 0)
+    const max = turns.reduce((m, t) => Math.max(m, t.outputTokens), 0)
     const denom = max || 1
 
     // Bin turns when exceeding MAX_CELLS to limit DOM nodes

@@ -2,27 +2,21 @@ import { useMemo } from 'react'
 import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
+import { TOKEN_COLORS, CHART_TOOLTIP_STYLE } from './chartConstants'
 import styles from './TokenBudget.module.css'
 
 interface Props {
   stats: SessionTokenStats
 }
 
-const COLORS = {
-  cacheRead: '#67e8f9',
-  cacheCreation: '#0891b2',
-  newInput: '#0c4a6e',
-  output: '#f59e0b',
-} as const
-
 export default function TokenBreakdown({ stats }: Props) {
   const data = useMemo(() => {
     const newInput = stats.totalInputTokens - stats.totalCacheReadTokens - stats.totalCacheCreationTokens
     return [
-      { name: 'Cache Read', value: stats.totalCacheReadTokens, fill: COLORS.cacheRead },
-      { name: 'Cache Creation', value: stats.totalCacheCreationTokens, fill: COLORS.cacheCreation },
-      { name: 'New Input', value: Math.max(0, newInput), fill: COLORS.newInput },
-      { name: 'Output', value: stats.totalOutputTokens, fill: COLORS.output },
+      { name: 'Cache Read', value: stats.totalCacheReadTokens, fill: TOKEN_COLORS.cacheRead },
+      { name: 'Cache Creation', value: stats.totalCacheCreationTokens, fill: TOKEN_COLORS.cacheCreation },
+      { name: 'New Input', value: Math.max(0, newInput), fill: TOKEN_COLORS.newInput },
+      { name: 'Output', value: stats.totalOutputTokens, fill: TOKEN_COLORS.output },
     ].filter(d => d.value > 0)
   }, [stats])
 
@@ -47,12 +41,7 @@ export default function TokenBreakdown({ stats }: Props) {
 
           <Tooltip
             formatter={(value) => formatTokens(Number(value))}
-            contentStyle={{
-              background: 'var(--color-bg)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              fontSize: 12,
-            }}
+            contentStyle={CHART_TOOLTIP_STYLE}
           />
           <Legend
             formatter={(value) => <span className={styles.legendText}>{value}</span>}

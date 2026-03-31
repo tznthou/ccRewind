@@ -83,7 +83,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
         </button>
       </div>
       {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heatMap={heatMap} />
+        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
       ))}
     </div>
   )
