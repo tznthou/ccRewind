@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-03-31
+
+### Added
+
+- **Context Budget visualization** (Phase 2.5): token usage tracking and charts for every session
+- Parser extracts `message.usage` fields from JSONL (input_tokens, output_tokens, cache_read_input_tokens, cache_creation_input_tokens, model)
+- `getSessionTokenStats` IPC API returning per-turn token breakdown with cache hit rate and model distribution
+- TokenBudgetPanel: expandable panel in ChatView toolbar with toggle button
+- TokenSummaryCard: 4-cell grid showing Total Input, Total Output, Cache Hit Rate, and Model(s) with multi-model percentage display
+- ContextGrowthChart: recharts stacked area chart (New Input / Cache Creation / Cache Read) with 200K/1M context limit reference line toggle
+- Shared `formatTokens()` utility for consistent token number formatting across components
+
+### Changed
+
+- **DB schema**: migration v7 adds `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_creation_tokens`, `model` columns to `messages` table; adds `total_input_tokens`, `total_output_tokens` to `sessions` table
+- Existing sessions are force re-indexed on upgrade (migration v7 clears `file_mtime`) to populate token fields
+- ChatView toolbar layout changed from `flex-end` to `space-between` to accommodate Token Budget button
+- Extracted `MessageRow` type and `mapMessageRow()` helper in database.ts to reduce duplication across `getMessages()` and `getMessageContext()`
+
+### Fixed
+
+- FTS5 search query injection: internal double quotes now escaped before wrapping (`fts5QuoteIfNeeded`), applied consistently to both `search()` and `searchSessions()`
+- IPC `message:context` range parameter clamped to [0, 10] to prevent unbounded DB scans
+- TokenBudgetPanel handles IPC errors gracefully with error state display instead of blank expanded panel
+
 ## [1.0.0] - 2026-03-30
 
 ### Added
