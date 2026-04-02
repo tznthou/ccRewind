@@ -1140,3 +1140,140 @@ describe('Phase 3.5: getRelatedSessions', () => {
     expect(db.getRelatedSessions('rel-empty')).toEqual([])
   })
 })
+
+// ── Phase 4: Dashboard 進階功能 ──
+
+describe('Phase 4: getEfficiencyTrend', () => {
+  beforeEach(() => {
+    // Session with 10 messages, 5000 total tokens => 500 tokens/turn
+    db.indexSession({
+      sessionId: 'eff-001', projectId: 'proj-eff', projectDisplayName: '/test/eff',
+      title: 'Efficient session', messageCount: 10, filePath: '/tmp/eff1.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T10:00:00.000Z', endedAt: '2024-03-01T11:00:00.000Z',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 3000, outputTokens: 2000 })],
+    })
+    // Session with 2 messages, 10000 total tokens => 5000 tokens/turn
+    db.indexSession({
+      sessionId: 'eff-002', projectId: 'proj-eff', projectDisplayName: '/test/eff',
+      title: 'Wasteful session', messageCount: 2, filePath: '/tmp/eff2.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T14:00:00.000Z', endedAt: '2024-03-01T15:00:00.000Z',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 6000, outputTokens: 4000 })],
+    })
+  })
+
+  it('computes daily avg tokens/turn', () => {
+    const trend = db.getEfficiencyTrend(null, 0)
+    const day = trend.find(d => d.date === '2024-03-01')!
+    // total tokens = 15000, total turns = 12, avg = 1250
+    expect(day.avgTokensPerTurn).toBe(1250)
+    expect(day.totalTurns).toBe(12)
+    expect(day.sessionCount).toBe(2)
+  })
+
+  it('filters by projectId', () => {
+    db.indexSession({
+      sessionId: 'eff-003', projectId: 'proj-other', projectDisplayName: '/test/other',
+      title: 'Other', messageCount: 5, filePath: '/tmp/eff3.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T10:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 1000, outputTokens: 500 })],
+    })
+    const trend = db.getEfficiencyTrend('proj-eff', 0)
+    expect(trend).toHaveLength(1)
+    expect(trend[0].sessionCount).toBe(2)
+  })
+})
+
+describe('Phase 4: getWasteSessions', () => {
+  beforeEach(() => {
+    // High-token session with NO productive outcome
+    db.indexSession({
+      sessionId: 'waste-001', projectId: 'proj-w', projectDisplayName: '/test/w',
+      title: 'Wasteful', messageCount: 20, filePath: '/tmp/w1.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T10:00:00.000Z', endedAt: '2024-03-01T11:00:00.000Z',
+      intentText: 'Refactor auth module',
+      outcomeStatus: 'in-progress',
+      durationSeconds: 3600,
+      filesTouched: 'auth.ts,login.ts,middleware.ts',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 50000, outputTokens: 30000 })],
+    })
+    // Committed session — should NOT appear
+    db.indexSession({
+      sessionId: 'waste-002', projectId: 'proj-w', projectDisplayName: '/test/w',
+      title: 'Productive', messageCount: 5, filePath: '/tmp/w2.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T12:00:00.000Z', endedAt: '2024-03-01T13:00:00.000Z',
+      outcomeStatus: 'committed',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 40000, outputTokens: 20000 })],
+    })
+  })
+
+  it('returns sessions with no productive outcome, sorted by tokens desc', () => {
+    const waste = db.getWasteSessions(null, 10)
+    expect(waste.length).toBeGreaterThanOrEqual(1)
+    expect(waste[0].sessionId).toBe('waste-001')
+    expect(waste[0].totalTokens).toBe(80000)
+    expect(waste[0].fileCount).toBe(3)
+    expect(waste[0].intentText).toBe('Refactor auth module')
+    // committed session should be excluded
+    expect(waste.find(w => w.sessionId === 'waste-002')).toBeUndefined()
+  })
+
+  it('filters by projectId', () => {
+    const waste = db.getWasteSessions('proj-nonexistent', 10)
+    expect(waste).toHaveLength(0)
+  })
+
+  it('respects limit', () => {
+    const waste = db.getWasteSessions(null, 1)
+    expect(waste).toHaveLength(1)
+  })
+})
+
+describe('Phase 4: getProjectHealth', () => {
+  beforeEach(() => {
+    db.indexSession({
+      sessionId: 'ph-001', projectId: 'proj-h', projectDisplayName: '/test/health',
+      title: 'H1', messageCount: 10, filePath: '/tmp/h1.jsonl', fileSize: 0,
+      fileMtime: '2024-03-01T00:00:00.000Z',
+      startedAt: '2024-03-01T10:00:00.000Z', endedAt: null,
+      outcomeStatus: 'committed',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 5000, outputTokens: 3000 })],
+    })
+    db.indexSession({
+      sessionId: 'ph-002', projectId: 'proj-h', projectDisplayName: '/test/health',
+      title: 'H2', messageCount: 5, filePath: '/tmp/h2.jsonl', fileSize: 0,
+      fileMtime: '2024-03-02T00:00:00.000Z',
+      startedAt: '2024-03-02T10:00:00.000Z', endedAt: null,
+      outcomeStatus: 'tested',
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 2000, outputTokens: 1000 })],
+    })
+    db.indexSession({
+      sessionId: 'ph-003', projectId: 'proj-h', projectDisplayName: '/test/health',
+      title: 'H3', messageCount: 3, filePath: '/tmp/h3.jsonl', fileSize: 0,
+      fileMtime: '2024-03-03T00:00:00.000Z',
+      startedAt: '2024-03-03T10:00:00.000Z', endedAt: null,
+      outcomeStatus: null,
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 1000, outputTokens: 500 })],
+    })
+  })
+
+  it('returns outcome distribution per project', () => {
+    const health = db.getProjectHealth()
+    const h = health.find(p => p.projectId === 'proj-h')!
+    expect(h.outcomeDistribution.committed).toBe(1)
+    expect(h.outcomeDistribution.tested).toBe(1)
+    expect(h.outcomeDistribution.unknown).toBe(1)
+    expect(h.outcomeDistribution.inProgress).toBe(0)
+  })
+
+  it('computes avg tokens/turn across all sessions', () => {
+    const health = db.getProjectHealth()
+    const h = health.find(p => p.projectId === 'proj-h')!
+    // total tokens = 12500, total turns = 18, avg ≈ 694
+    expect(h.avgTokensPerTurn).toBe(694)
+  })
+})

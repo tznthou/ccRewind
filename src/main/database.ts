@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, RelatedSession, FileHistoryEntry } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -1165,6 +1165,152 @@ export class Database {
         ? Math.round(durationRow[0].avg_duration)
         : null,
     }
+  }
+
+  // ── Phase 4: Dashboard 進階功能 ──
+
+  /** 效率趨勢：每日平均 tokens/turn */
+  getEfficiencyTrend(projectId?: string | null, days = 30): DailyEfficiency[] {
+    let sql = `
+      SELECT date(started_at) AS date,
+             COUNT(*) AS session_count,
+             SUM(message_count) AS total_turns,
+             CASE WHEN SUM(message_count) > 0
+               THEN CAST(
+                 (COALESCE(SUM(total_input_tokens), 0) + COALESCE(SUM(total_output_tokens), 0))
+                 AS REAL
+               ) / SUM(message_count)
+               ELSE 0
+             END AS avg_tokens_per_turn
+      FROM sessions
+      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0
+    `
+    const params: (string | number)[] = []
+
+    if (days > 0) {
+      sql += ` AND started_at >= date('now', ?)`
+      params.push(`-${days} days`)
+    }
+    if (projectId) {
+      sql += ' AND project_id = ?'
+      params.push(projectId)
+    }
+
+    sql += ' GROUP BY date(started_at) ORDER BY date(started_at)'
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      date: string
+      session_count: number
+      total_turns: number
+      avg_tokens_per_turn: number
+    }>
+    return rows.map(r => ({
+      date: r.date,
+      sessionCount: r.session_count,
+      totalTurns: r.total_turns,
+      avgTokensPerTurn: Math.round(r.avg_tokens_per_turn),
+    }))
+  }
+
+  /** 浪費偵測：高 token 但無 commit/test outcome 的 session */
+  getWasteSessions(projectId?: string | null, limit = 20): WasteSession[] {
+    let sql = `
+      SELECT s.id AS session_id, s.intent_text,
+             COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0) AS total_tokens,
+             s.duration_seconds, s.outcome_status, s.started_at,
+             p.display_name AS project_name,
+             CASE WHEN s.files_touched IS NOT NULL AND s.files_touched != ''
+               THEN LENGTH(s.files_touched) - LENGTH(REPLACE(s.files_touched, ',', '')) + 1
+               ELSE 0
+             END AS file_count
+      FROM sessions s
+      JOIN projects p ON p.id = s.project_id
+      WHERE s.archived = 0
+        AND (s.outcome_status IS NULL OR s.outcome_status NOT IN ('committed', 'tested'))
+        AND (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)) > 0
+    `
+    const params: (string | number)[] = []
+
+    if (projectId) {
+      sql += ' AND s.project_id = ?'
+      params.push(projectId)
+    }
+
+    sql += ' ORDER BY total_tokens DESC LIMIT ?'
+    params.push(limit)
+
+    const rows = this.db.prepare(sql).all(...params) as Array<{
+      session_id: string
+      intent_text: string | null
+      total_tokens: number
+      duration_seconds: number | null
+      outcome_status: string | null
+      started_at: string | null
+      project_name: string
+      file_count: number
+    }>
+    return rows.map(r => ({
+      sessionId: r.session_id,
+      intentText: r.intent_text,
+      totalTokens: r.total_tokens,
+      durationSeconds: r.duration_seconds,
+      outcomeStatus: r.outcome_status as OutcomeStatus,
+      fileCount: r.file_count,
+      startedAt: r.started_at,
+      projectName: r.project_name,
+    }))
+  }
+
+  /** 專案健康：outcome 分佈 + 活動趨勢 + 效率 */
+  getProjectHealth(): ProjectHealth[] {
+    const rows = this.db.prepare(`
+      SELECT s.project_id, p.display_name,
+             SUM(CASE WHEN s.outcome_status = 'committed' THEN 1 ELSE 0 END) AS committed,
+             SUM(CASE WHEN s.outcome_status = 'tested' THEN 1 ELSE 0 END) AS tested,
+             SUM(CASE WHEN s.outcome_status = 'in-progress' THEN 1 ELSE 0 END) AS in_progress,
+             SUM(CASE WHEN s.outcome_status = 'quick-qa' THEN 1 ELSE 0 END) AS quick_qa,
+             SUM(CASE WHEN s.outcome_status IS NULL THEN 1 ELSE 0 END) AS unknown,
+             SUM(CASE WHEN s.started_at >= date('now', '-7 days') THEN 1 ELSE 0 END) AS recent_count,
+             SUM(CASE WHEN s.started_at >= date('now', '-14 days') AND s.started_at < date('now', '-7 days') THEN 1 ELSE 0 END) AS previous_count,
+             CASE WHEN SUM(s.message_count) > 0
+               THEN CAST(
+                 (COALESCE(SUM(s.total_input_tokens), 0) + COALESCE(SUM(s.total_output_tokens), 0))
+                 AS REAL
+               ) / SUM(s.message_count)
+               ELSE NULL
+             END AS avg_tokens_per_turn
+      FROM sessions s
+      JOIN projects p ON p.id = s.project_id
+      WHERE s.archived = 0
+      GROUP BY s.project_id
+      ORDER BY recent_count DESC, committed + tested DESC
+    `).all() as Array<{
+      project_id: string
+      display_name: string
+      committed: number
+      tested: number
+      in_progress: number
+      quick_qa: number
+      unknown: number
+      recent_count: number
+      previous_count: number
+      avg_tokens_per_turn: number | null
+    }>
+
+    return rows.map(r => ({
+      projectId: r.project_id,
+      displayName: r.display_name,
+      outcomeDistribution: {
+        committed: r.committed,
+        tested: r.tested,
+        inProgress: r.in_progress,
+        quickQa: r.quick_qa,
+        unknown: r.unknown,
+      },
+      recentCount: r.recent_count,
+      previousCount: r.previous_count,
+      avgTokensPerTurn: r.avg_tokens_per_turn != null ? Math.round(r.avg_tokens_per_turn) : null,
+    }))
   }
 
   /** 相關 Session 推薦（基於檔案 Jaccard 相似度） */

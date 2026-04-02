@@ -208,6 +208,47 @@ export interface WorkPatterns {
   avgDurationSeconds: number | null
 }
 
+// ── Phase 4: Dashboard 進階功能 ──
+
+/** 每日效率趨勢 */
+export interface DailyEfficiency {
+  date: string
+  /** 當日平均 tokens/turn */
+  avgTokensPerTurn: number
+  sessionCount: number
+  totalTurns: number
+}
+
+/** 浪費偵測條目 */
+export interface WasteSession {
+  sessionId: string
+  intentText: string | null
+  totalTokens: number
+  durationSeconds: number | null
+  outcomeStatus: OutcomeStatus
+  fileCount: number
+  startedAt: string | null
+  projectName: string
+}
+
+/** 專案健康概覽 */
+export interface ProjectHealth {
+  projectId: string
+  displayName: string
+  outcomeDistribution: {
+    committed: number
+    tested: number
+    inProgress: number
+    quickQa: number
+    unknown: number
+  }
+  /** 近 7 天 session 數 */
+  recentCount: number
+  /** 前 7 天 session 數（趨勢比較用） */
+  previousCount: number
+  avgTokensPerTurn: number | null
+}
+
 /** 相關 Session（Jaccard 相似度） */
 export interface RelatedSession {
   sessionId: string
@@ -259,6 +300,12 @@ export interface ElectronAPI {
   getTagDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
   /** 工作模式 */
   getWorkPatterns: (projectId?: string | null) => Promise<WorkPatterns>
+  /** 效率趨勢（tokens/turn 每日） */
+  getEfficiencyTrend: (projectId?: string | null, days?: number) => Promise<DailyEfficiency[]>
+  /** 浪費偵測（高 token 低產出 session） */
+  getWasteSessions: (projectId?: string | null, limit?: number) => Promise<WasteSession[]>
+  /** 專案健康（outcome 分佈 + 趨勢） */
+  getProjectHealth: () => Promise<ProjectHealth[]>
   /** 相關 Session（Jaccard 相似度） */
   getRelatedSessions: (sessionId: string, limit?: number) => Promise<RelatedSession[]>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */

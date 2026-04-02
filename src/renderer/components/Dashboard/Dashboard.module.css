@@ -195,6 +195,119 @@
   color: var(--color-text);
 }
 
+/* ── Card Header (title + toggle) ── */
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-md);
+}
+
+/* ── Waste Detection ── */
+
+.wasteList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.wasteItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.wasteItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.wasteName {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wasteMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.outcomeBadge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+/* ── Project Health ── */
+
+.healthList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.healthItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-sm);
+}
+
+.healthItem:hover {
+  background: var(--color-bg-hover);
+}
+
+.healthBar {
+  width: 120px;
+  height: 8px;
+  display: flex;
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.healthBarSegment {
+  height: 100%;
+}
+
+.healthTrend {
+  font-size: var(--font-size-xs);
+  min-width: 48px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.healthTrendUp {
+  color: #22c55e;
+}
+
+.healthTrendDown {
+  color: #ef4444;
+}
+
+.healthTrendFlat {
+  color: var(--color-text-muted);
+}
+
+.healthMeta {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
 /* ── Legend / Tooltip shared ── */
 
 .legendText {
