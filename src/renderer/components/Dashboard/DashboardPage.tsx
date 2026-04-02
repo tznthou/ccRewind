@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import type { DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth } from '../../../shared/types'
 import { useAppDispatch } from '../../context/AppContext'
 import UsageTrendChart from './UsageTrendChart'
@@ -53,35 +53,36 @@ export default function DashboardPage() {
       .catch(() => { /* graceful degrade */ })
   }, [])
 
-  const loadData = useCallback(async () => {
-    setLoading(true)
+  useEffect(() => {
     let cancelled = false
-    try {
-      const results = await Promise.allSettled([
-        window.api.getUsageStats(projectFilter, range),
-        window.api.getToolDistribution(projectFilter),
-        window.api.getTagDistribution(projectFilter),
-        window.api.getWorkPatterns(projectFilter),
-        window.api.getEfficiencyTrend(projectFilter, range),
-        window.api.getWasteSessions(projectFilter),
-      ])
-      if (!cancelled) {
-        if (results[0].status === 'fulfilled') setUsage(results[0].value)
-        if (results[1].status === 'fulfilled') setTools(results[1].value)
-        if (results[2].status === 'fulfilled') setTags(results[2].value)
-        if (results[3].status === 'fulfilled') setPatterns(results[3].value)
-        if (results[4].status === 'fulfilled') setEfficiency(results[4].value)
-        if (results[5].status === 'fulfilled') setWaste(results[5].value)
+    setLoading(true)
+    ;(async () => {
+      try {
+        // Order: usage, tools, tags, patterns, efficiency, waste
+        const results = await Promise.allSettled([
+          window.api.getUsageStats(projectFilter, range),
+          window.api.getToolDistribution(projectFilter),
+          window.api.getTagDistribution(projectFilter),
+          window.api.getWorkPatterns(projectFilter),
+          window.api.getEfficiencyTrend(projectFilter, range),
+          window.api.getWasteSessions(projectFilter),
+        ])
+        if (!cancelled) {
+          if (results[0].status === 'fulfilled') setUsage(results[0].value)
+          if (results[1].status === 'fulfilled') setTools(results[1].value)
+          if (results[2].status === 'fulfilled') setTags(results[2].value)
+          if (results[3].status === 'fulfilled') setPatterns(results[3].value)
+          if (results[4].status === 'fulfilled') setEfficiency(results[4].value)
+          if (results[5].status === 'fulfilled') setWaste(results[5].value)
+        }
+      } catch {
+        /* IPC error — graceful degrade */
+      } finally {
+        if (!cancelled) setLoading(false)
       }
-    } catch {
-      /* IPC error — graceful degrade */
-    } finally {
-      if (!cancelled) setLoading(false)
-    }
+    })()
     return () => { cancelled = true }
   }, [projectFilter, range])
-
-  useEffect(() => { loadData() }, [loadData])
 
   return (
     <div className={styles.dashboard}>
