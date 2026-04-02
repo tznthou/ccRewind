@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-04-02
+
+### Added
+
+- **Efficiency Trend Chart** (Phase 4): daily tokens-per-turn trend line on the dashboard, togglable with Usage Trend via Usage/Efficiency switch
+  - `getEfficiencyTrend()` API: aggregates `(total_input_tokens + total_output_tokens) / message_count` per day with project filter and date range
+- **Waste Detection** (Phase 4): ranked list of sessions with high token consumption but no productive outcome (no commit/test)
+  - `getWasteSessions()` API: filters sessions where `outcome_status NOT IN ('committed', 'tested')`, sorted by total tokens descending
+  - Click-to-navigate: clicking a waste entry dispatches `SELECT_SESSION` + `SET_VIEW_MODE` to jump directly to session replay
+- **Project Health Dashboard** (Phase 4): replaces Project Activity ranking with richer per-project health cards
+  - Outcome distribution stacked bar (committed/tested/in-progress/quick-qa/unknown) with color coding
+  - 7-day trend arrow comparing recent vs previous period session count
+  - Average tokens-per-turn efficiency metric per project
+  - `getProjectHealth()` API: single SQL query with `SUM(CASE WHEN ...)` for all metrics
+- IPC handles for new APIs: `stats:efficiency`, `stats:waste`, `stats:project-health`
+- IPC input validation uses `Number.isFinite()` for numeric parameters (rejects NaN/Infinity)
+
+### Changed
+
+- Dashboard data fetching uses `Promise.allSettled` instead of `Promise.all` — individual API failures no longer cascade to other dashboard cards
+- `loadData` refactored from `useCallback` + separate `useEffect` to single `useEffect` with proper cancellation cleanup (fixes race condition on rapid filter changes)
+- `WasteDetection` component imports shared `formatDuration()` from `utils/formatTime.ts` instead of local duplicate
+- Initial project load split into independent calls (`getProjectStats` + `getProjectHealth`) to prevent mutual blocking
+
 ## [1.4.0] - 2026-04-01
 
 ### Added

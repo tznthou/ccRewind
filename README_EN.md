@@ -56,11 +56,14 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Conversation Browser** | User/assistant bubble UI with Markdown rendering + syntax highlighting |
 | **Three Themes** | Archive, Timeline, and Terminal themes, one-click toggle |
 | **Tool Collapsing** | tool_use / tool_result blocks collapsed by default, click to expand |
-| **Session Auto-Summary** | Auto-generated tags (bug-fix, refactor, etc.), touched files list, and tool usage stats (heuristic-based, LLM support planned) |
+| **Session Auto-Summary** | Intent extraction, outcome inference (committed/tested/in-progress/quick-qa), multi-signal tags (20+ rules), touched files with operation types, tool usage stats |
 | **Full-Text Search** | FTS5 index with pagination, results grouped by session. Two modes: "Messages" (content) and "Tags/Files" (session metadata) |
 | **Search Context Preview** | Expand any search result to see 2 surrounding messages without navigating away |
 | **Data Preservation** | Automatically archives conversations when JSONL files are deleted. No history is ever lost |
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
+| **Statistics Dashboard** | Usage/efficiency trends, project health (outcome bars + trend arrows), waste detection (high-token low-outcome sessions with click-to-navigate), tool/tag distribution, work pattern heatmap |
+| **Cross-Session Archaeology** | File history drawer (which sessions touched a file), related session recommendations (Jaccard similarity), expandable file chips |
+| **Context Budget** | Token breakdown (input/output/cache), context growth chart, output intensity heat bar, 5-rule insight engine (spike detection, cache efficiency, growth rate analysis) |
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
@@ -106,11 +109,15 @@ graph TB
 
     subgraph Renderer Process
         SB[Sidebar<br>Project List + Session List + Search]
-        CV[ChatView<br>Conversation Reader + Export Button]
+        CV[ChatView<br>Conversation Reader + Token Budget<br>+ File Chips + Related Sessions]
+        DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Waste Detection · Tool/Tag Distribution · Work Patterns]
+        FH[FileHistoryDrawer<br>Cross-Session File History Timeline]
     end
 
     IPC <-->|invoke / handle| SB
     IPC <-->|invoke / handle| CV
+    IPC <-->|invoke / handle| DB_UI
+    IPC <-->|invoke / handle| FH
 ```
 
 ---
@@ -124,7 +131,8 @@ graph TB
 | TypeScript 5.7 | Type safety | Strict mode |
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
-| Vitest 3 | Test framework | 119 tests, run through Electron |
+| recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
+| Vitest 3 | Test framework | 179 tests, run through Electron |
 
 ---
 
@@ -228,10 +236,11 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 | 1 | ✅ Done | Foundation: table splitting, data preservation, pagination, grouping |
 | 2 | ✅ Done | Session summary (heuristic), search context preview, scope expansion |
 | 2.5 | ✅ Done | Context Budget: token usage tracking, area chart, pie chart, heat bar, sorting |
-| 2.7 | 🔜 Planned | In-app auto-update (electron-updater) |
-| 3 | 📋 Planned | Summary quality upgrade: heuristic ceiling (tag expansion, tool pattern inference, smart extraction) |
-| 3.5 | 📋 Planned | Stats dashboard: conversation frequency, tool distribution, project activity |
-| 4 | 📋 Future | Cross-session archaeology: file history tracking, related session recommendations, project timeline |
+| 2.6 | ✅ Done | Token Insights Engine: auto-interpret charts (spike detection, cache assessment, hot spot marking, trend analysis) |
+| 3 | ✅ Done | Summary quality upgrade + file reverse index (cross-session archaeology foundation) |
+| 3.5 | ✅ Done | Statistics dashboard + cross-session archaeology UI |
+| 4 | ✅ Done | Advanced dashboard: efficiency trends, waste detection, project health |
+| 5 | 📋 Future | In-app auto-update (requires code signing) |
 
 ---
 
