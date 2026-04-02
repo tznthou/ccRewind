@@ -98,6 +98,22 @@ export function registerIpcHandlers(db: Database): void {
     return db.getWorkPatterns(pid)
   })
 
+  // ── Phase 4: Dashboard 進階功能 ──
+
+  ipcMain.handle('stats:efficiency', (_event, projectId?: unknown, days?: unknown) => {
+    const pid = parseOptionalString(projectId)
+    const d = Number.isFinite(days) ? (days as number) : 30
+    return db.getEfficiencyTrend(pid, d)
+  })
+
+  ipcMain.handle('stats:waste', (_event, projectId?: unknown, limit?: unknown) => {
+    const pid = parseOptionalString(projectId)
+    const l = Number.isFinite(limit) ? Math.min(Math.max(limit as number, 1), 50) : 20
+    return db.getWasteSessions(pid, l)
+  })
+
+  ipcMain.handle('stats:project-health', () => db.getProjectHealth())
+
   // ── 更新檢查 ──
 
   ipcMain.handle('updates:check', () => checkForUpdates())
