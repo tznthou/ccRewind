@@ -779,6 +779,11 @@ export class Database {
 
   static readonly SEARCH_PAGE_SIZE = 30
 
+  private static readonly VALID_OUTCOMES = new Set(['committed', 'tested', 'in-progress', 'quick-qa'])
+  private static parseOutcomeStatus(v: string | null): OutcomeStatus {
+    return v && Database.VALID_OUTCOMES.has(v) ? v as OutcomeStatus : null
+  }
+
   /** FTS5 安全引號包裹：對含分詞符號的查詢包引號，並跳脫內部引號 */
   private static fts5QuoteIfNeeded(query: string): string {
     if (/[/.\\-]/.test(query) && !query.startsWith('"')) {
@@ -921,7 +926,7 @@ export class Database {
         filesTouched: r.files_touched,
         snippet: r.snippet,
         startedAt: r.started_at,
-        outcomeStatus: (r.outcome_status as OutcomeStatus) ?? null,
+        outcomeStatus: Database.parseOutcomeStatus(r.outcome_status),
       }))
 
       return { results, offset, hasMore }

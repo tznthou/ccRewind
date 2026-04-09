@@ -1,19 +1,9 @@
-import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { formatTime } from '../../utils/formatTime'
+import { renderSnippet } from '../../utils/renderSnippet'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
 import styles from './SearchResults.module.css'
-
-/** FTS5 snippet 使用 Unicode sentinel \uE000/\uE001 標記匹配位置，轉為 React <mark> 元素 */
-function renderSnippet(snippet: string): ReactNode {
-  const parts = snippet.split(/(\uE000.*?\uE001)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith('\uE000') && part.endsWith('\uE001')) {
-      return <mark key={i}>{part.slice(1, -1)}</mark>
-    }
-    return part
-  })
-}
 
 /** 按 sessionId 分組，保持 rank 排序 */
 function groupSearchResults(results: SearchResult[]): GroupedSearchResult[] {

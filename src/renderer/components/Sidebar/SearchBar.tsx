@@ -12,12 +12,17 @@ const DATE_RANGE_LABELS: Record<DateRange, string> = {
   '90d': '90 天',
 }
 
+const DATE_RANGE_DAYS: Record<Exclude<DateRange, 'all'>, number> = {
+  '7d': 7,
+  '30d': 30,
+  '90d': 90,
+}
+
 function buildSearchOptions(dateRange: DateRange, sortBy: SearchSortBy): SearchOptions | undefined {
   let dateFrom: string | undefined
   if (dateRange !== 'all') {
-    const days = parseInt(dateRange)
     const d = new Date()
-    d.setDate(d.getDate() - days)
+    d.setDate(d.getDate() - DATE_RANGE_DAYS[dateRange])
     dateFrom = d.toISOString().slice(0, 10)
   }
   if (!dateFrom && sortBy === 'rank') return undefined

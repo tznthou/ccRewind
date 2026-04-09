@@ -1,26 +1,9 @@
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { formatTime } from '../../utils/formatTime'
-import type { SessionSearchResult, OutcomeStatus } from '../../../shared/types'
+import { renderSnippet } from '../../utils/renderSnippet'
+import type { SessionSearchResult } from '../../../shared/types'
 import styles from './SearchResults.module.css'
-
-const OUTCOME_LABELS: Record<NonNullable<OutcomeStatus>, string> = {
-  committed: 'committed',
-  tested: 'tested',
-  'in-progress': 'in-progress',
-  'quick-qa': 'quick-qa',
-}
-
-/** FTS5 snippet sentinel → React <mark> */
-function renderSnippet(snippet: string): ReactNode {
-  const parts = snippet.split(/(\uE000.*?\uE001)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith('\uE000') && part.endsWith('\uE001')) {
-      return <mark key={i}>{part.slice(1, -1)}</mark>
-    }
-    return part
-  })
-}
 
 export default function SessionSearchResults() {
   const { sessionSearchResults, searchQuery, searchHasMore, searchProjectId, searchOptions } = useAppState()
@@ -59,7 +42,7 @@ export default function SessionSearchResults() {
           <div className={styles.groupHeader}>
             <span className={styles.sessionTitle}>{r.sessionTitle ?? r.sessionId.slice(0, 8)}</span>
             {r.startedAt && <span className={styles.sessionDate}>{formatTime(r.startedAt)}</span>}
-            {r.outcomeStatus && <span className={styles.tagBadge}>{OUTCOME_LABELS[r.outcomeStatus]}</span>}
+            {r.outcomeStatus && <span className={styles.tagBadge}>{r.outcomeStatus}</span>}
           </div>
           <div className={styles.groupBody}>
             <div className={styles.projectName}>{r.projectName}</div>

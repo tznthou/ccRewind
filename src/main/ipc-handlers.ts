@@ -9,13 +9,15 @@ function parseOptionalString(v: unknown): string | null {
   return v != null && typeof v === 'string' ? v : null
 }
 
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
 /** 將 unknown 轉為 SearchOptions（IPC 參數驗證用） */
 function parseSearchOptions(v: unknown): SearchOptions | undefined {
   if (v == null || typeof v !== 'object') return undefined
   const obj = v as Record<string, unknown>
   const opts: SearchOptions = {}
-  if (typeof obj.dateFrom === 'string') opts.dateFrom = obj.dateFrom
-  if (typeof obj.dateTo === 'string') opts.dateTo = obj.dateTo
+  if (typeof obj.dateFrom === 'string' && ISO_DATE_RE.test(obj.dateFrom)) opts.dateFrom = obj.dateFrom
+  if (typeof obj.dateTo === 'string' && ISO_DATE_RE.test(obj.dateTo)) opts.dateTo = obj.dateTo
   if (obj.sortBy === 'rank' || obj.sortBy === 'date') opts.sortBy = obj.sortBy
   return opts
 }
