@@ -42,7 +42,7 @@ describe('scanSubagents', () => {
     expect(result).toHaveLength(2)
 
     const ids = result.map(r => r.subagentId).sort()
-    expect(ids).toEqual(['agent-aRead-abc123', 'agent-aWrite-def456'])
+    expect(ids).toEqual(['session-001/agent-aRead-abc123', 'session-001/agent-aWrite-def456'])
 
     // 每個結果都有正確的 parentSessionId
     for (const r of result) {
@@ -303,12 +303,12 @@ describe('subagent indexer integration', () => {
     // 驗證 subagent session 被索引
     const subs = db.getSubagentSessions('sess-001')
     expect(subs).toHaveLength(1)
-    expect(subs[0].id).toBe('agent-aRead-abc123')
+    expect(subs[0].id).toBe('sess-001/agent-aRead-abc123')
     expect(subs[0].agentType).toBe('file-reader')
     expect(subs[0].messageCount).toBe(2)
 
     // 驗證 subagent messages 被寫入 messages 表
-    const subMsgs = db.getMessages('agent-aRead-abc123')
+    const subMsgs = db.getMessages('sess-001/agent-aRead-abc123')
     expect(subMsgs).toHaveLength(2)
     expect(subMsgs[0].contentText).toBe('Read the config file')
     expect(subMsgs[1].contentText).toBe('Here is the config content.')

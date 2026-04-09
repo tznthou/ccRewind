@@ -101,11 +101,12 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
     }
     if (!fileStat.isFile()) continue
 
-    const subagentId = entry.replace(/\.jsonl$/, '')
+    const bareId = entry.replace(/\.jsonl$/, '')
+    const subagentId = `${parentSessionId}/${bareId}`
 
     // 嘗試讀取對應 meta.json
     let agentType: string | null = null
-    const metaPath = path.join(subagentsDir, `${subagentId}.meta.json`)
+    const metaPath = path.join(subagentsDir, `${bareId}.meta.json`)
     try {
       const metaRaw = await readFile(metaPath, 'utf-8')
       const meta = JSON.parse(metaRaw)

@@ -778,6 +778,29 @@ export class Database {
     this.db.prepare('DELETE FROM subagent_sessions WHERE parent_session_id = ?').run(parentSessionId)
   }
 
+  /** 刪除單一 subagent session（含對應的 sessions/messages 資料） */
+  deleteSubagentSession(subagentId: string): void {
+    const doDelete = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(subagentId)
+      this.db.prepare('DELETE FROM session_files WHERE session_id = ?').run(subagentId)
+      this.db.prepare('DELETE FROM sessions WHERE id = ?').run(subagentId)
+      this.db.prepare('DELETE FROM subagent_sessions WHERE id = ?').run(subagentId)
+    })
+    doDelete()
+  }
+
+  /** 取得指定 parent session 的所有 subagent ID */
+  getSubagentSessionIds(parentSessionId: string): string[] {
+    const rows = this.db.prepare('SELECT id FROM subagent_sessions WHERE parent_session_id = ?').all(parentSessionId) as Array<{ id: string }>
+    return rows.map(r => r.id)
+  }
+
+  /** 在單一 transaction 中執行多個 DB 操作 */
+  runTransaction(fn: () => void): void {
+    const tx = this.db.transaction(fn)
+    tx()
+  }
+
   /** 一次取得所有 subagent sessions 的 file_mtime（增量比對用） */
   getAllSubagentMtimes(): Map<string, string> {
     const rows = this.db.prepare('SELECT id, file_mtime FROM subagent_sessions').all() as Array<{ id: string; file_mtime: string | null }>
@@ -975,6 +998,7 @@ export class Database {
         JOIN projects p ON p.id = s.project_id
         WHERE messages_fts MATCH ?
           AND m.type NOT IN ('last-prompt', 'queue-operation')
+          AND s.id NOT IN (SELECT id FROM subagent_sessions)
       `
       const params: (string | number | null)[] = [query]
 
@@ -1046,6 +1070,7 @@ export class Database {
         JOIN sessions s ON s.rowid = sessions_fts.rowid
         JOIN projects p ON p.id = s.project_id
         WHERE sessions_fts MATCH ?
+          AND s.id NOT IN (SELECT id FROM subagent_sessions)
       `
       const params: (string | number | null)[] = [query]
 
@@ -1178,6 +1203,7 @@ export class Database {
       JOIN sessions s ON s.id = sf.session_id
       JOIN projects p ON p.id = s.project_id
       WHERE sf.file_path = ?
+        AND s.id NOT IN (SELECT id FROM subagent_sessions)
       ORDER BY s.started_at DESC
     `).all(filePath) as Array<{
       session_id: string
@@ -1290,7 +1316,7 @@ export class Database {
 
   /** 工具分佈（從 tools_used CSV 欄位聚合） */
   getToolDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = 'SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0'
+    let sql = 'SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)'
     const params: string[] = []
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1321,7 +1347,7 @@ export class Database {
 
   /** 標籤分佈（從 tags CSV 欄位聚合） */
   getTagDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = 'SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0'
+    let sql = 'SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)'
     const params: string[] = []
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1350,12 +1376,12 @@ export class Database {
     let hourSql = `
       SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0
+      WHERE started_at IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)
     `
     let durationSql = `
       SELECT AVG(COALESCE(active_duration_seconds, duration_seconds)) AS avg_duration
       FROM sessions
-      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0
+      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)
     `
     const params: string[] = []
 
@@ -1401,7 +1427,7 @@ export class Database {
                ELSE 0
              END AS avg_tokens_per_turn
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0
+      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0 AND id NOT IN (SELECT id FROM subagent_sessions)
     `
     const params: (string | number)[] = []
 
@@ -1444,6 +1470,7 @@ export class Database {
       FROM sessions s
       JOIN projects p ON p.id = s.project_id
       WHERE s.archived = 0
+        AND s.id NOT IN (SELECT id FROM subagent_sessions)
         AND (s.outcome_status IS NULL OR s.outcome_status NOT IN ('committed', 'tested'))
         AND (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)) > 0
     `
@@ -1553,6 +1580,7 @@ export class Database {
       WHERE sf.file_path IN (${placeholders})
         AND sf.session_id != ?
         AND s.archived = 0
+        AND s.id NOT IN (SELECT id FROM subagent_sessions)
     `).all(...targetFiles.map(r => r.file_path), sessionId) as Array<{
       session_id: string
       title: string | null

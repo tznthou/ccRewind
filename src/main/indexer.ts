@@ -162,6 +162,15 @@ export async function runIndexer(
       }
       if (subagents.length === 0) continue
 
+      // 清理磁碟已刪除的 stale subagents
+      const scannedSubIds = new Set(subagents.map(s => s.subagentId))
+      const storedSubIds = db.getSubagentSessionIds(session.sessionId)
+      for (const storedId of storedSubIds) {
+        if (!scannedSubIds.has(storedId)) {
+          db.deleteSubagentSession(storedId)
+        }
+      }
+
       for (const sub of subagents) {
         // 增量比對：mtime 沒變就跳過
         const existingMtime = existingSubMtimes.get(sub.subagentId)
@@ -175,50 +184,50 @@ export async function runIndexer(
           continue
         }
 
-        // 寫入 subagent_sessions 表
-        db.indexSubagentSession({
-          id: sub.subagentId,
-          parentSessionId: sub.parentSessionId,
-          agentType: sub.agentType,
-          filePath: sub.filePath,
-          fileSize: sub.fileSize,
-          fileMtime: sub.fileMtime,
-          messageCount: parsed.messages.length,
-          startedAt: parsed.startedAt,
-          endedAt: parsed.endedAt,
-        })
+        // 在單一 transaction 中寫入 metadata + content，避免不一致
+        db.runTransaction(() => {
+          db.indexSubagentSession({
+            id: sub.subagentId,
+            parentSessionId: sub.parentSessionId,
+            agentType: sub.agentType,
+            filePath: sub.filePath,
+            fileSize: sub.fileSize,
+            fileMtime: sub.fileMtime,
+            messageCount: parsed.messages.length,
+            startedAt: parsed.startedAt,
+            endedAt: parsed.endedAt,
+          })
 
-        // subagent messages 寫入現有 messages 表（session_id 用 subagentId）
-        // 先清除舊 messages（if re-indexing）
-        db.indexSession({
-          sessionId: sub.subagentId,
-          projectId: project.projectId,
-          projectDisplayName: project.displayName,
-          title: parsed.title,
-          messageCount: parsed.messages.length,
-          filePath: sub.filePath,
-          fileSize: sub.fileSize,
-          fileMtime: sub.fileMtime,
-          startedAt: parsed.startedAt,
-          endedAt: parsed.endedAt,
-          messages: parsed.messages.map((msg, idx) => ({
-            type: msg.type,
-            uuid: msg.uuid,
-            role: msg.role,
-            contentText: msg.contentText,
-            contentJson: msg.contentJson,
-            hasToolUse: msg.hasToolUse,
-            hasToolResult: msg.hasToolResult,
-            toolNames: msg.toolNames,
-            timestamp: msg.timestamp,
-            sequence: idx,
-            rawJson: msg.rawJson,
-            inputTokens: msg.inputTokens,
-            outputTokens: msg.outputTokens,
-            cacheReadTokens: msg.cacheReadTokens,
-            cacheCreationTokens: msg.cacheCreationTokens,
-            model: msg.model,
-          })),
+          db.indexSession({
+            sessionId: sub.subagentId,
+            projectId: project.projectId,
+            projectDisplayName: project.displayName,
+            title: parsed.title,
+            messageCount: parsed.messages.length,
+            filePath: sub.filePath,
+            fileSize: sub.fileSize,
+            fileMtime: sub.fileMtime,
+            startedAt: parsed.startedAt,
+            endedAt: parsed.endedAt,
+            messages: parsed.messages.map((msg, idx) => ({
+              type: msg.type,
+              uuid: msg.uuid,
+              role: msg.role,
+              contentText: msg.contentText,
+              contentJson: msg.contentJson,
+              hasToolUse: msg.hasToolUse,
+              hasToolResult: msg.hasToolResult,
+              toolNames: msg.toolNames,
+              timestamp: msg.timestamp,
+              sequence: idx,
+              rawJson: msg.rawJson,
+              inputTokens: msg.inputTokens,
+              outputTokens: msg.outputTokens,
+              cacheReadTokens: msg.cacheReadTokens,
+              cacheCreationTokens: msg.cacheCreationTokens,
+              model: msg.model,
+            })),
+          })
         })
       }
     }
