@@ -31,6 +31,7 @@ function groupSearchResults(results: SearchResult[]): GroupedSearchResult[] {
         sessionTitle: r.sessionTitle,
         projectId: r.projectId,
         projectName: r.projectName,
+        sessionStartedAt: r.sessionStartedAt,
         matches: [{ messageId: r.messageId, snippet: r.snippet, timestamp: r.timestamp }],
       })
     }
@@ -53,7 +54,7 @@ function MessagePreview({ role, text }: { role: string | null; text: string | nu
 }
 
 export default function SearchResults() {
-  const { searchResults, searchQuery, searchHasMore, searchProjectId } = useAppState()
+  const { searchResults, searchQuery, searchHasMore, searchProjectId, searchOptions } = useAppState()
   const dispatch = useAppDispatch()
   const [loading, setLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -92,7 +93,7 @@ export default function SearchResults() {
   const handleLoadMore = async () => {
     setLoading(true)
     try {
-      const page = await window.api.search(searchQuery, searchProjectId, searchResults.length)
+      const page = await window.api.search(searchQuery, searchProjectId, searchResults.length, searchOptions)
       dispatch({ type: 'APPEND_SEARCH_RESULTS', results: page.results, hasMore: page.hasMore })
     } catch {
       // ignore
@@ -119,6 +120,7 @@ export default function SearchResults() {
             <button className={styles.groupHeader} onClick={() => toggleGroup(g.sessionId)}>
               <span className={styles.expandIcon}>{collapsed ? '▸' : '▾'}</span>
               <span className={styles.sessionTitle}>{g.sessionTitle ?? g.sessionId.slice(0, 8)}</span>
+              {g.sessionStartedAt && <span className={styles.sessionDate}>{formatTime(g.sessionStartedAt)}</span>}
               <span className={styles.matchCount}>{g.matches.length}</span>
             </button>
             {!collapsed && (

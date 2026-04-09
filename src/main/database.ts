@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -280,6 +280,29 @@ const migrations: Migration[] = [
       `)
       // 清空 file_mtime 強制全量 re-index
       db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
+  {
+    version: 9,
+    description: 'rebuild sessions_fts with intent_text column for search enhancement',
+    up: (db) => {
+      db.exec(`
+        DROP TABLE IF EXISTS sessions_fts;
+        CREATE VIRTUAL TABLE sessions_fts USING fts5(
+          title,
+          tags,
+          files_touched,
+          summary_text,
+          intent_text,
+          content='sessions',
+          content_rowid='rowid',
+          tokenize='unicode61'
+        );
+        INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text, intent_text)
+        SELECT rowid, COALESCE(title,''), COALESCE(tags,''), COALESCE(files_touched,''),
+               COALESCE(summary_text,''), COALESCE(intent_text,'')
+        FROM sessions;
+      `)
     },
   },
 ]
@@ -625,12 +648,12 @@ export class Database {
     const doIndex = this.db.transaction(() => {
       this.db.prepare('DELETE FROM messages WHERE session_id = ?').run(params.sessionId)
       // 清除 sessions_fts 中的舊資料（external content 模式需手動維護）
-      const oldSession = this.db.prepare('SELECT rowid, title, tags, files_touched, summary_text FROM sessions WHERE id = ?').get(params.sessionId) as
-        { rowid: number; title: string | null; tags: string | null; files_touched: string | null; summary_text: string | null } | undefined
+      const oldSession = this.db.prepare('SELECT rowid, title, tags, files_touched, summary_text, intent_text FROM sessions WHERE id = ?').get(params.sessionId) as
+        { rowid: number; title: string | null; tags: string | null; files_touched: string | null; summary_text: string | null; intent_text: string | null } | undefined
       if (oldSession) {
         this.db.prepare(
-          "INSERT INTO sessions_fts(sessions_fts, rowid, title, tags, files_touched, summary_text) VALUES ('delete', ?, ?, ?, ?, ?)",
-        ).run(oldSession.rowid, oldSession.title ?? '', oldSession.tags ?? '', oldSession.files_touched ?? '', oldSession.summary_text ?? '')
+          "INSERT INTO sessions_fts(sessions_fts, rowid, title, tags, files_touched, summary_text, intent_text) VALUES ('delete', ?, ?, ?, ?, ?, ?)",
+        ).run(oldSession.rowid, oldSession.title ?? '', oldSession.tags ?? '', oldSession.files_touched ?? '', oldSession.summary_text ?? '', oldSession.intent_text ?? '')
       }
       this.db.prepare('DELETE FROM session_files WHERE session_id = ?').run(params.sessionId)
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
@@ -660,8 +683,8 @@ export class Database {
       )
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(
-        'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text) VALUES (?, ?, ?, ?, ?)',
-      ).run(insertResult.lastInsertRowid, params.title ?? '', params.tags ?? '', params.filesTouched ?? '', params.summaryText ?? '')
+        'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text, intent_text) VALUES (?, ?, ?, ?, ?, ?)',
+      ).run(insertResult.lastInsertRowid, params.title ?? '', params.tags ?? '', params.filesTouched ?? '', params.summaryText ?? '', params.intentText ?? '')
       // 寫入 session_files
       if (params.sessionFiles && params.sessionFiles.length > 0) {
         const insertFile = this.db.prepare(`
@@ -764,7 +787,7 @@ export class Database {
     return query
   }
 
-  search(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE): SearchPage {
+  search(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE, options?: SearchOptions): SearchPage {
     limit = Math.min(limit, 100)
     query = Database.fts5QuoteIfNeeded(query)
     try {
@@ -775,8 +798,9 @@ export class Database {
           s.title AS session_title,
           s.project_id,
           p.display_name AS project_name,
-          snippet(messages_fts, 0, x'EE8080', x'EE8081', '...', 64) AS snippet,
-          m.timestamp
+          snippet(messages_fts, 0, x'EE8080', x'EE8081', '...', 128) AS snippet,
+          m.timestamp,
+          s.started_at AS session_started_at
         FROM messages_fts
         JOIN messages m ON m.id = messages_fts.rowid
         JOIN sessions s ON s.id = m.session_id
@@ -790,8 +814,17 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
+      if (options?.dateFrom) {
+        sql += ' AND s.started_at >= ?'
+        params.push(options.dateFrom)
+      }
+      if (options?.dateTo) {
+        sql += ' AND s.started_at <= ?'
+        params.push(options.dateTo)
+      }
 
-      sql += ' ORDER BY rank LIMIT ? OFFSET ?'
+      sql += options?.sortBy === 'date' ? ' ORDER BY m.timestamp DESC' : ' ORDER BY rank'
+      sql += ' LIMIT ? OFFSET ?'
       params.push(limit + 1, offset) // 多取 1 筆判斷 hasMore
 
       const rows = this.db.prepare(sql).all(...params) as Array<{
@@ -802,6 +835,7 @@ export class Database {
         project_name: string
         snippet: string
         timestamp: string | null
+        session_started_at: string | null
       }>
 
       const hasMore = rows.length > limit
@@ -814,6 +848,7 @@ export class Database {
         messageId: r.message_id,
         snippet: r.snippet,
         timestamp: r.timestamp,
+        sessionStartedAt: r.session_started_at,
       }))
 
       return { results, offset, hasMore }
@@ -823,8 +858,8 @@ export class Database {
     }
   }
 
-  /** 搜尋 session 標題 / 標籤 / 檔案路徑 / 摘要 */
-  searchSessions(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE): SessionSearchPage {
+  /** 搜尋 session 標題 / 標籤 / 檔案路徑 / 摘要 / 意圖 */
+  searchSessions(query: string, projectId?: string | null, offset = 0, limit = Database.SEARCH_PAGE_SIZE, options?: SearchOptions): SessionSearchPage {
     limit = Math.min(limit, 100)
     query = Database.fts5QuoteIfNeeded(query)
     try {
@@ -836,7 +871,9 @@ export class Database {
           p.display_name AS project_name,
           s.tags,
           s.files_touched,
-          snippet(sessions_fts, -1, x'EE8080', x'EE8081', '...', 64) AS snippet
+          snippet(sessions_fts, -1, x'EE8080', x'EE8081', '...', 128) AS snippet,
+          s.started_at,
+          s.outcome_status
         FROM sessions_fts
         JOIN sessions s ON s.rowid = sessions_fts.rowid
         JOIN projects p ON p.id = s.project_id
@@ -848,8 +885,17 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
+      if (options?.dateFrom) {
+        sql += ' AND s.started_at >= ?'
+        params.push(options.dateFrom)
+      }
+      if (options?.dateTo) {
+        sql += ' AND s.started_at <= ?'
+        params.push(options.dateTo)
+      }
 
-      sql += ' ORDER BY rank LIMIT ? OFFSET ?'
+      sql += options?.sortBy === 'date' ? ' ORDER BY s.started_at DESC' : ' ORDER BY rank'
+      sql += ' LIMIT ? OFFSET ?'
       params.push(limit + 1, offset)
 
       const rows = this.db.prepare(sql).all(...params) as Array<{
@@ -860,6 +906,8 @@ export class Database {
         tags: string | null
         files_touched: string | null
         snippet: string
+        started_at: string | null
+        outcome_status: string | null
       }>
 
       const hasMore = rows.length > limit
@@ -872,6 +920,8 @@ export class Database {
         tags: r.tags,
         filesTouched: r.files_touched,
         snippet: r.snippet,
+        startedAt: r.started_at,
+        outcomeStatus: (r.outcome_status as OutcomeStatus) ?? null,
       }))
 
       return { results, offset, hasMore }

@@ -1,12 +1,23 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import type { Database } from './database'
-import type { IndexerStatus } from '../shared/types'
+import type { IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
 /** 將 unknown 轉為 optional string（IPC 參數驗證用） */
 function parseOptionalString(v: unknown): string | null {
   return v != null && typeof v === 'string' ? v : null
+}
+
+/** 將 unknown 轉為 SearchOptions（IPC 參數驗證用） */
+function parseSearchOptions(v: unknown): SearchOptions | undefined {
+  if (v == null || typeof v !== 'object') return undefined
+  const obj = v as Record<string, unknown>
+  const opts: SearchOptions = {}
+  if (typeof obj.dateFrom === 'string') opts.dateFrom = obj.dateFrom
+  if (typeof obj.dateTo === 'string') opts.dateTo = obj.dateTo
+  if (obj.sortBy === 'rank' || obj.sortBy === 'date') opts.sortBy = obj.sortBy
+  return opts
 }
 
 /** 註冊所有 IPC handlers（invoke/handle 模式） */
@@ -23,20 +34,20 @@ export function registerIpcHandlers(db: Database): void {
     return db.getMessages(sessionId)
   })
 
-  ipcMain.handle('search:query', (_event, query: unknown, projectId?: unknown, offset?: unknown) => {
+  ipcMain.handle('search:query', (_event, query: unknown, projectId?: unknown, offset?: unknown, options?: unknown) => {
     if (typeof query !== 'string') throw new Error('Invalid query')
     if (query.length > 500) throw new Error('Query too long')
     const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : String(projectId)
     const off = typeof offset === 'number' ? offset : 0
-    return db.search(query, pid, off)
+    return db.search(query, pid, off, undefined, parseSearchOptions(options))
   })
 
-  ipcMain.handle('search:sessions', (_event, query: unknown, projectId?: unknown, offset?: unknown) => {
+  ipcMain.handle('search:sessions', (_event, query: unknown, projectId?: unknown, offset?: unknown, options?: unknown) => {
     if (typeof query !== 'string') throw new Error('Invalid query')
     if (query.length > 500) throw new Error('Query too long')
     const pid = projectId == null ? null : typeof projectId === 'string' ? projectId : String(projectId)
     const off = typeof offset === 'number' ? offset : 0
-    return db.searchSessions(query, pid, off)
+    return db.searchSessions(query, pid, off, undefined, parseSearchOptions(options))
   })
 
   ipcMain.handle('message:context', (_event, messageId: unknown, range?: unknown) => {
