@@ -400,6 +400,9 @@ function mapMessageRow(r: MessageRow): Message {
 export class Database {
   private db: BetterSqlite3.Database
 
+  /** Subagent 排除子查詢：用於所有面向使用者的 query，只顯示主 session */
+  private static readonly EXCLUDE_SUBAGENTS = 'NOT IN (SELECT id FROM subagent_sessions)'
+
   constructor(dbPath: string) {
     // :memory: 不需要建目錄
     if (dbPath !== ':memory:') {
@@ -574,8 +577,8 @@ export class Database {
   updateProjectStats(projectId: string): void {
     this.db.prepare(`
       UPDATE projects SET
-        session_count = (SELECT COUNT(*) FROM sessions WHERE project_id = ? AND id NOT IN (SELECT id FROM subagent_sessions)),
-        last_activity_at = (SELECT MAX(ended_at) FROM sessions WHERE project_id = ? AND id NOT IN (SELECT id FROM subagent_sessions))
+        session_count = (SELECT COUNT(*) FROM sessions WHERE project_id = ? AND id ${Database.EXCLUDE_SUBAGENTS}),
+        last_activity_at = (SELECT MAX(ended_at) FROM sessions WHERE project_id = ? AND id ${Database.EXCLUDE_SUBAGENTS})
       WHERE id = ?
     `).run(projectId, projectId, projectId)
   }
@@ -615,7 +618,7 @@ export class Database {
               tags, files_touched, tools_used, total_input_tokens, total_output_tokens
        FROM sessions
        WHERE project_id = ?
-         AND id NOT IN (SELECT id FROM subagent_sessions)
+         AND id ${Database.EXCLUDE_SUBAGENTS}
        ORDER BY started_at DESC`,
     ).all(projectId) as Array<{
       id: string
@@ -662,7 +665,7 @@ export class Database {
 
   /** 將 DB 中不在 keepIds 集合的 session 標記為 archived（JSONL 已從磁碟消失），排除 subagent sessions */
   archiveStaleSessionsExcept(keepIds: Set<string>): void {
-    const allRows = this.db.prepare('SELECT id FROM sessions WHERE archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)').all() as Array<{ id: string }>
+    const allRows = this.db.prepare(`SELECT id FROM sessions WHERE archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`).all() as Array<{ id: string }>
     const archiveStmt = this.db.prepare('UPDATE sessions SET archived = 1 WHERE id = ?')
     const doArchive = this.db.transaction(() => {
       for (const row of allRows) {
@@ -998,7 +1001,7 @@ export class Database {
         JOIN projects p ON p.id = s.project_id
         WHERE messages_fts MATCH ?
           AND m.type NOT IN ('last-prompt', 'queue-operation')
-          AND s.id NOT IN (SELECT id FROM subagent_sessions)
+          AND s.id ${Database.EXCLUDE_SUBAGENTS}
       `
       const params: (string | number | null)[] = [query]
 
@@ -1070,7 +1073,7 @@ export class Database {
         JOIN sessions s ON s.rowid = sessions_fts.rowid
         JOIN projects p ON p.id = s.project_id
         WHERE sessions_fts MATCH ?
-          AND s.id NOT IN (SELECT id FROM subagent_sessions)
+          AND s.id ${Database.EXCLUDE_SUBAGENTS}
       `
       const params: (string | number | null)[] = [query]
 
@@ -1203,7 +1206,7 @@ export class Database {
       JOIN sessions s ON s.id = sf.session_id
       JOIN projects p ON p.id = s.project_id
       WHERE sf.file_path = ?
-        AND s.id NOT IN (SELECT id FROM subagent_sessions)
+        AND s.id ${Database.EXCLUDE_SUBAGENTS}
       ORDER BY s.started_at DESC
     `).all(filePath) as Array<{
       session_id: string
@@ -1316,7 +1319,7 @@ export class Database {
 
   /** 工具分佈（從 tools_used CSV 欄位聚合） */
   getToolDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = 'SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)'
+    let sql = `SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1347,7 +1350,7 @@ export class Database {
 
   /** 標籤分佈（從 tags CSV 欄位聚合） */
   getTagDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = 'SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)'
+    let sql = `SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1376,12 +1379,12 @@ export class Database {
     let hourSql = `
       SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)
+      WHERE started_at IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}
     `
     let durationSql = `
       SELECT AVG(COALESCE(active_duration_seconds, duration_seconds)) AS avg_duration
       FROM sessions
-      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)
+      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}
     `
     const params: string[] = []
 
@@ -1427,7 +1430,7 @@ export class Database {
                ELSE 0
              END AS avg_tokens_per_turn
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0 AND id NOT IN (SELECT id FROM subagent_sessions)
+      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0 AND id ${Database.EXCLUDE_SUBAGENTS}
     `
     const params: (string | number)[] = []
 
@@ -1470,7 +1473,7 @@ export class Database {
       FROM sessions s
       JOIN projects p ON p.id = s.project_id
       WHERE s.archived = 0
-        AND s.id NOT IN (SELECT id FROM subagent_sessions)
+        AND s.id ${Database.EXCLUDE_SUBAGENTS}
         AND (s.outcome_status IS NULL OR s.outcome_status NOT IN ('committed', 'tested'))
         AND (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)) > 0
     `
@@ -1580,7 +1583,7 @@ export class Database {
       WHERE sf.file_path IN (${placeholders})
         AND sf.session_id != ?
         AND s.archived = 0
-        AND s.id NOT IN (SELECT id FROM subagent_sessions)
+        AND s.id ${Database.EXCLUDE_SUBAGENTS}
     `).all(...targetFiles.map(r => r.file_path), sessionId) as Array<{
       session_id: string
       title: string | null

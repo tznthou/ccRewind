@@ -1,11 +1,33 @@
 import path from 'node:path'
-import type { IndexerStatus, ParsedSession } from '../shared/types'
-import type { Database } from './database'
+import type { IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
+import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents } from './scanner'
 import { parseSession } from './parser'
 import { summarizeSession } from './summarizer'
 
 export type ProgressCallback = (status: IndexerStatus) => void
+
+/** ParsedLine[] → MessageInput[]（加上 sequence，去除 parser-only 欄位） */
+function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
+  return lines.map((msg, idx) => ({
+    type: msg.type,
+    uuid: msg.uuid,
+    role: msg.role,
+    contentText: msg.contentText,
+    contentJson: msg.contentJson,
+    hasToolUse: msg.hasToolUse,
+    hasToolResult: msg.hasToolResult,
+    toolNames: msg.toolNames,
+    timestamp: msg.timestamp,
+    sequence: idx,
+    rawJson: msg.rawJson,
+    inputTokens: msg.inputTokens,
+    outputTokens: msg.outputTokens,
+    cacheReadTokens: msg.cacheReadTokens,
+    cacheCreationTokens: msg.cacheCreationTokens,
+    model: msg.model,
+  }))
+}
 
 /**
  * 執行首次/增量索引。
@@ -39,7 +61,6 @@ export async function runIndexer(
   const existingMtimes = db.getAllSessionMtimes()
   const sessionsToIndex: SessionToIndex[] = []
   const scannedSessionIds = new Set<string>()
-  const affectedProjects = new Set<string>()
 
   for (const project of projects) {
     for (const session of project.sessions) {
@@ -52,7 +73,6 @@ export async function runIndexer(
           projectId: project.projectId,
           projectDisplayName: project.displayName,
         })
-        affectedProjects.add(project.projectId)
       }
     }
   }
@@ -127,24 +147,7 @@ export async function runIndexer(
       filesTouched: summary.filesTouched,
       toolsUsed: summary.toolsUsed,
       sessionFiles,
-      messages: messages.map((msg, idx) => ({
-        type: msg.type,
-        uuid: msg.uuid,
-        role: msg.role,
-        contentText: msg.contentText,
-        contentJson: msg.contentJson,
-        hasToolUse: msg.hasToolUse,
-        hasToolResult: msg.hasToolResult,
-        toolNames: msg.toolNames,
-        timestamp: msg.timestamp,
-        sequence: idx,
-        rawJson: msg.rawJson,
-        inputTokens: msg.inputTokens,
-        outputTokens: msg.outputTokens,
-        cacheReadTokens: msg.cacheReadTokens,
-        cacheCreationTokens: msg.cacheCreationTokens,
-        model: msg.model,
-      })),
+      messages: toMessageInputs(messages),
     })
   }
 
@@ -209,24 +212,7 @@ export async function runIndexer(
             fileMtime: sub.fileMtime,
             startedAt: parsed.startedAt,
             endedAt: parsed.endedAt,
-            messages: parsed.messages.map((msg, idx) => ({
-              type: msg.type,
-              uuid: msg.uuid,
-              role: msg.role,
-              contentText: msg.contentText,
-              contentJson: msg.contentJson,
-              hasToolUse: msg.hasToolUse,
-              hasToolResult: msg.hasToolResult,
-              toolNames: msg.toolNames,
-              timestamp: msg.timestamp,
-              sequence: idx,
-              rawJson: msg.rawJson,
-              inputTokens: msg.inputTokens,
-              outputTokens: msg.outputTokens,
-              cacheReadTokens: msg.cacheReadTokens,
-              cacheCreationTokens: msg.cacheCreationTokens,
-              model: msg.model,
-            })),
+            messages: toMessageInputs(parsed.messages),
           })
         })
       }
