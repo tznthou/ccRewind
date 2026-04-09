@@ -11,6 +11,7 @@ let db: Database
 /** 建立測試用 message，rawJson 預設 null */
 function msg(overrides: Partial<MessageInput> & { type: string; sequence: number }): MessageInput {
   return {
+    uuid: null,
     role: null,
     contentText: null,
     contentJson: null,

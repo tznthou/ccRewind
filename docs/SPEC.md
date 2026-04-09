@@ -219,6 +219,38 @@ END;
   - 其他 type → content_json 保留，不納入 content_text
 ```
 
+### UUID 語義與 Resumed Session
+
+每個 JSONL entry 帶有 `uuid` 欄位（全域唯一）。Resumed session 會將先前 entries
+（含原始 uuid）replay 到新 .jsonl 檔案中。解析時以 uuid 做跨 session 去重，
+避免同一段對話在多個 session 中重複出現。uuid 為 null 的 entries 不參與去重。
+
+### Assistant 回應的 requestId 分塊
+
+單次 API response 可能被拆成多個 `type:"assistant"` entries（每個 content block 一個）。
+這些 entries 共享相同 `requestId` / `message.id`，但只有最後一個帶正確的 `output_tokens`。
+ccRewind 目前將每個 entry 獨立儲存為一條 message；若未來需要精確 token 統計，
+需以 requestId 聚合並取 max output_tokens。
+
+### User Entry 分類
+
+`type:"user"` entries 包含多種語義不同的訊息：
+
+- **人類輸入**：`isSidechain`/`isMeta`/`isCompactSummary` 皆為 falsy
+- **tool_result**：content 陣列第一個 block 為 `type:"tool_result"`
+- **interrupt marker**：content 以 `[Request interrupted` 開頭
+- **compact summary**：`isCompactSummary: true`
+- **meta-injected**：`isMeta: true`（system reminder 等）
+
+目前 ccRewind 全部儲存，不區分子類型。
+
+### Subagent 檔案結構（未實作，供參考）
+
+Subagent transcripts 位於 `<project>/<sessionId>/subagents/*.jsonl`，
+旁有 `*.meta.json` 記載 `{agentType}`。
+檔名格式：`agent-a<label>-<hex>.jsonl`（label 可推斷 agent 類型）。
+ccRewind 目前不掃描 subagents/ 目錄。
+
 ### Session 標題推導
 
 優先順序：

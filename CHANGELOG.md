@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1] - 2026-04-09
+
+### Fixed
+
+- **Resumed session dedup**: sessions resumed via Claude Code's `/resume` no longer produce duplicate messages — entries replayed into the new JSONL file are detected by UUID and skipped
+- **Dedup ordering**: sessions are indexed by file modification time (ascending) to ensure the original session always claims UUID ownership before any resumed copy
+- **Empty replay sessions**: pure-replay JSONL files (all messages already indexed from the original) are skipped entirely instead of creating ghost session entries
+- **UUID format guard**: malformed UUIDs (empty, whitespace-only, or >128 chars) from corrupted JSONL are normalized to null before dedup
+
+### Changed
+
+- **DB schema**: migration v10 adds `uuid` column to `messages` table with index, enabling cross-session dedup; existing sessions are force re-indexed on upgrade
+- Dedup logic runs in the indexer layer (before summary/session_files generation) so all session-level derivatives reflect only the actual stored messages
+- `docs/SPEC.md` expanded with JSONL format notes: UUID semantics, assistant requestId chunking, user entry subtypes, and subagent directory structure
+
 ## [1.6.0] - 2026-04-09
 
 ### Added
