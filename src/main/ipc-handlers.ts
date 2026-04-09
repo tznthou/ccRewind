@@ -95,7 +95,7 @@ export function registerIpcHandlers(db: Database): void {
 
   ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
     const pid = parseOptionalString(projectId)
-    const d = typeof days === 'number' ? days : 30
+    const d = typeof days === 'number' && Number.isFinite(days) ? Math.max(1, Math.min(Math.round(days), 365)) : 30
     return db.getUsageStats(pid, d)
   })
 

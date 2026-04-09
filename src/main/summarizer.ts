@@ -360,7 +360,7 @@ export function computeActiveTime(messages: ParsedLine[]): number | null {
     }
   }
 
-  return activeSeconds
+  return Math.round(activeSeconds)
 }
 
 // ── Main Entry Point ──
