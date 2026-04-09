@@ -6,6 +6,7 @@ import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchO
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
   type: string
+  uuid: string | null
   role: string | null
   contentText: string | null
   contentJson: string | null
@@ -303,6 +304,20 @@ const migrations: Migration[] = [
                COALESCE(summary_text,''), COALESCE(intent_text,'')
         FROM sessions;
       `)
+    },
+  },
+  {
+    version: 10,
+    description: 'add uuid column to messages for cross-session dedup (resumed sessions)',
+    up: (db) => {
+      const cols = db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>
+      if (cols.some(c => c.name === 'uuid')) return
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN uuid TEXT;
+        CREATE INDEX idx_messages_uuid ON messages(uuid);
+      `)
+      // 強制全量 re-index，讓既有 messages 填入 uuid
+      db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
 ]
@@ -642,6 +657,22 @@ export class Database {
     }
   }
 
+  // ── UUID dedup helper ──
+
+  /** 查詢 DB 中已存在的 uuid（用於跨 session 去重 resumed session replay） */
+  getExistingUuids(uuids: string[]): Set<string> {
+    const result = new Set<string>()
+    for (let i = 0; i < uuids.length; i += 500) {
+      const chunk = uuids.slice(i, i + 500)
+      const placeholders = chunk.map(() => '?').join(',')
+      const rows = this.db.prepare(
+        `SELECT uuid FROM messages WHERE uuid IN (${placeholders})`,
+      ).all(...chunk) as Array<{ uuid: string }>
+      for (const r of rows) result.add(r.uuid)
+    }
+    return result
+  }
+
   // ── Atomic session indexing ──
 
   indexSession(params: IndexSessionParams): void {
@@ -696,8 +727,8 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -712,6 +743,7 @@ export class Database {
           m.toolNames.length > 0 ? m.toolNames.join(',') : null,
           m.timestamp, m.sequence,
           m.inputTokens, m.outputTokens, m.cacheReadTokens, m.cacheCreationTokens, m.model,
+          m.uuid,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {

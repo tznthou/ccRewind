@@ -59,7 +59,8 @@ export async function runIndexer(
   // 標記 DB 中存在但掃描不到的 session 為 archived
   db.archiveStaleSessionsExcept(scannedSessionIds)
 
-  // 3. INDEXING
+  // 3. INDEXING — 按 fileMtime 升冪排序，確保舊 session 先索引（UUID 去重依賴此順序）
+  sessionsToIndex.sort((a, b) => a.fileMtime.localeCompare(b.fileMtime))
   const total = sessionsToIndex.length
 
   for (let i = 0; i < total; i++) {
@@ -80,8 +81,27 @@ export async function runIndexer(
       continue
     }
 
-    // 產生 session 摘要 + session_files
-    const { summary, sessionFiles } = summarizeSession(parsed.messages, parsed.startedAt, parsed.endedAt)
+    // UUID 去重：過濾掉其他 session 已索引的 replay entries
+    const uuids = parsed.messages.filter(m => m.uuid).map(m => m.uuid!)
+    const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids) : new Set<string>()
+    const messages = parsed.messages.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
+
+    // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
+    if (messages.length === 0 && parsed.messages.length > 0) continue
+
+    // 去重後的時間範圍
+    let startedAt = parsed.startedAt
+    let endedAt = parsed.endedAt
+    if (existingUuids.size > 0 && messages.length > 0) {
+      const timestamps = messages.filter(m => m.timestamp).map(m => m.timestamp!)
+      if (timestamps.length > 0) {
+        startedAt = timestamps[0]
+        endedAt = timestamps[timestamps.length - 1]
+      }
+    }
+
+    // 用去重後的 messages 產生 session 摘要 + session_files
+    const { summary, sessionFiles } = summarizeSession(messages, startedAt, endedAt)
 
     // DB 寫入 — 失敗向上拋出（不應靜默）
     db.indexSession({
@@ -89,12 +109,12 @@ export async function runIndexer(
       projectId: s.projectId,
       projectDisplayName: s.projectDisplayName,
       title: parsed.title,
-      messageCount: parsed.messages.length,
+      messageCount: messages.length,
       filePath: s.filePath,
       fileSize: s.fileSize,
       fileMtime: s.fileMtime,
-      startedAt: parsed.startedAt,
-      endedAt: parsed.endedAt,
+      startedAt,
+      endedAt,
       summaryText: summary.summaryText,
       intentText: summary.intentText || null,
       outcomeStatus: summary.outcomeStatus,
@@ -105,8 +125,9 @@ export async function runIndexer(
       filesTouched: summary.filesTouched,
       toolsUsed: summary.toolsUsed,
       sessionFiles,
-      messages: parsed.messages.map((msg, idx) => ({
+      messages: messages.map((msg, idx) => ({
         type: msg.type,
+        uuid: msg.uuid,
         role: msg.role,
         contentText: msg.contentText,
         contentJson: msg.contentJson,
