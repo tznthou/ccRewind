@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-04-09
+
+### Added
+
+- **Active Time Calculation**: session duration now shows active time (excluding idle periods >5 minutes) alongside wall-clock time, providing a more meaningful measure of actual work time
+  - Sidebar session list prioritizes active time display, with wall-clock time shown in parentheses when different
+  - Dashboard work patterns and heatmap use active time for average calculations (`COALESCE(active_duration_seconds, duration_seconds)`)
+- **Subagent File Scanning**: automatically discovers and indexes subagent transcripts from `<session>/subagents/*.jsonl` directories
+  - Reads `*.meta.json` for agent type metadata when available
+  - Subagent sessions stored in dedicated `subagent_sessions` table with parent-child linkage
+  - Subagent messages queryable through existing messages API
+  - Incremental indexing: unchanged subagent files are skipped on re-index
+  - Stale cleanup: subagent entries are removed from DB when files are deleted from disk
+  - New IPC channel `session:subagents` for frontend access
+
+### Changed
+
+- **DB schema**: migration v11 adds `active_duration_seconds` column to sessions (INTEGER); migration v12 creates `subagent_sessions` table with FK to sessions
+- All user-facing queries (search, file history, analytics, waste detection, related sessions) exclude subagent sessions via centralized `EXCLUDE_SUBAGENTS` predicate
+- Subagent IDs namespaced by parent session (`parentSessionId/bareFilename`) to prevent cross-session collision
+- Subagent metadata + content writes wrapped in single transaction for atomicity
+- `stats:usage` handler now clamps `days` parameter to [1, 365] range for input safety
+
 ## [1.6.1] - 2026-04-09
 
 ### Fixed
