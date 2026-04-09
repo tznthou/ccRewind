@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, type KeyboardEvent } from 'react'
+import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import type { SearchScope, SearchOptions, SearchSortBy } from '../../../shared/types'
 import styles from './SearchBar.module.css'
@@ -12,12 +12,16 @@ const DATE_RANGE_LABELS: Record<DateRange, string> = {
   '90d': '90 天',
 }
 
-function dateRangeToFrom(range: DateRange): string | undefined {
-  if (range === 'all') return undefined
-  const days = parseInt(range)
-  const d = new Date()
-  d.setDate(d.getDate() - days)
-  return d.toISOString().slice(0, 10)
+function buildSearchOptions(dateRange: DateRange, sortBy: SearchSortBy): SearchOptions | undefined {
+  let dateFrom: string | undefined
+  if (dateRange !== 'all') {
+    const days = parseInt(dateRange)
+    const d = new Date()
+    d.setDate(d.getDate() - days)
+    dateFrom = d.toISOString().slice(0, 10)
+  }
+  if (!dateFrom && sortBy === 'rank') return undefined
+  return { dateFrom, sortBy }
 }
 
 export default function SearchBar() {
@@ -29,37 +33,48 @@ export default function SearchBar() {
   const [searchType, setSearchType] = useState<SearchScope>('messages')
   const [dateRange, setDateRange] = useState<DateRange>('all')
   const [sortBy, setSortBy] = useState<SearchSortBy>('rank')
+  const searchTypeRef = useRef(searchType)
+  const scopeRef = useRef(scope)
+  searchTypeRef.current = searchType
+  scopeRef.current = scope
 
   // 外部清搜尋（如切換專案）時同步 input
   useEffect(() => { setInput(searchQuery) }, [searchQuery])
 
-  const searchOptions = useMemo((): SearchOptions | undefined => {
-    const dateFrom = dateRangeToFrom(dateRange)
-    if (!dateFrom && sortBy === 'rank') return undefined
-    return { dateFrom, sortBy }
+  const executeSearch = useCallback(async (q: string, opts: SearchOptions | undefined) => {
+    if (!q) return
+    const projectId = scopeRef.current === 'project' ? selectedProjectId : null
+    setSearching(true)
+    try {
+      if (searchTypeRef.current === 'sessions') {
+        const page = await window.api.searchSessions(q, projectId, undefined, opts)
+        dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
+      } else {
+        const page = await window.api.search(q, projectId, undefined, opts)
+        dispatch({ type: 'SET_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
+      }
+    } catch {
+      if (searchTypeRef.current === 'sessions') {
+        dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: [], hasMore: false, projectId })
+      } else {
+        dispatch({ type: 'SET_SEARCH', query: q, results: [], hasMore: false, projectId })
+      }
+    } finally {
+      setSearching(false)
+    }
+  }, [selectedProjectId, dispatch])
+
+  // filter 變更時，若已有搜尋 query 則自動重新搜尋
+  useEffect(() => {
+    if (searchQuery) {
+      executeSearch(searchQuery, buildSearchOptions(dateRange, sortBy))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在 filter 變更時觸發
   }, [dateRange, sortBy])
 
   const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && input.trim()) {
-      const projectId = scope === 'project' ? selectedProjectId : null
-      setSearching(true)
-      try {
-        if (searchType === 'sessions') {
-          const page = await window.api.searchSessions(input.trim(), projectId, undefined, searchOptions)
-          dispatch({ type: 'SET_SESSION_SEARCH', query: input.trim(), results: page.results, hasMore: page.hasMore, projectId, options: searchOptions })
-        } else {
-          const page = await window.api.search(input.trim(), projectId, undefined, searchOptions)
-          dispatch({ type: 'SET_SEARCH', query: input.trim(), results: page.results, hasMore: page.hasMore, projectId, options: searchOptions })
-        }
-      } catch {
-        if (searchType === 'sessions') {
-          dispatch({ type: 'SET_SESSION_SEARCH', query: input.trim(), results: [], hasMore: false, projectId })
-        } else {
-          dispatch({ type: 'SET_SEARCH', query: input.trim(), results: [], hasMore: false, projectId })
-        }
-      } finally {
-        setSearching(false)
-      }
+      executeSearch(input.trim(), buildSearchOptions(dateRange, sortBy))
     }
     if (e.key === 'Escape') {
       setInput('')

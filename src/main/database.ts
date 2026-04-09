@@ -815,15 +815,15 @@ export class Database {
         params.push(projectId)
       }
       if (options?.dateFrom) {
-        sql += ' AND s.started_at >= ?'
+        sql += ' AND date(s.started_at) >= ?'
         params.push(options.dateFrom)
       }
       if (options?.dateTo) {
-        sql += ' AND s.started_at <= ?'
+        sql += ' AND date(s.started_at) <= ?'
         params.push(options.dateTo)
       }
 
-      sql += options?.sortBy === 'date' ? ' ORDER BY m.timestamp DESC' : ' ORDER BY rank'
+      sql += options?.sortBy === 'date' ? ' ORDER BY m.timestamp DESC, m.id DESC' : ' ORDER BY rank, m.id DESC'
       sql += ' LIMIT ? OFFSET ?'
       params.push(limit + 1, offset) // 多取 1 筆判斷 hasMore
 
@@ -886,15 +886,15 @@ export class Database {
         params.push(projectId)
       }
       if (options?.dateFrom) {
-        sql += ' AND s.started_at >= ?'
+        sql += ' AND date(s.started_at) >= ?'
         params.push(options.dateFrom)
       }
       if (options?.dateTo) {
-        sql += ' AND s.started_at <= ?'
+        sql += ' AND date(s.started_at) <= ?'
         params.push(options.dateTo)
       }
 
-      sql += options?.sortBy === 'date' ? ' ORDER BY s.started_at DESC' : ' ORDER BY rank'
+      sql += options?.sortBy === 'date' ? ' ORDER BY s.started_at DESC, s.rowid DESC' : ' ORDER BY rank, s.rowid DESC'
       sql += ' LIMIT ? OFFSET ?'
       params.push(limit + 1, offset)
 
