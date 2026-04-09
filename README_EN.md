@@ -57,8 +57,8 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Three Themes** | Archive, Timeline, and Terminal themes, one-click toggle |
 | **Tool Collapsing** | tool_use / tool_result blocks collapsed by default, click to expand |
 | **Session Auto-Summary** | Intent extraction, outcome inference (committed/tested/in-progress/quick-qa), multi-signal tags (20+ rules), touched files with operation types, tool usage stats |
-| **Full-Text Search** | FTS5 index with pagination, results grouped by session. Two modes: "Messages" (content) and "Tags/Files" (session metadata) |
-| **Search Context Preview** | Expand any search result to see 2 surrounding messages without navigating away |
+| **Full-Text Search** | FTS5 index with pagination, results grouped by session. Two modes: "Messages" (content) and "Tags/Files" (session metadata). Filter by date range (7d/30d/90d) and toggle between relevance or chronological sort |
+| **Search Context Preview** | Expand any search result to see 2 surrounding messages without navigating away. Results show session date and outcome status badge |
 | **Data Preservation** | Automatically archives conversations when JSONL files are deleted. No history is ever lost |
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
 | **Statistics Dashboard** | Usage/efficiency trends, project health (outcome bars + trend arrows), waste detection (high-token low-outcome sessions with click-to-navigate), tool/tag distribution, work pattern heatmap |
@@ -90,9 +90,14 @@ Tags and file counts appear directly on each session list item. No need to open 
 ccRewind offers two search modes, toggled via radio buttons next to the search bar:
 
 - **Messages** (default): Searches message content. Results are grouped by session. Each result has a ▸ button that expands to show 2 surrounding messages as context preview, so you can judge relevance without navigating away
-- **Tags/Files**: Searches session titles, tags, file paths, and summaries. Great for queries like "which session touched auth.ts?" or "show all bug-fix sessions"
+- **Tags/Files**: Searches session titles, tags, file paths, summaries, and intent. Great for queries like "which session touched auth.ts?" or "show all bug-fix sessions"
 
-Both modes support "All projects / Current project" scope filtering.
+Below the search bar, filter controls let you narrow results:
+
+- **Date range**: All / 7 days / 30 days / 90 days for quick temporal filtering
+- **Sort order**: Relevance (FTS5 rank) or Newest first (chronological), auto-re-searches on change
+
+Both modes support "All projects / Current project" scope filtering. Search result groups display the session date, and session search results show outcome status badges.
 
 ---
 
@@ -190,14 +195,18 @@ ccRewind/
 │   │   ├── App.tsx            # Root component
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
-│   │   │   ├── ChatView/      # Conversation reader + export button
+│   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + export
+│   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
+│   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
+│   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
 │   │   │   └── UpdateBanner/  # Update notification banner
 │   │   ├── hooks/             # useSession, useSessions, useProjects
+│   │   ├── utils/             # formatTokens, formatTime, formatDuration, pathDisplay, renderSnippet
 │   │   └── context/           # AppContext + ThemeContext (theme persistence)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (119)
+├── tests/                     # Vitest tests (179)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -240,6 +249,7 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 | 3 | ✅ Done | Summary quality upgrade + file reverse index (cross-session archaeology foundation) |
 | 3.5 | ✅ Done | Statistics dashboard + cross-session archaeology UI |
 | 4 | ✅ Done | Advanced dashboard: efficiency trends, waste detection, project health |
+| 4.5 | ✅ Done | Search UX: date filter, sort toggle, intent_text search, result date & outcome badges |
 | 5 | 📋 Future | In-app auto-update (requires code signing) |
 
 ---

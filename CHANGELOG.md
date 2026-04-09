@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-04-09
+
+### Added
+
+- **Date Range Filter**: search results can be filtered by time range (all / 7 days / 30 days / 90 days) via quick-select buttons in the search bar
+- **Sort Toggle**: switch between relevance-based (FTS5 rank) and chronological (newest first) ordering for search results
+- **Intent Text Search**: session-level FTS5 index now includes `intent_text` column (Migration v9), enabling search by session intent/purpose
+- **Session Date in Search Results**: message search result group headers and session search results now display the session start date
+- **Outcome Status Badge**: session search results show outcome status (committed / tested / in-progress / quick-qa) as a badge
+
+### Changed
+
+- FTS5 snippet length increased from 64 to 128 characters for richer search result previews
+- Search API (`search` / `searchSessions`) extended with `SearchOptions` parameter for date filtering and sort control
+- Date range and sort filter changes automatically re-execute the current search query (no need to press Enter again)
+- `renderSnippet` extracted to shared utility (`utils/renderSnippet.tsx`), eliminating duplication between `SearchResults` and `SessionSearchResults`
+- IPC boundary adds ISO date format validation (`/^\d{4}-\d{2}-\d{2}$/`) for `dateFrom`/`dateTo` parameters
+- `OutcomeStatus` values validated at runtime via `Set.has()` instead of bare type assertion
+- Pagination sort order includes stable secondary key (`m.id DESC` / `s.rowid DESC`) to prevent duplicate/missing results
+- Date comparison uses SQLite `date()` function for consistent timezone handling
+
 ## [1.5.0] - 2026-04-02
 
 ### Added
