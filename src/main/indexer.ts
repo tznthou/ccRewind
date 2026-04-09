@@ -95,8 +95,8 @@ export async function runIndexer(
     if (existingUuids.size > 0 && messages.length > 0) {
       const timestamps = messages.filter(m => m.timestamp).map(m => m.timestamp!)
       if (timestamps.length > 0) {
-        startedAt = timestamps[0]
-        endedAt = timestamps[timestamps.length - 1]
+        startedAt = timestamps.reduce((a, b) => a < b ? a : b)
+        endedAt = timestamps.reduce((a, b) => a > b ? a : b)
       }
     }
 
