@@ -38,6 +38,8 @@ export interface SessionSummary {
   summaryVersion: number
   /** session 持續秒數 */
   durationSeconds: number | null
+  /** active time（排除 >5 分鐘閒置）秒數 */
+  activeDurationSeconds: number | null
 }
 
 /** session_files 表的操作類型：mutation（改動）vs discovery（搜尋/瀏覽） */
@@ -69,6 +71,8 @@ export interface SessionMeta {
   outcomeStatus: OutcomeStatus
   /** session 持續秒數（Phase 3） */
   durationSeconds: number | null
+  /** active time（排除 >5 分鐘閒置）秒數 */
+  activeDurationSeconds: number | null
   /** 摘要引擎版本（Phase 3） */
   summaryVersion: number | null
   tags: string | null

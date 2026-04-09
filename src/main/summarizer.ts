@@ -339,6 +339,30 @@ function computeDuration(startedAt: string | null, endedAt: string | null): numb
   return Math.round((end - start) / 1000)
 }
 
+// ── Active Time ──
+
+const IDLE_THRESHOLD_SECONDS = 300
+
+/** 計算 active time：累加相鄰 message 間 ≤ 5 分鐘的間隔秒數 */
+export function computeActiveTime(messages: ParsedLine[]): number | null {
+  const withTimestamp = messages.filter(m => m.timestamp != null)
+  if (withTimestamp.length < 2) return null
+
+  const sorted = [...withTimestamp].sort((a, b) =>
+    new Date(a.timestamp!).getTime() - new Date(b.timestamp!).getTime(),
+  )
+
+  let activeSeconds = 0
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = (new Date(sorted[i].timestamp!).getTime() - new Date(sorted[i - 1].timestamp!).getTime()) / 1000
+    if (gap <= IDLE_THRESHOLD_SECONDS) {
+      activeSeconds += gap
+    }
+  }
+
+  return activeSeconds
+}
+
 // ── Main Entry Point ──
 
 export interface SummarizerResult {
@@ -363,6 +387,7 @@ export function summarizeSession(
     toolsUsed: '',
     summaryVersion: SUMMARY_VERSION,
     durationSeconds: null,
+    activeDurationSeconds: null,
   }
 
   if (messages.length === 0) {
@@ -421,6 +446,7 @@ export function summarizeSession(
 
   // ── Duration ──
   const durationSeconds = computeDuration(startedAt, endedAt)
+  const activeDurationSeconds = computeActiveTime(messages)
 
   // ── Composite summaryText ──
   const summaryParts: string[] = []
@@ -443,6 +469,7 @@ export function summarizeSession(
       toolsUsed,
       summaryVersion: SUMMARY_VERSION,
       durationSeconds,
+      activeDurationSeconds,
     },
     sessionFiles,
   }
