@@ -95,7 +95,8 @@ export function parseLine(line: string): ParsedLine | null {
   if (typeof obj !== 'object' || obj === null) return null
 
   const type = typeof obj.type === 'string' ? obj.type : 'unknown'
-  const uuid = typeof obj.uuid === 'string' ? obj.uuid : null
+  const rawUuid = typeof obj.uuid === 'string' ? obj.uuid.trim() : null
+  const uuid = rawUuid && rawUuid.length <= 128 ? rawUuid : null
   const parentUuid = typeof obj.parentUuid === 'string' ? obj.parentUuid : null
   const sessionId = typeof obj.sessionId === 'string' ? obj.sessionId : null
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : null
