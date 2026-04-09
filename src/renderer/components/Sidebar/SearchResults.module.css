@@ -56,6 +56,12 @@
   flex: 1;
 }
 
+.sessionDate {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  flex-shrink: 0;
+}
+
 .matchCount {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);

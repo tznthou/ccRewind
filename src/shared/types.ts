@@ -132,6 +132,14 @@ export interface MessageContext {
 
 /** 搜尋範圍 */
 export type SearchScope = 'messages' | 'sessions'
+export type SearchSortBy = 'rank' | 'date'
+
+/** 搜尋選項（日期過濾 + 排序） */
+export interface SearchOptions {
+  dateFrom?: string   // ISO date, e.g. '2026-04-01'
+  dateTo?: string
+  sortBy?: SearchSortBy  // 預設 'rank'
+}
 
 /** 搜尋結果 */
 export interface SearchResult {
@@ -142,6 +150,7 @@ export interface SearchResult {
   messageId: number
   snippet: string
   timestamp: string | null
+  sessionStartedAt: string | null
 }
 
 /** 搜尋分頁回應 */
@@ -160,6 +169,8 @@ export interface SessionSearchResult {
   tags: string | null
   filesTouched: string | null
   snippet: string
+  startedAt: string | null
+  outcomeStatus: OutcomeStatus
 }
 
 /** Session 搜尋分頁回應 */
@@ -175,6 +186,7 @@ export interface GroupedSearchResult {
   sessionTitle: string | null
   projectId: string
   projectName: string
+  sessionStartedAt: string | null
   matches: Array<{ messageId: number; snippet: string; timestamp: string | null }>
 }
 
@@ -277,9 +289,9 @@ export interface ElectronAPI {
   getProjects: () => Promise<Project[]>
   getSessions: (projectId: string) => Promise<SessionMeta[]>
   loadSession: (sessionId: string) => Promise<Message[]>
-  search: (query: string, projectId?: string | null, offset?: number) => Promise<SearchPage>
-  /** 搜尋 session 標題 / 標籤 / 檔案 */
-  searchSessions: (query: string, projectId?: string | null, offset?: number) => Promise<SessionSearchPage>
+  search: (query: string, projectId?: string | null, offset?: number, options?: SearchOptions) => Promise<SearchPage>
+  /** 搜尋 session 標題 / 標籤 / 檔案 / 意圖 */
+  searchSessions: (query: string, projectId?: string | null, offset?: number, options?: SearchOptions) => Promise<SessionSearchPage>
   /** 取得訊息上下文（搜尋預覽用） */
   getMessageContext: (messageId: number, range?: number) => Promise<MessageContext>
   /** 取得 session token 統計（Context Budget 用） */

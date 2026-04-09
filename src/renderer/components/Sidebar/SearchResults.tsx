@@ -1,19 +1,9 @@
-import { useState, useMemo, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { formatTime } from '../../utils/formatTime'
+import { renderSnippet } from '../../utils/renderSnippet'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
 import styles from './SearchResults.module.css'
-
-/** FTS5 snippet 使用 Unicode sentinel \uE000/\uE001 標記匹配位置，轉為 React <mark> 元素 */
-function renderSnippet(snippet: string): ReactNode {
-  const parts = snippet.split(/(\uE000.*?\uE001)/g)
-  return parts.map((part, i) => {
-    if (part.startsWith('\uE000') && part.endsWith('\uE001')) {
-      return <mark key={i}>{part.slice(1, -1)}</mark>
-    }
-    return part
-  })
-}
 
 /** 按 sessionId 分組，保持 rank 排序 */
 function groupSearchResults(results: SearchResult[]): GroupedSearchResult[] {
@@ -31,6 +21,7 @@ function groupSearchResults(results: SearchResult[]): GroupedSearchResult[] {
         sessionTitle: r.sessionTitle,
         projectId: r.projectId,
         projectName: r.projectName,
+        sessionStartedAt: r.sessionStartedAt,
         matches: [{ messageId: r.messageId, snippet: r.snippet, timestamp: r.timestamp }],
       })
     }
@@ -53,7 +44,7 @@ function MessagePreview({ role, text }: { role: string | null; text: string | nu
 }
 
 export default function SearchResults() {
-  const { searchResults, searchQuery, searchHasMore, searchProjectId } = useAppState()
+  const { searchResults, searchQuery, searchHasMore, searchProjectId, searchOptions } = useAppState()
   const dispatch = useAppDispatch()
   const [loading, setLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -92,7 +83,7 @@ export default function SearchResults() {
   const handleLoadMore = async () => {
     setLoading(true)
     try {
-      const page = await window.api.search(searchQuery, searchProjectId, searchResults.length)
+      const page = await window.api.search(searchQuery, searchProjectId, searchResults.length, searchOptions)
       dispatch({ type: 'APPEND_SEARCH_RESULTS', results: page.results, hasMore: page.hasMore })
     } catch {
       // ignore
@@ -119,6 +110,7 @@ export default function SearchResults() {
             <button className={styles.groupHeader} onClick={() => toggleGroup(g.sessionId)}>
               <span className={styles.expandIcon}>{collapsed ? '▸' : '▾'}</span>
               <span className={styles.sessionTitle}>{g.sessionTitle ?? g.sessionId.slice(0, 8)}</span>
+              {g.sessionStartedAt && <span className={styles.sessionDate}>{formatTime(g.sessionStartedAt)}</span>}
               <span className={styles.matchCount}>{g.matches.length}</span>
             </button>
             {!collapsed && (
