@@ -65,7 +65,7 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Cross-Session Archaeology** | File history drawer (which sessions touched a file), related session recommendations (Jaccard similarity), expandable file chips |
 | **Context Budget** | Token breakdown (input/output/cache), context growth chart, output intensity heat bar, 5-rule insight engine (spike detection, cache efficiency, growth rate analysis) |
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
-| **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards |
+| **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
 | **Accessibility** | WCAG 2.1 AA contrast, ARIA labels, keyboard navigation, focus management |
