@@ -102,9 +102,9 @@ export async function runIndexer(
       continue
     }
 
-    // UUID 去重：過濾掉其他 session 已索引的 replay entries
+    // UUID 去重：過濾掉其他 session 已索引的 replay entries（排除自身，避免 re-index 時自己匹配自己）
     const uuids = parsed.messages.filter(m => m.uuid).map(m => m.uuid!)
-    const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids) : new Set<string>()
+    const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
     const messages = parsed.messages.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
     // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB

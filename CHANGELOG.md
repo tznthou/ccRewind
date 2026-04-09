@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1] - 2026-04-10
+
+### Fixed
+
+- **Critical: UUID self-dedup bug** — `getExistingUuids` was matching a session's own previously-indexed messages during re-index, causing all user/assistant messages to be silently dropped. Only messages without UUID (file-history-snapshot, queue-operation, permission-mode) survived. Root cause: the dedup query ran before `indexSession` deleted old messages, so the session's own UUIDs matched itself. Fix: exclude current session from the dedup query (`session_id != ?`). Migration v13 forces a full re-index to rebuild all affected sessions.
+
 ## [1.7.0] - 2026-04-09
 
 ### Added

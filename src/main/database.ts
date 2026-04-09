@@ -353,6 +353,13 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 13,
+    description: 'force re-index to fix UUID self-dedup bug (v12 re-index dropped messages with uuid)',
+    up: (db) => {
+      db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -817,14 +824,14 @@ export class Database {
   // ── UUID dedup helper ──
 
   /** 查詢 DB 中已存在的 uuid（用於跨 session 去重 resumed session replay） */
-  getExistingUuids(uuids: string[]): Set<string> {
+  getExistingUuids(uuids: string[], excludeSessionId: string): Set<string> {
     const result = new Set<string>()
     for (let i = 0; i < uuids.length; i += 500) {
       const chunk = uuids.slice(i, i + 500)
       const placeholders = chunk.map(() => '?').join(',')
       const rows = this.db.prepare(
-        `SELECT uuid FROM messages WHERE uuid IN (${placeholders})`,
-      ).all(...chunk) as Array<{ uuid: string }>
+        `SELECT uuid FROM messages WHERE session_id != ? AND uuid IN (${placeholders})`,
+      ).all(excludeSessionId, ...chunk) as Array<{ uuid: string }>
       for (const r of rows) result.add(r.uuid)
     }
     return result
