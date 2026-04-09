@@ -49,6 +49,7 @@ export interface IndexSessionParams {
   outcomeStatus?: OutcomeStatus
   outcomeSignals?: string | null
   durationSeconds?: number | null
+  activeDurationSeconds?: number | null
   summaryVersion?: number | null
   tags?: string | null
   filesTouched?: string | null
@@ -320,6 +321,17 @@ const migrations: Migration[] = [
       db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
+  {
+    version: 11,
+    description: 'add active_duration_seconds column to sessions',
+    up: (db) => {
+      const cols = db.prepare('PRAGMA table_info(sessions)').all() as Array<{ name: string }>
+      if (cols.some(c => c.name === 'active_duration_seconds')) return
+      db.exec('ALTER TABLE sessions ADD COLUMN active_duration_seconds INTEGER')
+      // 強制全量 re-index，讓既有 sessions 填入 active_duration_seconds
+      db.exec("UPDATE sessions SET file_mtime = NULL")
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -564,7 +576,7 @@ export class Database {
   getSessions(projectId: string): SessionMeta[] {
     const rows = this.db.prepare(
       `SELECT id, project_id, title, message_count, started_at, ended_at, archived,
-              summary_text, intent_text, outcome_status, duration_seconds, summary_version,
+              summary_text, intent_text, outcome_status, duration_seconds, active_duration_seconds, summary_version,
               tags, files_touched, tools_used, total_input_tokens, total_output_tokens
        FROM sessions WHERE project_id = ? ORDER BY started_at DESC`,
     ).all(projectId) as Array<{
@@ -579,6 +591,7 @@ export class Database {
       intent_text: string | null
       outcome_status: string | null
       duration_seconds: number | null
+      active_duration_seconds: number | null
       summary_version: number | null
       tags: string | null
       files_touched: string | null
@@ -599,6 +612,7 @@ export class Database {
       intentText: r.intent_text,
       outcomeStatus: (r.outcome_status as OutcomeStatus) ?? null,
       durationSeconds: r.duration_seconds,
+      activeDurationSeconds: r.active_duration_seconds,
       summaryVersion: r.summary_version,
       tags: r.tags,
       filesTouched: r.files_touched,
@@ -698,16 +712,16 @@ export class Database {
       }
       const insertResult = this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at,
-          summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, summary_version,
+          summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, active_duration_seconds, summary_version,
           tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
         params.startedAt, params.endedAt,
         params.summaryText ?? null, params.intentText ?? null,
         params.outcomeStatus ?? null, params.outcomeSignals ?? null,
-        params.durationSeconds ?? null, params.summaryVersion ?? null,
+        params.durationSeconds ?? null, params.activeDurationSeconds ?? null, params.summaryVersion ?? null,
         params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
         totalInput || null, totalOutput || null,
@@ -1222,9 +1236,9 @@ export class Database {
       WHERE started_at IS NOT NULL AND archived = 0
     `
     let durationSql = `
-      SELECT AVG(duration_seconds) AS avg_duration
+      SELECT AVG(COALESCE(active_duration_seconds, duration_seconds)) AS avg_duration
       FROM sessions
-      WHERE duration_seconds IS NOT NULL AND archived = 0
+      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0
     `
     const params: string[] = []
 

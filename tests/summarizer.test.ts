@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { summarizeSession, SUMMARY_VERSION } from '../src/main/summarizer'
+import { summarizeSession, SUMMARY_VERSION, computeActiveTime } from '../src/main/summarizer'
 import type { ParsedLine } from '../src/shared/types'
 
 /** 建立測試用 ParsedLine，預設值皆為空 */
@@ -440,5 +440,107 @@ describe('summarizeSession', () => {
       }),
     ])
     expect(summary.filesTouched).toBe('')
+  })
+
+  // ── Active Duration ──
+
+  it('computes activeDurationSeconds in summary', () => {
+    const { summary } = summarizeSession(
+      [
+        line({ timestamp: '2024-01-01T10:00:00Z', role: 'user', contentText: 'start' }),
+        line({ timestamp: '2024-01-01T10:02:00Z', role: 'assistant', contentText: 'reply' }),
+        line({ timestamp: '2024-01-01T10:10:00Z', role: 'user', contentText: 'idle gap' }),
+        line({ timestamp: '2024-01-01T10:12:00Z', role: 'assistant', contentText: 'reply2' }),
+      ],
+      '2024-01-01T10:00:00Z',
+      '2024-01-01T10:12:00Z',
+    )
+    // gap 0→1 = 120s (≤300, counted), gap 1→2 = 480s (>300, skipped), gap 2→3 = 120s (≤300, counted)
+    expect(summary.activeDurationSeconds).toBe(240)
+    // wall clock = 720s, active = 240s
+    expect(summary.durationSeconds).toBe(720)
+  })
+})
+
+describe('computeActiveTime', () => {
+  it('returns null for empty messages', () => {
+    expect(computeActiveTime([])).toBeNull()
+  })
+
+  it('returns null for single message', () => {
+    expect(computeActiveTime([
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+    ])).toBeNull()
+  })
+
+  it('returns 0 for messages without timestamps', () => {
+    expect(computeActiveTime([
+      line({ timestamp: null }),
+      line({ timestamp: null }),
+    ])).toBeNull()
+  })
+
+  it('sums only gaps ≤ 300 seconds', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:02:00Z' }),  // +120s → counted
+      line({ timestamp: '2024-01-01T10:10:00Z' }),  // +480s → skipped (>300)
+      line({ timestamp: '2024-01-01T10:12:00Z' }),  // +120s → counted
+    ]
+    expect(computeActiveTime(messages)).toBe(240) // 120 + 120
+  })
+
+  it('counts exactly 300s gap as active', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:05:00Z' }),  // exactly 300s
+    ]
+    expect(computeActiveTime(messages)).toBe(300)
+  })
+
+  it('skips gap of 301 seconds', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:05:01Z' }),  // 301s → skipped
+    ]
+    expect(computeActiveTime(messages)).toBe(0)
+  })
+
+  it('sorts by timestamp before computing', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:04:00Z' }),  // out of order
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:02:00Z' }),
+    ]
+    // sorted: 10:00, 10:02, 10:04 → gaps: 120s + 120s = 240s
+    expect(computeActiveTime(messages)).toBe(240)
+  })
+
+  it('filters out messages without timestamp', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: null }),
+      line({ timestamp: '2024-01-01T10:02:00Z' }),
+    ]
+    expect(computeActiveTime(messages)).toBe(120)
+  })
+
+  it('handles all consecutive active gaps', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:01:00Z' }),  // +60s
+      line({ timestamp: '2024-01-01T10:02:00Z' }),  // +60s
+      line({ timestamp: '2024-01-01T10:03:00Z' }),  // +60s
+    ]
+    expect(computeActiveTime(messages)).toBe(180)
+  })
+
+  it('handles all idle gaps (returns 0)', () => {
+    const messages = [
+      line({ timestamp: '2024-01-01T10:00:00Z' }),
+      line({ timestamp: '2024-01-01T10:10:00Z' }),  // +600s → skipped
+      line({ timestamp: '2024-01-01T10:20:00Z' }),  // +600s → skipped
+    ]
+    expect(computeActiveTime(messages)).toBe(0)
   })
 })

@@ -120,6 +120,7 @@ export async function runIndexer(
       outcomeStatus: summary.outcomeStatus,
       outcomeSignals: JSON.stringify(summary.outcomeSignals),
       durationSeconds: summary.durationSeconds,
+      activeDurationSeconds: summary.activeDurationSeconds,
       summaryVersion: summary.summaryVersion,
       tags: summary.tags,
       filesTouched: summary.filesTouched,

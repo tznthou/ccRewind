@@ -108,8 +108,11 @@ export default function SessionList() {
               <div className={styles.sessionMeta}>
                 <span>
                   {formatDateTime(session.startedAt)}
-                  {session.durationSeconds != null && session.durationSeconds > 0 && (
-                    <span className={styles.durationBadge}> · {formatDuration(session.durationSeconds)}</span>
+                  {(session.activeDurationSeconds != null && session.activeDurationSeconds > 0
+                    ? <span className={styles.durationBadge}> · {formatDuration(session.activeDurationSeconds)}{session.durationSeconds != null && session.durationSeconds > session.activeDurationSeconds ? ` (${formatDuration(session.durationSeconds)})` : ''}</span>
+                    : session.durationSeconds != null && session.durationSeconds > 0
+                      ? <span className={styles.durationBadge}> · {formatDuration(session.durationSeconds)}</span>
+                      : null
                   )}
                 </span>
                 <span>
