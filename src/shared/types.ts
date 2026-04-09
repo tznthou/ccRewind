@@ -324,6 +324,8 @@ export interface ElectronAPI {
   getProjectHealth: () => Promise<ProjectHealth[]>
   /** 相關 Session（Jaccard 相似度） */
   getRelatedSessions: (sessionId: string, limit?: number) => Promise<RelatedSession[]>
+  /** 取得 session 的 subagent sessions */
+  getSubagentSessions: (parentSessionId: string) => Promise<SubagentSession[]>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
   /** 檢查更新（回傳最新狀態） */
@@ -362,11 +364,38 @@ export interface ScannedSession {
   sessionId: string
 }
 
+/** 掃描到的 subagent 檔案資訊 */
+export interface ScannedSubagent {
+  filePath: string
+  fileSize: number
+  fileMtime: string
+  /** 從檔名萃取的 subagent id（不含 .jsonl） */
+  subagentId: string
+  /** 所屬的 parent session id */
+  parentSessionId: string
+  /** 從 *.meta.json 讀取的 agent type（如存在） */
+  agentType: string | null
+}
+
 /** 掃描到的專案資訊 */
 export interface ScannedProject {
   projectId: string
   displayName: string
   sessions: ScannedSession[]
+}
+
+/** Subagent session（DB 表對應型別） */
+export interface SubagentSession {
+  id: string
+  parentSessionId: string
+  agentType: string | null
+  filePath: string
+  fileSize: number | null
+  fileMtime: string | null
+  messageCount: number
+  startedAt: string | null
+  endedAt: string | null
+  createdAt: string
 }
 
 // ── Parser 中間型別 ──
