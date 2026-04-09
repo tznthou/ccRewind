@@ -1,6 +1,7 @@
+import path from 'node:path'
 import type { IndexerStatus, ParsedSession } from '../shared/types'
 import type { Database } from './database'
-import { scanProjects } from './scanner'
+import { scanProjects, scanSubagents } from './scanner'
 import { parseSession } from './parser'
 import { summarizeSession } from './summarizer'
 
@@ -147,7 +148,83 @@ export async function runIndexer(
     })
   }
 
-  // 4. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
+  // 4. SUBAGENT SCANNING — 對有變動的 session，掃描 subagents/
+  const existingSubMtimes = db.getAllSubagentMtimes()
+  for (const project of projects) {
+    for (const session of project.sessions) {
+      // session 目錄：<project>/<sessionId>/
+      const sessionDir = path.join(path.dirname(session.filePath), session.sessionId)
+      let subagents
+      try {
+        subagents = await scanSubagents(sessionDir, session.sessionId)
+      } catch {
+        continue
+      }
+      if (subagents.length === 0) continue
+
+      for (const sub of subagents) {
+        // 增量比對：mtime 沒變就跳過
+        const existingMtime = existingSubMtimes.get(sub.subagentId)
+        if (existingMtime && existingMtime === sub.fileMtime) continue
+
+        // 解析 subagent JSONL
+        let parsed: ParsedSession
+        try {
+          parsed = await parseSession(sub.filePath, sub.subagentId)
+        } catch {
+          continue
+        }
+
+        // 寫入 subagent_sessions 表
+        db.indexSubagentSession({
+          id: sub.subagentId,
+          parentSessionId: sub.parentSessionId,
+          agentType: sub.agentType,
+          filePath: sub.filePath,
+          fileSize: sub.fileSize,
+          fileMtime: sub.fileMtime,
+          messageCount: parsed.messages.length,
+          startedAt: parsed.startedAt,
+          endedAt: parsed.endedAt,
+        })
+
+        // subagent messages 寫入現有 messages 表（session_id 用 subagentId）
+        // 先清除舊 messages（if re-indexing）
+        db.indexSession({
+          sessionId: sub.subagentId,
+          projectId: project.projectId,
+          projectDisplayName: project.displayName,
+          title: parsed.title,
+          messageCount: parsed.messages.length,
+          filePath: sub.filePath,
+          fileSize: sub.fileSize,
+          fileMtime: sub.fileMtime,
+          startedAt: parsed.startedAt,
+          endedAt: parsed.endedAt,
+          messages: parsed.messages.map((msg, idx) => ({
+            type: msg.type,
+            uuid: msg.uuid,
+            role: msg.role,
+            contentText: msg.contentText,
+            contentJson: msg.contentJson,
+            hasToolUse: msg.hasToolUse,
+            hasToolResult: msg.hasToolResult,
+            toolNames: msg.toolNames,
+            timestamp: msg.timestamp,
+            sequence: idx,
+            rawJson: msg.rawJson,
+            inputTokens: msg.inputTokens,
+            outputTokens: msg.outputTokens,
+            cacheReadTokens: msg.cacheReadTokens,
+            cacheCreationTokens: msg.cacheCreationTokens,
+            model: msg.model,
+          })),
+        })
+      }
+    }
+  }
+
+  // 5. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
   for (const project of projects) {
     db.updateProjectStats(project.projectId)
   }

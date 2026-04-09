@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -332,6 +332,27 @@ const migrations: Migration[] = [
       db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
+  {
+    version: 12,
+    description: 'add subagent_sessions table for subagent file scanning',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS subagent_sessions (
+          id TEXT PRIMARY KEY,
+          parent_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+          agent_type TEXT,
+          file_path TEXT NOT NULL,
+          file_size INTEGER,
+          file_mtime TEXT,
+          message_count INTEGER DEFAULT 0,
+          started_at TEXT,
+          ended_at TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+        CREATE INDEX IF NOT EXISTS idx_subagent_parent ON subagent_sessions(parent_session_id);
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -458,10 +479,24 @@ export class Database {
         PRIMARY KEY (session_id, file_path, operation)
       );
 
+      CREATE TABLE IF NOT EXISTS subagent_sessions (
+        id TEXT PRIMARY KEY,
+        parent_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+        agent_type TEXT,
+        file_path TEXT NOT NULL,
+        file_size INTEGER,
+        file_mtime TEXT,
+        message_count INTEGER DEFAULT 0,
+        started_at TEXT,
+        ended_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sequence);
       CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, started_at DESC);
       CREATE INDEX IF NOT EXISTS idx_session_files_path ON session_files(file_path);
       CREATE INDEX IF NOT EXISTS idx_session_files_session ON session_files(session_id);
+      CREATE INDEX IF NOT EXISTS idx_subagent_parent ON subagent_sessions(parent_session_id);
     `)
 
     // FTS5 虛擬表不支援 IF NOT EXISTS，先查 sqlite_master
@@ -539,8 +574,8 @@ export class Database {
   updateProjectStats(projectId: string): void {
     this.db.prepare(`
       UPDATE projects SET
-        session_count = (SELECT COUNT(*) FROM sessions WHERE project_id = ?),
-        last_activity_at = (SELECT MAX(ended_at) FROM sessions WHERE project_id = ?)
+        session_count = (SELECT COUNT(*) FROM sessions WHERE project_id = ? AND id NOT IN (SELECT id FROM subagent_sessions)),
+        last_activity_at = (SELECT MAX(ended_at) FROM sessions WHERE project_id = ? AND id NOT IN (SELECT id FROM subagent_sessions))
       WHERE id = ?
     `).run(projectId, projectId, projectId)
   }
@@ -578,7 +613,10 @@ export class Database {
       `SELECT id, project_id, title, message_count, started_at, ended_at, archived,
               summary_text, intent_text, outcome_status, duration_seconds, active_duration_seconds, summary_version,
               tags, files_touched, tools_used, total_input_tokens, total_output_tokens
-       FROM sessions WHERE project_id = ? ORDER BY started_at DESC`,
+       FROM sessions
+       WHERE project_id = ?
+         AND id NOT IN (SELECT id FROM subagent_sessions)
+       ORDER BY started_at DESC`,
     ).all(projectId) as Array<{
       id: string
       project_id: string
@@ -622,9 +660,9 @@ export class Database {
     }))
   }
 
-  /** 將 DB 中不在 keepIds 集合的 session 標記為 archived（JSONL 已從磁碟消失） */
+  /** 將 DB 中不在 keepIds 集合的 session 標記為 archived（JSONL 已從磁碟消失），排除 subagent sessions */
   archiveStaleSessionsExcept(keepIds: Set<string>): void {
-    const allRows = this.db.prepare('SELECT id FROM sessions WHERE archived = 0').all() as Array<{ id: string }>
+    const allRows = this.db.prepare('SELECT id FROM sessions WHERE archived = 0 AND id NOT IN (SELECT id FROM subagent_sessions)').all() as Array<{ id: string }>
     const archiveStmt = this.db.prepare('UPDATE sessions SET archived = 1 WHERE id = ?')
     const doArchive = this.db.transaction(() => {
       for (const row of allRows) {
@@ -669,6 +707,85 @@ export class Database {
       startedAt: row.started_at,
       endedAt: row.ended_at,
     }
+  }
+
+  // ── Subagent sessions ──
+
+  /** 寫入 subagent session 記錄（upsert：重複 id 更新 mtime/count） */
+  indexSubagentSession(params: {
+    id: string
+    parentSessionId: string
+    agentType: string | null
+    filePath: string
+    fileSize: number | null
+    fileMtime: string | null
+    messageCount: number
+    startedAt: string | null
+    endedAt: string | null
+  }): void {
+    this.db.prepare(`
+      INSERT INTO subagent_sessions (id, parent_session_id, agent_type, file_path, file_size, file_mtime, message_count, started_at, ended_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        agent_type = excluded.agent_type,
+        file_size = excluded.file_size,
+        file_mtime = excluded.file_mtime,
+        message_count = excluded.message_count,
+        started_at = excluded.started_at,
+        ended_at = excluded.ended_at
+    `).run(
+      params.id, params.parentSessionId, params.agentType,
+      params.filePath, params.fileSize, params.fileMtime,
+      params.messageCount, params.startedAt, params.endedAt,
+    )
+  }
+
+  /** 取得指定 parent session 下的所有 subagent sessions */
+  getSubagentSessions(parentSessionId: string): SubagentSession[] {
+    const rows = this.db.prepare(
+      `SELECT id, parent_session_id, agent_type, file_path, file_size, file_mtime,
+              message_count, started_at, ended_at, created_at
+       FROM subagent_sessions WHERE parent_session_id = ? ORDER BY started_at`,
+    ).all(parentSessionId) as Array<{
+      id: string
+      parent_session_id: string
+      agent_type: string | null
+      file_path: string
+      file_size: number | null
+      file_mtime: string | null
+      message_count: number
+      started_at: string | null
+      ended_at: string | null
+      created_at: string
+    }>
+
+    return rows.map(r => ({
+      id: r.id,
+      parentSessionId: r.parent_session_id,
+      agentType: r.agent_type,
+      filePath: r.file_path,
+      fileSize: r.file_size,
+      fileMtime: r.file_mtime,
+      messageCount: r.message_count,
+      startedAt: r.started_at,
+      endedAt: r.ended_at,
+      createdAt: r.created_at,
+    }))
+  }
+
+  /** 刪除指定 parent session 的所有 subagent sessions */
+  deleteSubagentSessions(parentSessionId: string): void {
+    this.db.prepare('DELETE FROM subagent_sessions WHERE parent_session_id = ?').run(parentSessionId)
+  }
+
+  /** 一次取得所有 subagent sessions 的 file_mtime（增量比對用） */
+  getAllSubagentMtimes(): Map<string, string> {
+    const rows = this.db.prepare('SELECT id, file_mtime FROM subagent_sessions').all() as Array<{ id: string; file_mtime: string | null }>
+    const map = new Map<string, string>()
+    for (const r of rows) {
+      if (r.file_mtime) map.set(r.id, r.file_mtime)
+    }
+    return map
   }
 
   // ── UUID dedup helper ──

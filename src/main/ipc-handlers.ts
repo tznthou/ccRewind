@@ -86,6 +86,11 @@ export function registerIpcHandlers(db: Database): void {
     return db.getRelatedSessions(sessionId, l)
   })
 
+  ipcMain.handle('session:subagents', (_event, sessionId: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    return db.getSubagentSessions(sessionId)
+  })
+
   // ── Phase 3.5: 統計儀表板 ──
 
   ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
