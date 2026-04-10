@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2] - 2026-04-10
+
+### Fixed
+
+- **Token statistics ~2.3x inflation** — Claude Code JSONL splits a single API response into multiple `type:"assistant"` entries (one per content block), each carrying identical `usage` data. ccRewind was summing all entries independently, inflating input token counts by ~2.3x. Fix: `deduplicateTokensByRequestId()` in the indexer nulls token fields on all but the last entry per `requestId`, so each API call is counted exactly once. All downstream statistics (Dashboard usage trend, efficiency trend, waste detection, project health, Token Budget panel) are automatically corrected.
+- **Subagent token counts not re-indexed** — Migration v14 now also invalidates `subagent_sessions.file_mtime`, ensuring subagent transcripts are re-indexed with the corrected token dedup logic.
+- **`requestId` length guard** — Added `length <= 128` boundary validation to `requestId` extraction, matching the existing `uuid` guard pattern.
+
+### Changed
+
+- **DB schema**: migration v14 forces full re-index of both sessions and subagent_sessions for token dedup correction
+- `ParsedLine` type extended with `requestId: string | null` field for API request identification
+
 ## [1.7.1] - 2026-04-10
 
 ### Fixed

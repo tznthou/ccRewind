@@ -67,6 +67,7 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Active Time** | Session duration prioritizes active time (excluding >5min idle periods), with wall-clock time shown in parentheses. Dashboard averages use active time |
 | **Subagent Indexing** | Automatically scans and indexes `subagents/*.jsonl` transcripts with `*.meta.json` agent type metadata, incremental indexing, and automatic stale cleanup |
+| **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
@@ -139,7 +140,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 179 tests, run through Electron |
+| Vitest 3 | Test framework | 211 tests, run through Electron |
 
 ---
 
@@ -208,7 +209,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext (theme persistence)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (179)
+├── tests/                     # Vitest tests (211)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -252,7 +253,8 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 | 3.5 | ✅ Done | Statistics dashboard + cross-session archaeology UI |
 | 4 | ✅ Done | Advanced dashboard: efficiency trends, waste detection, project health |
 | 4.5 | ✅ Done | Search UX: date filter, sort toggle, intent_text search, result date & outcome badges |
-| 5 | 📋 Future | In-app auto-update (requires code signing) |
+| 5 | ✅ Done | Active time calculation + subagent indexing + requestId token dedup |
+| — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 
 ---
 
