@@ -100,7 +100,8 @@ export function parseLine(line: string): ParsedLine | null {
   const parentUuid = typeof obj.parentUuid === 'string' ? obj.parentUuid : null
   const sessionId = typeof obj.sessionId === 'string' ? obj.sessionId : null
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : null
-  const requestId = typeof obj.requestId === 'string' ? obj.requestId : null
+  const rawRequestId = typeof obj.requestId === 'string' ? obj.requestId : null
+  const requestId = rawRequestId && rawRequestId.length <= 128 ? rawRequestId : null
 
   let role: 'user' | 'assistant' | null = null
   let contentText: string | null = null
