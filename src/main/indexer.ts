@@ -7,6 +7,28 @@ import { summarizeSession } from './summarizer'
 
 export type ProgressCallback = (status: IndexerStatus) => void
 
+/**
+ * 同一 requestId 的 assistant entries 只保留最後一個的 token 值，其他清零為 null。
+ * 修正 Claude Code JSONL 將單次 API response 拆成多個 entries 造成的 token 重複計算。
+ */
+export function deduplicateTokensByRequestId(lines: ParsedLine[]): ParsedLine[] {
+  // 收集同一 requestId 的最後一個 assistant entry index
+  const lastIndex = new Map<string, number>()
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.role === 'assistant' && line.requestId) {
+      lastIndex.set(line.requestId, i)
+    }
+  }
+
+  return lines.map((line, i) => {
+    if (line.role === 'assistant' && line.requestId && lastIndex.get(line.requestId) !== i) {
+      return { ...line, inputTokens: null, outputTokens: null, cacheReadTokens: null, cacheCreationTokens: null }
+    }
+    return line
+  })
+}
+
 /** ParsedLine[] → MessageInput[]（加上 sequence，去除 parser-only 欄位） */
 function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
   return lines.map((msg, idx) => ({
@@ -102,10 +124,13 @@ export async function runIndexer(
       continue
     }
 
+    // requestId token 去重：同一 API response 的多個 entries 只保留最後一個的 token
+    const dedupedLines = deduplicateTokensByRequestId(parsed.messages)
+
     // UUID 去重：過濾掉其他 session 已索引的 replay entries（排除自身，避免 re-index 時自己匹配自己）
-    const uuids = parsed.messages.filter(m => m.uuid).map(m => m.uuid!)
+    const uuids = dedupedLines.filter(m => m.uuid).map(m => m.uuid!)
     const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
-    const messages = parsed.messages.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
+    const messages = dedupedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
     // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
     if (messages.length === 0 && parsed.messages.length > 0) continue
@@ -212,7 +237,7 @@ export async function runIndexer(
             fileMtime: sub.fileMtime,
             startedAt: parsed.startedAt,
             endedAt: parsed.endedAt,
-            messages: toMessageInputs(parsed.messages),
+            messages: toMessageInputs(deduplicateTokensByRequestId(parsed.messages)),
           })
         })
       }

@@ -420,6 +420,8 @@ export interface ParsedLine {
   cacheReadTokens: number | null
   cacheCreationTokens: number | null
   model: string | null
+  /** API request 識別符，同一 requestId 的多個 entries 共享相同 token usage */
+  requestId: string | null
 }
 
 /** 整個 session 解析結果 */

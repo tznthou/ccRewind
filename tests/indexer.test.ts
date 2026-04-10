@@ -3,8 +3,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
 import { Database } from '../src/main/database'
-import { runIndexer, type ProgressCallback } from '../src/main/indexer'
-import type { IndexerStatus } from '../src/shared/types'
+import { runIndexer, deduplicateTokensByRequestId, type ProgressCallback } from '../src/main/indexer'
+import type { IndexerStatus, ParsedLine } from '../src/shared/types'
 
 let tmpDir: string
 let dbPath: string
@@ -270,5 +270,136 @@ describe('runIndexer', () => {
     // toolsUsed 應有 Read 和 Edit
     expect(s.toolsUsed).toContain('Read:')
     expect(s.toolsUsed).toContain('Edit:')
+  })
+})
+
+// ── deduplicateTokensByRequestId ──
+
+/** 建立最小 ParsedLine 供 dedup 測試 */
+function makeParsedLine(overrides: Partial<ParsedLine> = {}): ParsedLine {
+  return {
+    type: 'assistant',
+    uuid: null,
+    parentUuid: null,
+    sessionId: null,
+    timestamp: null,
+    role: 'assistant',
+    contentText: null,
+    contentJson: null,
+    hasToolUse: false,
+    hasToolResult: false,
+    toolNames: [],
+    rawJson: '{}',
+    inputTokens: null,
+    outputTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    model: null,
+    requestId: null,
+    ...overrides,
+  }
+}
+
+describe('deduplicateTokensByRequestId', () => {
+  it('entries without requestId pass through unchanged', () => {
+    const lines = [
+      makeParsedLine({ uuid: 'a1', inputTokens: 100, outputTokens: 50 }),
+      makeParsedLine({ uuid: 'a2', inputTokens: 200, outputTokens: 80 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    expect(result).toHaveLength(2)
+    expect(result[0].inputTokens).toBe(100)
+    expect(result[1].inputTokens).toBe(200)
+  })
+
+  it('single entry per requestId passes through unchanged', () => {
+    const lines = [
+      makeParsedLine({ uuid: 'a1', requestId: 'req_001', inputTokens: 3000, outputTokens: 391 }),
+      makeParsedLine({ uuid: 'a2', requestId: 'req_002', inputTokens: 5000, outputTokens: 200 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    expect(result[0].inputTokens).toBe(3000)
+    expect(result[0].outputTokens).toBe(391)
+    expect(result[1].inputTokens).toBe(5000)
+    expect(result[1].outputTokens).toBe(200)
+  })
+
+  it('multi-entry requestId: only last entry retains tokens', () => {
+    const lines = [
+      makeParsedLine({ uuid: 'a1', requestId: 'req_001', inputTokens: 3000, outputTokens: 34, cacheReadTokens: 11000, cacheCreationTokens: 9000 }),
+      makeParsedLine({ uuid: 'a2', requestId: 'req_001', inputTokens: 3000, outputTokens: 34, cacheReadTokens: 11000, cacheCreationTokens: 9000 }),
+      makeParsedLine({ uuid: 'a3', requestId: 'req_001', inputTokens: 3000, outputTokens: 391, cacheReadTokens: 11000, cacheCreationTokens: 9000 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    expect(result).toHaveLength(3)
+    // first two: tokens nulled
+    expect(result[0].inputTokens).toBeNull()
+    expect(result[0].outputTokens).toBeNull()
+    expect(result[0].cacheReadTokens).toBeNull()
+    expect(result[0].cacheCreationTokens).toBeNull()
+    expect(result[1].inputTokens).toBeNull()
+    expect(result[1].outputTokens).toBeNull()
+    // last: tokens retained
+    expect(result[2].inputTokens).toBe(3000)
+    expect(result[2].outputTokens).toBe(391)
+    expect(result[2].cacheReadTokens).toBe(11000)
+    expect(result[2].cacheCreationTokens).toBe(9000)
+  })
+
+  it('interleaved user entries are not affected', () => {
+    const userLine = makeParsedLine({ type: 'user', role: 'user', uuid: 'u1', requestId: null, inputTokens: null })
+    const lines = [
+      makeParsedLine({ uuid: 'a1', requestId: 'req_001', inputTokens: 3000, outputTokens: 8 }),
+      userLine,
+      makeParsedLine({ uuid: 'a2', requestId: 'req_001', inputTokens: 3000, outputTokens: 252 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    expect(result).toHaveLength(3)
+    // first assistant: nulled
+    expect(result[0].inputTokens).toBeNull()
+    // user: unchanged
+    expect(result[1]).toBe(userLine)
+    // last assistant: retained
+    expect(result[2].inputTokens).toBe(3000)
+    expect(result[2].outputTokens).toBe(252)
+  })
+
+  it('mixed requestId groups each dedup independently', () => {
+    const lines = [
+      makeParsedLine({ uuid: 'a1', requestId: 'req_A', inputTokens: 1000, outputTokens: 10 }),
+      makeParsedLine({ uuid: 'a2', requestId: 'req_A', inputTokens: 1000, outputTokens: 100 }),
+      makeParsedLine({ uuid: 'a3', requestId: 'req_B', inputTokens: 5000, outputTokens: 20 }),
+      makeParsedLine({ uuid: 'a4', requestId: 'req_B', inputTokens: 5000, outputTokens: 500 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    // req_A: first nulled, second retained
+    expect(result[0].inputTokens).toBeNull()
+    expect(result[1].inputTokens).toBe(1000)
+    expect(result[1].outputTokens).toBe(100)
+    // req_B: first nulled, second retained
+    expect(result[2].inputTokens).toBeNull()
+    expect(result[3].inputTokens).toBe(5000)
+    expect(result[3].outputTokens).toBe(500)
+  })
+
+  it('non-assistant entries with requestId are not deduped', () => {
+    // 防禦性測試：只有 role=assistant 的才處理
+    const lines = [
+      makeParsedLine({ type: 'user', role: 'user', uuid: 'u1', requestId: 'req_001', inputTokens: 100 }),
+      makeParsedLine({ type: 'user', role: 'user', uuid: 'u2', requestId: 'req_001', inputTokens: 200 }),
+    ]
+    const result = deduplicateTokensByRequestId(lines)
+    expect(result[0].inputTokens).toBe(100)
+    expect(result[1].inputTokens).toBe(200)
+  })
+
+  it('does not mutate original array', () => {
+    const lines = [
+      makeParsedLine({ uuid: 'a1', requestId: 'req_001', inputTokens: 3000, outputTokens: 34 }),
+      makeParsedLine({ uuid: 'a2', requestId: 'req_001', inputTokens: 3000, outputTokens: 391 }),
+    ]
+    deduplicateTokensByRequestId(lines)
+    // original should be untouched
+    expect(lines[0].inputTokens).toBe(3000)
   })
 })

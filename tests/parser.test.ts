@@ -152,6 +152,47 @@ describe('parseLine', () => {
     expect(result).not.toBeNull()
     expect(result!.contentText).toBeNull()
   })
+
+  it('extracts requestId from top-level field', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      requestId: 'req_011CZVkxXRnVB3AAiJXkgBUm',
+      timestamp: '2024-06-01T10:00:01.000Z',
+      sessionId: 'sess-001',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Hello' }] },
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.requestId).toBe('req_011CZVkxXRnVB3AAiJXkgBUm')
+  })
+
+  it('requestId is null when field is missing', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'u1',
+      timestamp: '2024-06-01T10:00:00.000Z',
+      sessionId: 's1',
+      message: { role: 'user', content: 'Hello' },
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.requestId).toBeNull()
+  })
+
+  it('requestId is null when field is not a string', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      requestId: 12345,
+      timestamp: '2024-06-01T10:00:01.000Z',
+      sessionId: 'sess-001',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'Hi' }] },
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.requestId).toBeNull()
+  })
 })
 
 describe('parseSession', () => {

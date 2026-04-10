@@ -360,6 +360,14 @@ const migrations: Migration[] = [
       db.exec("UPDATE sessions SET file_mtime = NULL")
     },
   },
+  {
+    version: 14,
+    description: 'force re-index for requestId token dedup (fix ~2.3x inflated token counts)',
+    up: (db) => {
+      db.exec("UPDATE sessions SET file_mtime = NULL")
+      db.exec("UPDATE subagent_sessions SET file_mtime = NULL")
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
