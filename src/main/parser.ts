@@ -17,12 +17,12 @@ const STRIP_RE = new RegExp(
   STRIP_TAGS.map(t => `<${t}>[\\s\\S]*?</${t}>`).join('|'), 'g',
 )
 const UNWRAP_RE = new RegExp(
-  `<(?:${UNWRAP_TAGS.join('|')})>([\\s\\S]*?)</(?:${UNWRAP_TAGS.join('|')})>`, 'g',
+  `<(${UNWRAP_TAGS.join('|')})>([\\s\\S]*?)</\\1>`, 'g',
 )
 
 /** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
 export function stripSystemXml(text: string): string {
-  return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, content: string) => content).trim()
+  return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, _tag: string, content: string) => content).trim()
 }
 
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
