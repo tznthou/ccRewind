@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.3] - 2026-04-11
+
+### Fixed
+
+- **System XML noise in titles and messages** — Claude Code injects system XML tags (`<local-command-caveat>`, `<task-notification>`, `<ide_opened_file>`, `<system-reminder>`) into user message content. These were stored verbatim in `contentText`, polluting session titles and message display. Fix: `stripSystemXml()` strips known system tags (whitelist-only) during JSONL parsing, while preserving command metadata (`<command-name>`, `<command-args>`) as unwrapped plain text. Original data fully preserved in `raw_json` and `content_json`.
+- **UNWRAP_RE cross-tag mismatch** — Regex for unwrapping command tags now uses backreference (`\1`) to enforce open/close tag name symmetry, preventing incorrect matches on malformed XML.
+
+### Changed
+
+- **DB schema**: migration v15 forces full re-index of sessions and subagent_sessions to apply system XML stripping to all existing `contentText`
+
 ## [1.7.2] - 2026-04-10
 
 ### Fixed
