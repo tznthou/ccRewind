@@ -120,3 +120,83 @@
   0% { box-shadow: 0 0 0 4px var(--color-accent); }
   100% { box-shadow: 0 0 0 0 transparent; }
 }
+
+/* ── Subagent panel ── */
+
+.subagentBreadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-md);
+  margin-bottom: var(--space-sm);
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-accent);
+}
+
+.subagentBack {
+  padding: 0;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  color: var(--color-accent);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.subagentBack:hover {
+  color: var(--color-text);
+}
+
+.subagentTypeBadge {
+  padding: 1px 6px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: #8b5cf6;
+  background: rgba(139, 92, 246, 0.1);
+  border-radius: 3px;
+}
+
+.subagentChips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding-bottom: var(--space-sm);
+}
+
+.subagentLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  margin-right: var(--space-xs);
+}
+
+.subagentChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-secondary);
+  background: var(--color-bg-hover);
+  border: 1px solid transparent;
+  border-left: 2px solid #8b5cf6;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.subagentChip:hover {
+  border-color: #8b5cf6;
+  color: #8b5cf6;
+}
+
+.subagentCount {
+  font-size: 10px;
+  color: var(--color-text-muted);
+  background: var(--color-bg-sidebar);
+  padding: 0 4px;
+  border-radius: 2px;
+}

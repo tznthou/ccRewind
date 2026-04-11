@@ -6,6 +6,7 @@ import { basename } from '../../utils/pathDisplay'
 import MessageBubble from './MessageBubble'
 import TokenBudgetPanel from '../TokenBudget/TokenBudgetPanel'
 import RelatedSessionsPanel from '../Archaeology/RelatedSessionsPanel'
+import SubagentPanel from './SubagentPanel'
 import { useTokenHeat } from './TokenHeatGutter'
 import styles from './ChatView.module.css'
 
@@ -73,59 +74,58 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     }
   }, [sessionId])
 
-  if (loading) {
-    return <div className={styles.status}>載入對話中...</div>
-  }
-
-  if (error) {
-    return <div className={styles.error}>錯誤：{error}</div>
-  }
-
-  if (messages.length === 0) {
-    return <div className={styles.status}>此 Session 沒有訊息</div>
-  }
-
   return (
     <div ref={containerRef} className={styles.chatView}>
-      <div className={styles.toolbar}>
-        <TokenBudgetPanel sessionId={sessionId} />
-        <div className={styles.toolbarActions}>
-          {sessionFiles.length > 0 && (
-            <button
-              className={styles.filesToggle}
-              onClick={() => setShowFiles(v => !v)}
-            >
-              {sessionFiles.length} files {showFiles ? '\u25B4' : '\u25BE'}
-            </button>
+      <SubagentPanel sessionId={sessionId} />
+      {loading ? (
+        <div className={styles.status}>載入對話中...</div>
+      ) : error ? (
+        <div className={styles.error}>錯誤：{error}</div>
+      ) : messages.length === 0 ? (
+        <div className={styles.status}>此 Session 沒有訊息</div>
+      ) : (
+        <>
+          <div className={styles.toolbar}>
+            <TokenBudgetPanel sessionId={sessionId} />
+            <div className={styles.toolbarActions}>
+              {sessionFiles.length > 0 && (
+                <button
+                  className={styles.filesToggle}
+                  onClick={() => setShowFiles(v => !v)}
+                >
+                  {sessionFiles.length} files {showFiles ? '\u25B4' : '\u25BE'}
+                </button>
+              )}
+              <button
+                className={styles.exportButton}
+                onClick={handleExport}
+                disabled={exporting || messages.length === 0}
+              >
+                {exporting ? 'Exporting...' : 'Export Markdown'}
+              </button>
+            </div>
+          </div>
+          {showFiles && sessionFiles.length > 0 && (
+            <div className={styles.filesChips}>
+              {sessionFiles.map(f => (
+                <button
+                  key={`${f.filePath}-${f.operation}`}
+                  className={styles.fileChip}
+                  data-op={f.operation}
+                  onClick={() => dispatch({ type: 'OPEN_FILE_HISTORY', filePath: f.filePath })}
+                  title={`${f.filePath} (${f.operation} ×${f.count})`}
+                >
+                  {basename(f.filePath)}
+                </button>
+              ))}
+            </div>
           )}
-          <button
-            className={styles.exportButton}
-            onClick={handleExport}
-            disabled={exporting || messages.length === 0}
-          >
-            {exporting ? 'Exporting...' : 'Export Markdown'}
-          </button>
-        </div>
-      </div>
-      {showFiles && sessionFiles.length > 0 && (
-        <div className={styles.filesChips}>
-          {sessionFiles.map(f => (
-            <button
-              key={`${f.filePath}-${f.operation}`}
-              className={styles.fileChip}
-              data-op={f.operation}
-              onClick={() => dispatch({ type: 'OPEN_FILE_HISTORY', filePath: f.filePath })}
-              title={`${f.filePath} (${f.operation} ×${f.count})`}
-            >
-              {basename(f.filePath)}
-            </button>
+          {messages.map((msg) => (
+            <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
           ))}
-        </div>
+          <RelatedSessionsPanel sessionId={sessionId} />
+        </>
       )}
-      {messages.map((msg) => (
-        <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
-      ))}
-      <RelatedSessionsPanel sessionId={sessionId} />
     </div>
   )
 }
