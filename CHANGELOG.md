@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.4] - 2026-04-11
+
+### Fixed
+
+- **Token heat gutter invisible in Timeline/Terminal themes** — Heat gutter used hardcoded `rgba()` values with low opacity (0.3), failing WCAG 1.4.11 non-text contrast (3:1) on dark and light backgrounds. Fix: replaced with per-theme CSS variables (`--color-heat-positive` / `--color-heat-negative`) driven by `color-mix(in srgb)`, minimum intensity raised from 30% to 65%. Changed from `inset box-shadow 3px` to `border-left 4px` for better visual weight.
+- **Timeline double-border conflict** — Timeline theme's accent `border-left` and heat gutter `box-shadow` stacked into a confusing 6px dual-color band. Fix: accent border now uses `:not([data-heat])` selector, showing only when no heat indicator is present.
+
+### Added
+
+- **Terminal heat glow** — Terminal theme adds `box-shadow` glow effect on heat-indicated messages for depth on transparent bubbles, matching the retro-future aesthetic.
+
 ## [1.7.3] - 2026-04-11
 
 ### Fixed
