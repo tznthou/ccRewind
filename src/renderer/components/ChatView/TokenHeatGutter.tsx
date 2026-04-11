@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, type CSSProperties } from 'react'
 import type { Message } from '../../../shared/types'
 
 export interface HeatInfo {
@@ -45,19 +45,26 @@ export function useTokenHeat(messages: Message[]): Map<number, HeatInfo> {
   }, [messages])
 }
 
+export interface HeatGutterProps {
+  /** "positive" (cache-efficient) or "negative" (expensive) */
+  attr: 'positive' | 'negative'
+  /** CSS custom property: --heat-intensity as percentage */
+  style: CSSProperties
+}
+
 /**
- * Returns inline style for a message's heat gutter indicator.
- * Uses inset box-shadow (not border-left) to avoid overriding theme borders.
+ * Returns data-heat attribute value + CSS custom property for intensity.
+ * Color is CSS-driven via color-mix() — each theme defines its own heat colors.
  */
-export function getHeatStyle(heat: HeatInfo | undefined): React.CSSProperties | undefined {
+export function getHeatProps(heat: HeatInfo | undefined): HeatGutterProps | undefined {
   if (!heat) return undefined
   const { intensity, cacheGood } = heat
   if (intensity === 0 && cacheGood) return undefined
 
-  // Red = expensive (high delta), Green = cache-efficient
-  const color = cacheGood
-    ? `rgba(34, 197, 94, ${0.3 + intensity * 0.7})`   // green
-    : `rgba(239, 68, 68, ${0.3 + intensity * 0.7})`    // red
+  const pct = Math.round((0.65 + intensity * 0.35) * 100)
 
-  return { boxShadow: `inset 3px 0 0 ${color}` }
+  return {
+    attr: cacheGood ? 'positive' : 'negative',
+    style: { '--heat-intensity': `${pct}%` } as CSSProperties,
+  }
 }

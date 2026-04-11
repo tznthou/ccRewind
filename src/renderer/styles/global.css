@@ -26,6 +26,10 @@
   --color-accent-user: #0891B2;
   --color-accent-assistant: #D97706;
 
+  /* Token heat gutter */
+  --color-heat-positive: #16a34a;
+  --color-heat-negative: #dc2626;
+
   /* Message bubbles */
   --color-bubble-user: #E0F7FA;
   --color-bubble-assistant: #F8FAFC;
@@ -132,6 +136,8 @@ mark {
   --color-accent-light: #F0E6D0;
   --color-accent-user: #B8860B;
   --color-accent-assistant: #B8860B;
+  --color-heat-positive: #15803d;
+  --color-heat-negative: #b91c1c;
   --color-error: #A63D40;
   --color-bubble-user: #EDE4D2;
   --color-bubble-assistant: #F0EBE2;
@@ -168,6 +174,8 @@ mark {
   --color-accent-light: rgba(34, 211, 238, 0.1);
   --color-accent-user: #22D3EE;
   --color-accent-assistant: #FBBF24;
+  --color-heat-positive: #86efac;
+  --color-heat-negative: #fca5a5;
   --color-error: #F87171;
   --color-bubble-user: transparent;
   --color-bubble-assistant: transparent;

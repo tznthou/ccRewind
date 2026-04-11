@@ -3,7 +3,7 @@ import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import { formatTime } from '../../utils/formatTime'
-import { getHeatStyle, type HeatInfo } from './TokenHeatGutter'
+import { getHeatProps, type HeatInfo } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
 
 interface MessageBubbleProps {
@@ -61,7 +61,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
-  const heatStyle = !isUser ? getHeatStyle(heat) : undefined
+  const heatProps = !isUser ? getHeatProps(heat) : undefined
 
   // last-prompt 不顯示
   if (message.type === 'last-prompt') return null
@@ -82,7 +82,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} tabIndex={-1} style={heatStyle}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} tabIndex={-1} style={heatProps?.style}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>

@@ -174,7 +174,7 @@
    Theme B — Timeline
    ============================================================ */
 
-:global([data-theme="timeline"]) .assistant {
+:global([data-theme="timeline"]) .assistant:not([data-heat]) {
   border-left: 3px solid var(--color-accent-assistant);
 }
 
@@ -223,4 +223,21 @@
 
 :global([data-theme="terminal"]) .content :global(pre) {
   border: 1px dashed var(--color-border);
+}
+
+/* ============================================================
+   Token Heat Gutter — theme-aware left border
+   ============================================================ */
+
+.bubble[data-heat="positive"] { --heat-base: var(--color-heat-positive); }
+.bubble[data-heat="negative"] { --heat-base: var(--color-heat-negative); }
+
+.bubble[data-heat] {
+  --current-heat-color: color-mix(in srgb, var(--heat-base) var(--heat-intensity, 50%), transparent);
+  border-left: 4px solid var(--current-heat-color);
+}
+
+/* Terminal — glow effect for depth on transparent bubbles */
+:global([data-theme="terminal"]) .bubble[data-heat] {
+  box-shadow: 0 0 8px var(--current-heat-color);
 }
