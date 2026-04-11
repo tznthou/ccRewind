@@ -8,6 +8,29 @@ interface ContentResult {
   toolNames: string[]
 }
 
+/** 完全移除的系統標籤（標籤+內容一起刪）*/
+const STRIP_TAGS = ['local-command-caveat', 'task-notification', 'ide_opened_file', 'system-reminder']
+/** 只移除標籤殼、保留內文的系統標籤 */
+const UNWRAP_TAGS = ['command-name', 'command-message', 'command-args', 'local-command-stdout']
+
+const STRIP_RE = new RegExp(
+  STRIP_TAGS.map(t => `<${t}>[\\s\\S]*?</${t}>`).join('|'), 'g',
+)
+const UNWRAP_RE = new RegExp(
+  UNWRAP_TAGS.map(t => `<${t}>([\\s\\S]*?)</${t}>`).join('|'), 'g',
+)
+
+/** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
+export function stripSystemXml(text: string): string {
+  return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (...args) => {
+    // args: match, cap1, cap2, ..., offset, string — 取第一個非 undefined 的 capture group
+    for (let i = 1; i <= UNWRAP_TAGS.length; i++) {
+      if (args[i] !== undefined) return args[i] as string
+    }
+    return ''
+  }).trim()
+}
+
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
 export function parseContent(content: unknown): ContentResult {
   if (content == null) {
@@ -15,7 +38,8 @@ export function parseContent(content: unknown): ContentResult {
   }
 
   if (typeof content === 'string') {
-    return { contentText: content, hasToolUse: false, hasToolResult: false, toolNames: [] }
+    const cleaned = stripSystemXml(content)
+    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [] }
   }
 
   if (!Array.isArray(content)) {
@@ -33,7 +57,10 @@ export function parseContent(content: unknown): ContentResult {
 
     switch (b.type) {
       case 'text':
-        if (typeof b.text === 'string') textParts.push(b.text)
+        if (typeof b.text === 'string') {
+          const cleaned = stripSystemXml(b.text)
+          if (cleaned) textParts.push(cleaned)
+        }
         break
       case 'tool_use':
         hasToolUse = true
@@ -136,7 +163,8 @@ export function parseLine(line: string): ParsedLine | null {
     model = typeof message.model === 'string' ? message.model : null
   } else if (typeof obj.content === 'string') {
     // queue-operation 等 type 的 prompt 存在頂層 content 欄位
-    contentText = obj.content as string
+    const cleaned = stripSystemXml(obj.content as string)
+    contentText = cleaned || null
   }
 
   return {
