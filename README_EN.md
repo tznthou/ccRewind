@@ -66,7 +66,7 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Context Budget** | Token breakdown (input/output/cache), context growth chart, output intensity heat bar, 5-rule insight engine (spike detection, cache efficiency, growth rate analysis) |
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Active Time** | Session duration prioritizes active time (excluding >5min idle periods), with wall-clock time shown in parentheses. Dashboard averages use active time |
-| **Subagent Indexing** | Automatically scans and indexes `subagents/*.jsonl` transcripts with `*.meta.json` agent type metadata, incremental indexing, and automatic stale cleanup |
+| **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
@@ -140,7 +140,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 211 tests, run through Electron |
+| Vitest 3 | Test framework | 231 tests, run through Electron |
 
 ---
 
@@ -198,7 +198,7 @@ ccRewind/
 │   │   ├── App.tsx            # Root component
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
-│   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + export
+│   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + export
 │   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
@@ -209,7 +209,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext (theme persistence)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (211)
+├── tests/                     # Vitest tests (231)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -254,6 +254,7 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 | 4 | ✅ Done | Advanced dashboard: efficiency trends, waste detection, project health |
 | 4.5 | ✅ Done | Search UX: date filter, sort toggle, intent_text search, result date & outcome badges |
 | 5 | ✅ Done | Active time calculation + subagent indexing + requestId token dedup |
+| 5.5 | ✅ Done | Subagent frontend UI: chip navigation + breadcrumb back |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 
 ---
