@@ -17,18 +17,12 @@ const STRIP_RE = new RegExp(
   STRIP_TAGS.map(t => `<${t}>[\\s\\S]*?</${t}>`).join('|'), 'g',
 )
 const UNWRAP_RE = new RegExp(
-  UNWRAP_TAGS.map(t => `<${t}>([\\s\\S]*?)</${t}>`).join('|'), 'g',
+  `<(?:${UNWRAP_TAGS.join('|')})>([\\s\\S]*?)</(?:${UNWRAP_TAGS.join('|')})>`, 'g',
 )
 
 /** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
 export function stripSystemXml(text: string): string {
-  return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (...args) => {
-    // args: match, cap1, cap2, ..., offset, string — 取第一個非 undefined 的 capture group
-    for (let i = 1; i <= UNWRAP_TAGS.length; i++) {
-      if (args[i] !== undefined) return args[i] as string
-    }
-    return ''
-  }).trim()
+  return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, content: string) => content).trim()
 }
 
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
