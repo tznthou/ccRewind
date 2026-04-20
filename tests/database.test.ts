@@ -1339,6 +1339,22 @@ describe('exclusion_rules schema (v16)', () => {
     const preview = db.previewExclusion({ projectId: 'proj-norm', dateFrom: '', dateTo: '  ' })
     expect(preview.sessionCount).toBe(0)  // project has no sessions; '' ignored — not matching all dates
   })
+
+  it('normalize: rejects invalid date format (防止 DATE(\'bad\')=NULL 繞過 date 條件)', () => {
+    expect(() =>
+      db.previewExclusion({ projectId: null, dateFrom: 'not-a-date', dateTo: null }),
+    ).toThrow(/YYYY-MM-DD/)
+    expect(() =>
+      db.addExclusionRule({ projectId: null, dateFrom: null, dateTo: '2026/01/01' }),
+    ).toThrow(/YYYY-MM-DD/)
+  })
+})
+
+describe('getInactiveSessions input validation', () => {
+  it('rejects non-integer / negative thresholdDays', () => {
+    expect(() => db.getInactiveSessions(-1)).toThrow(/non-negative integer/)
+    expect(() => db.getInactiveSessions(1.5)).toThrow(/non-negative integer/)
+  })
 })
 
 describe('exclusion rules CRUD', () => {

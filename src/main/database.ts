@@ -1705,8 +1705,10 @@ export class Database {
   }
 
   /**
-   * 將規則 normalize：空字串→null，trim whitespace。
-   * 防止空字串 criteria 在 SQL 比對時 match 所有 row（例：`DATE(x) >= ''` 對非 null date 恆真）。
+   * 將規則 normalize + 嚴格驗證：
+   * - 空字串 / 僅空白 → null（防止 `DATE(x) >= ''` 對非 null date 恆真）
+   * - 日期欄位必須符合 YYYY-MM-DD（防止無效日期讓 `DATE('bad')` 回 NULL，
+   *   整個 date 條件被靜默跳過，再配上 null projectId 可能誤刪全庫）
    */
   private normalizeRule(rule: ExclusionRuleInput): ExclusionRuleInput {
     const norm = (v: string | null): string | null => {
@@ -1717,6 +1719,13 @@ export class Database {
     const r = { projectId: norm(rule.projectId), dateFrom: norm(rule.dateFrom), dateTo: norm(rule.dateTo) }
     if (!r.projectId && !r.dateFrom && !r.dateTo) {
       throw new Error('Exclusion rule requires at least one non-empty criterion')
+    }
+    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+    if (r.dateFrom != null && !DATE_RE.test(r.dateFrom)) {
+      throw new Error(`dateFrom must be YYYY-MM-DD, got: ${r.dateFrom}`)
+    }
+    if (r.dateTo != null && !DATE_RE.test(r.dateTo)) {
+      throw new Error(`dateTo must be YYYY-MM-DD, got: ${r.dateTo}`)
     }
     return r
   }
@@ -1805,6 +1814,9 @@ export class Database {
   }
 
   getInactiveSessions(thresholdDays: number): InactiveSession[] {
+    if (!Number.isInteger(thresholdDays) || thresholdDays < 0) {
+      throw new Error(`thresholdDays must be a non-negative integer, got: ${thresholdDays}`)
+    }
     const rows = this.db.prepare(`
       SELECT s.id, s.project_id, p.display_name, s.title, s.ended_at, s.message_count
       FROM sessions s JOIN projects p ON p.id = s.project_id
@@ -1916,29 +1928,32 @@ export class Database {
   applyExclusion(rawRule: ExclusionRuleInput): { rule: ExclusionRule; releasedBytes: number; vacuumed: boolean } {
     const rule = this.normalizeRule(rawRule)
     const bytesBefore = this.getDbBytes()
-    const sessions = this.findMatchingSessionIds(rule)
-    const sessionIds = sessions.map(s => s.id)
-    const subagentIds: string[] = []
-    this.chunkedIn(sessionIds, (ph, chunk) => {
-      const rows = this.db.prepare(`SELECT id FROM subagent_sessions WHERE parent_session_id IN (${ph})`)
-        .all(...chunk) as Array<{ id: string }>
-      for (const r of rows) subagentIds.push(r.id)
-    })
-    const allIds = [...sessionIds, ...subagentIds]
-    const affectedProjects = new Set(sessions.map(s => s.project_id))
 
-    const createdRule = this.db.transaction(() => {
+    let deletedCount = 0
+    const result = this.db.transaction(() => {
+      const sessions = this.findMatchingSessionIds(rule)
+      const sessionIds = sessions.map(s => s.id)
+      const subagentIds: string[] = []
+      this.chunkedIn(sessionIds, (ph, chunk) => {
+        const rows = this.db.prepare(`SELECT id FROM subagent_sessions WHERE parent_session_id IN (${ph})`)
+          .all(...chunk) as Array<{ id: string }>
+        for (const r of rows) subagentIds.push(r.id)
+      })
+      const allIds = [...sessionIds, ...subagentIds]
+      const affectedProjects = new Set(sessions.map(s => s.project_id))
+
       this.deleteSessionsBatch(allIds, sessionIds)
-      const r = this.addExclusionRule(rule)
+      const createdRule = this.addExclusionRule(rule)
       for (const pid of affectedProjects) this.updateProjectStats(pid)
-      return r
+      deletedCount = allIds.length
+      return createdRule
     })()
 
     let vacuumed = false
-    if (allIds.length > 0) {
+    if (deletedCount > 0) {
       try { this.db.exec('VACUUM'); vacuumed = true } catch { /* delete already committed */ }
     }
-    return { rule: createdRule, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()), vacuumed }
+    return { rule: result, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()), vacuumed }
   }
 
   /** 將多個 session 從 sessions_fts 移除（external content FTS5 需手動維護）*/
