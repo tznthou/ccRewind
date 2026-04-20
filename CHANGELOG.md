@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Storage Management DB layer** (v1.9.0 Phase 1, infrastructure only — UI arrives in later phases): foundation for user-controlled disk usage management
+  - `exclusion_rules` table (migration v16): composite project + date range rules with nullable columns and `CHECK` ensuring at least one non-null criterion, so users can selectively keep sessions by either or both dimensions
+  - Database methods: storage stats, per-project breakdown, inactive session detection, exclusion rule CRUD, preview (aggregate-only, no ID materialization), and apply (hard delete + FTS sync + CASCADE + best-effort `VACUUM`, all within a single atomic transaction)
+  - Session-to-date mapping uses first message timestamp (conservative: long cross-day sessions stay with their start day)
+  - `applyExclusion` returns `vacuumed: boolean` so a post-commit `VACUUM` failure does not mislead callers into retrying an already-deleted operation
+
+### Changed
+
+- **DB schema**: migration v16 adds `exclusion_rules` table with `project_id` FK and `idx_exclusion_project` index
+- `getDbBytes` now sums `-wal` and `-shm` sidecar files for accurate WAL-mode disk usage reporting
+- Exclusion rule input hardening: rejects empty/whitespace criteria, enforces `YYYY-MM-DD` date format, and validates `thresholdDays` as a non-negative integer — preventing SQL comparison bypasses (`DATE(started_at) >= ''` or `DATE('bad-input')` returning `NULL`) that could cause mass accidental deletion
+- Internal: `chunkedIn` helper centralizes 500-row `IN (...)` batching across exclusion-related queries; FTS5 `sessions_fts` rowid deletion extracted to `deleteSessionsFromFts` helper
+
 ## [1.8.0] - 2026-04-11
 
 ### Added
