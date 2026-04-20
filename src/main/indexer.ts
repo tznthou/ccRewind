@@ -1,11 +1,59 @@
 import path from 'node:path'
-import type { IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
+import { readFile } from 'node:fs/promises'
+import type { ExclusionRule, IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents } from './scanner'
 import { parseSession } from './parser'
 import { summarizeSession } from './summarizer'
 
 export type ProgressCallback = (status: IndexerStatus) => void
+
+/**
+ * 掃整份 JSONL，回傳第一個帶 timestamp 的行。與 parser.parseSession 的 startedAt
+ * 來源一致（整檔掃）——否則 applyExclusion 依完整掃描的 started_at 刪了 session，
+ * re-index 時因 peek 截斷拿不到 timestamp 就會讓它被 re-import，破壞 skip 契約。
+ */
+export async function readFirstTimestamp(filePath: string): Promise<string | null> {
+  let content: string
+  try {
+    content = await readFile(filePath, 'utf-8')
+  } catch {
+    return null
+  }
+  for (const line of content.split('\n')) {
+    if (!line.trim()) continue
+    try {
+      const obj = JSON.parse(line) as { timestamp?: unknown }
+      if (typeof obj.timestamp === 'string') return obj.timestamp
+    } catch {
+      // 該行非合法 JSON → 跳過繼續找
+    }
+  }
+  return null
+}
+
+/**
+ * 對應 database.buildExclusionWhere 的純 JS 版本，用於 indexer 階段 skip 判斷。
+ * 日期比對採 UTC date（new Date → toISOString）以對齊 SQLite `DATE(started_at)`——
+ * 後者對帶 offset 的 timestamp 會先 normalize 到 UTC 再截日期。invalid timestamp
+ * 視為保守不匹配，避免誤 skip。沒 timestamp 時若 rule 有 date range → 不匹配。
+ */
+export function matchesExclusionRule(
+  projectId: string,
+  firstTimestamp: string | null,
+  rule: ExclusionRule,
+): boolean {
+  if (rule.projectId != null && rule.projectId !== projectId) return false
+  if (rule.dateFrom != null || rule.dateTo != null) {
+    if (firstTimestamp == null) return false
+    const d = new Date(firstTimestamp)
+    if (Number.isNaN(d.getTime())) return false
+    const date = d.toISOString().substring(0, 10)
+    if (rule.dateFrom != null && date < rule.dateFrom) return false
+    if (rule.dateTo != null && date > rule.dateTo) return false
+  }
+  return true
+}
 
 /**
  * 同一 requestId 的 assistant entries 只保留最後一個的 token 值，其他清零為 null。
@@ -84,12 +132,21 @@ export async function runIndexer(
   const sessionsToIndex: SessionToIndex[] = []
   const scannedSessionIds = new Set<string>()
 
+  // Exclusion rules（v1.9.0）：防止新 session 被重建（尤其 applyExclusion 硬刪後磁碟還在的場景）
+  // 只攔截新 session（!existing），已 indexed 的保持 mtime 同步邏輯不變
+  const exclusionRules = db.getExclusionRules()
+
   for (const project of projects) {
     for (const session of project.sessions) {
       scannedSessionIds.add(session.sessionId)
       const existing = existingMtimes.get(session.sessionId)
       // 重新索引條件：新 session、mtime 變更、或 archived session 重新出現
       if (!existing || existing.mtime !== session.fileMtime || existing.archived) {
+        if (exclusionRules.length > 0 && !existing) {
+          const firstTs = await readFirstTimestamp(session.filePath)
+          const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))
+          if (excluded) continue
+        }
         sessionsToIndex.push({
           ...session,
           projectId: project.projectId,
