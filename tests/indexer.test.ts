@@ -3,8 +3,8 @@ import path from 'node:path'
 import os from 'node:os'
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
 import { Database } from '../src/main/database'
-import { runIndexer, deduplicateTokensByRequestId, type ProgressCallback } from '../src/main/indexer'
-import type { IndexerStatus, ParsedLine } from '../src/shared/types'
+import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, type ProgressCallback } from '../src/main/indexer'
+import type { ExclusionRule, IndexerStatus, ParsedLine } from '../src/shared/types'
 
 let tmpDir: string
 let dbPath: string
@@ -401,5 +401,266 @@ describe('deduplicateTokensByRequestId', () => {
     deduplicateTokensByRequestId(lines)
     // original should be untouched
     expect(lines[0].inputTokens).toBe(3000)
+  })
+})
+
+// ── readFirstTimestamp ──
+
+describe('readFirstTimestamp', () => {
+  it('returns timestamp from the first line when present', async () => {
+    const filePath = path.join(tmpDir, 'ts-basic.jsonl')
+    await writeFile(filePath, makeJsonl([
+      { timestamp: '2024-06-01T10:00:00.000Z', type: 'user' },
+      { timestamp: '2024-06-01T10:00:05.000Z', type: 'assistant' },
+    ]))
+    expect(await readFirstTimestamp(filePath)).toBe('2024-06-01T10:00:00.000Z')
+  })
+
+  it('skips leading timestamp-less lines and finds the first one with', async () => {
+    const filePath = path.join(tmpDir, 'ts-skip.jsonl')
+    await writeFile(filePath, makeJsonl([
+      { type: 'summary', content: 'no timestamp here' },
+      { timestamp: '2024-07-01T00:00:00.000Z', type: 'user' },
+    ]))
+    expect(await readFirstTimestamp(filePath)).toBe('2024-07-01T00:00:00.000Z')
+  })
+
+  it('returns null for an empty file', async () => {
+    const filePath = path.join(tmpDir, 'empty.jsonl')
+    await writeFile(filePath, '')
+    expect(await readFirstTimestamp(filePath)).toBeNull()
+  })
+
+  it('returns null when file has no timestamped line', async () => {
+    const filePath = path.join(tmpDir, 'no-ts.jsonl')
+    await writeFile(filePath, makeJsonl([
+      { type: 'summary', content: 'a' },
+      { type: 'summary', content: 'b' },
+    ]))
+    expect(await readFirstTimestamp(filePath)).toBeNull()
+  })
+
+  it('returns null for nonexistent file', async () => {
+    expect(await readFirstTimestamp(path.join(tmpDir, 'does-not-exist.jsonl'))).toBeNull()
+  })
+
+  it('ignores non-JSON lines and continues scanning', async () => {
+    const filePath = path.join(tmpDir, 'bad-first.jsonl')
+    await writeFile(filePath, `not-json-line\n${JSON.stringify({ timestamp: '2024-08-01T00:00:00.000Z' })}`)
+    expect(await readFirstTimestamp(filePath)).toBe('2024-08-01T00:00:00.000Z')
+  })
+
+  it('finds first timestamp even past 8KB of timestamp-less preamble', async () => {
+    // 防回歸：早期版本只 peek 前 8KB，會錯過此類 session，導致被排除刪除的 session
+    // 在 re-index 時因 null timestamp 繞過 date rule 而重現。
+    const filePath = path.join(tmpDir, 'large-preamble.jsonl')
+    const padLine = JSON.stringify({ type: 'summary', content: 'x'.repeat(1000) })
+    const lines: string[] = []
+    for (let i = 0; i < 12; i++) lines.push(padLine) // ~12KB of preamble
+    lines.push(JSON.stringify({ timestamp: '2024-09-01T00:00:00.000Z', type: 'user' }))
+    await writeFile(filePath, lines.join('\n'))
+    expect(await readFirstTimestamp(filePath)).toBe('2024-09-01T00:00:00.000Z')
+  })
+
+  it('returns null for files exceeding size guard (DoS protection)', async () => {
+    // 防回歸：無 size guard 時，惡意/異常大檔會被 readFile 全載入記憶體。
+    // 超過 maxBytes 應直接回 null（null 對 date rule 保守不匹配，不破壞 skip 語意）。
+    const filePath = path.join(tmpDir, 'oversized.jsonl')
+    await writeFile(filePath, makeJsonl([
+      { timestamp: '2024-06-01T10:00:00.000Z', type: 'user' },
+    ]))
+    // 檔案 size ~60 bytes；設 guard 為 10 bytes → 應觸發 guard
+    expect(await readFirstTimestamp(filePath, 10)).toBeNull()
+    // 正常 guard 下仍能讀到
+    expect(await readFirstTimestamp(filePath)).toBe('2024-06-01T10:00:00.000Z')
+  })
+})
+
+// ── matchesExclusionRule ──
+
+function mkRule(overrides: Partial<ExclusionRule> = {}): ExclusionRule {
+  return {
+    id: 1,
+    projectId: null,
+    dateFrom: null,
+    dateTo: null,
+    createdAt: '2024-06-01T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+describe('matchesExclusionRule', () => {
+  it('projectId-only rule matches the same project', () => {
+    expect(matchesExclusionRule('-p1', null, mkRule({ projectId: '-p1' }))).toBe(true)
+  })
+
+  it('projectId-only rule rejects a different project', () => {
+    expect(matchesExclusionRule('-p2', null, mkRule({ projectId: '-p1' }))).toBe(false)
+  })
+
+  it('dateFrom-only rule: matches dates >= dateFrom (inclusive)', () => {
+    const rule = mkRule({ dateFrom: '2024-06-01' })
+    expect(matchesExclusionRule('any', '2024-06-01T00:00:00.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('any', '2024-06-02T00:00:00.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('any', '2024-05-31T23:59:59.000Z', rule)).toBe(false)
+  })
+
+  it('dateTo-only rule: matches dates <= dateTo (inclusive)', () => {
+    const rule = mkRule({ dateTo: '2024-06-30' })
+    expect(matchesExclusionRule('any', '2024-06-30T23:59:59.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('any', '2024-06-01T00:00:00.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('any', '2024-07-01T00:00:00.000Z', rule)).toBe(false)
+  })
+
+  it('date range rule: matches only within [from, to]', () => {
+    const rule = mkRule({ dateFrom: '2024-06-01', dateTo: '2024-06-30' })
+    expect(matchesExclusionRule('p', '2024-06-15T12:00:00.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('p', '2024-05-31T00:00:00.000Z', rule)).toBe(false)
+    expect(matchesExclusionRule('p', '2024-07-01T00:00:00.000Z', rule)).toBe(false)
+  })
+
+  it('projectId + dateFrom: both must match', () => {
+    const rule = mkRule({ projectId: '-p1', dateFrom: '2024-06-01' })
+    expect(matchesExclusionRule('-p1', '2024-06-15T00:00:00.000Z', rule)).toBe(true)
+    expect(matchesExclusionRule('-p2', '2024-06-15T00:00:00.000Z', rule)).toBe(false)
+    expect(matchesExclusionRule('-p1', '2024-05-01T00:00:00.000Z', rule)).toBe(false)
+  })
+
+  it('null timestamp with date rule: conservative false (do not skip)', () => {
+    expect(matchesExclusionRule('p', null, mkRule({ dateFrom: '2024-06-01' }))).toBe(false)
+    expect(matchesExclusionRule('p', null, mkRule({ dateTo: '2024-06-30' }))).toBe(false)
+  })
+
+  it('null timestamp with projectId-only rule: still matches', () => {
+    expect(matchesExclusionRule('-p1', null, mkRule({ projectId: '-p1' }))).toBe(true)
+  })
+
+  it('normalizes timezone offset to UTC date (aligned with SQL DATE semantics)', () => {
+    // 防回歸：原版用 substring(0,10) 對非 Z timestamp 會跟 SQL DATE() 的
+    // UTC-normalized 結果分歧，造成 applyExclusion 刪了但 skip 不命中 → 被重建。
+    // '2024-07-01T00:30:00+08:00' 的 UTC 時間是 2024-06-30T16:30:00Z，日期歸 2024-06-30
+    const rule = mkRule({ dateFrom: '2024-06-30', dateTo: '2024-06-30' })
+    expect(matchesExclusionRule('p', '2024-07-01T00:30:00+08:00', rule)).toBe(true)
+    // 同理 '2024-06-30T23:30:00-05:00' UTC = 2024-07-01 → 不在 06-30 範圍
+    expect(matchesExclusionRule('p', '2024-06-30T23:30:00-05:00', rule)).toBe(false)
+  })
+
+  it('invalid timestamp with date rule: conservative false (do not skip)', () => {
+    expect(matchesExclusionRule('p', 'not-a-date', mkRule({ dateFrom: '2024-06-01' }))).toBe(false)
+    expect(matchesExclusionRule('p', '', mkRule({ dateTo: '2024-06-30' }))).toBe(false)
+  })
+})
+
+// ── runIndexer exclusion rules (integration) ──
+
+describe('runIndexer exclusion rules', () => {
+  it('new session covered by rule is skipped on re-index (applyExclusion then rescan)', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-excl', { 'sess-excl-1': sampleSession1 })
+
+    // 初次索引 → sess-excl-1 存在
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-excl-1')).toHaveLength(2)
+
+    // 透過 applyExclusion 硬刪 + 留下規則
+    db.applyExclusion({ projectId: '-Users-test-excl', dateFrom: null, dateTo: null })
+    expect(db.getMessages('sess-excl-1')).toEqual([])
+
+    // 磁碟 JSONL 還在，但 rule 應阻止 re-index 重建
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-excl-1')).toEqual([])
+  })
+
+  it('removing the rule allows subsequent re-index to rebuild the session', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-excl2', { 'sess-excl-2': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir)
+    const { rule } = db.applyExclusion({ projectId: '-Users-test-excl2', dateFrom: null, dateTo: null })
+    expect(db.getMessages('sess-excl-2')).toEqual([])
+
+    // rule 還在 → 不重建
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-excl-2')).toEqual([])
+
+    // 移除 rule → 重建
+    db.removeExclusionRule(rule.id)
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-excl-2')).toHaveLength(2)
+  })
+
+  it('session outside rule date range is indexed normally', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-excl3', {
+      'sess-old': sampleSession1, // 2024-06-01
+      'sess-new': [{
+        type: 'user', uuid: 'un', timestamp: '2024-09-01T00:00:00.000Z',
+        sessionId: 'sess-new', message: { role: 'user', content: 'newer' },
+      }],
+    })
+
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-old')).toHaveLength(2)
+    expect(db.getMessages('sess-new')).toHaveLength(1)
+
+    // 規則只涵蓋 2024-06 → 刪 sess-old，留 sess-new
+    db.applyExclusion({ projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-30' })
+    expect(db.getMessages('sess-old')).toEqual([])
+    expect(db.getMessages('sess-new')).toHaveLength(1)
+
+    // re-index：sess-old 不重建，sess-new 保留
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-old')).toEqual([])
+    expect(db.getMessages('sess-new')).toHaveLength(1)
+  })
+
+  it('cross-day session attributed by first timestamp (start date)', async () => {
+    const crossDay = [
+      {
+        type: 'user', uuid: 'uc', timestamp: '2024-06-30T23:59:00.000Z',
+        sessionId: 'sess-cross', message: { role: 'user', content: 'hi' },
+      },
+      {
+        type: 'assistant', uuid: 'ac', parentUuid: 'uc',
+        timestamp: '2024-07-02T01:00:00.000Z', sessionId: 'sess-cross',
+        message: { role: 'assistant', content: 'next day' },
+      },
+    ]
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-cross', { 'sess-cross': crossDay })
+
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-cross')).toHaveLength(2)
+
+    // 只涵蓋 2024-06-30 單日：以 first timestamp 歸屬應命中
+    db.applyExclusion({ projectId: null, dateFrom: '2024-06-30', dateTo: '2024-06-30' })
+    expect(db.getMessages('sess-cross')).toEqual([])
+
+    // re-index：readFirstTimestamp 取第一行 → 日期 2024-06-30 → rule 命中 skip
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-cross')).toEqual([])
+  })
+
+  it('multiple rules: any match triggers skip', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-multi-A', { 'sess-A': sampleSession1 })
+    await createProject(baseDir, '-Users-multi-B', { 'sess-B': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir)
+    db.applyExclusion({ projectId: '-Users-multi-A', dateFrom: null, dateTo: null })
+    db.applyExclusion({ projectId: '-Users-multi-B', dateFrom: null, dateTo: null })
+
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getMessages('sess-A')).toEqual([])
+    expect(db.getMessages('sess-B')).toEqual([])
+  })
+
+  it('empty rules set → all sessions indexed normally (fast path)', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-none', { 'sess-plain': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir)
+    expect(db.getExclusionRules()).toEqual([])
+    expect(db.getMessages('sess-plain')).toHaveLength(2)
   })
 })

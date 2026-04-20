@@ -14,6 +14,12 @@ export function formatTime(iso: string | null): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+/** 取 ISO 字串的 YYYY-MM-DD 部分；null/空值回 '—' */
+export function formatDateOnly(iso: string | null): string {
+  if (!iso) return '—'
+  return iso.substring(0, 10)
+}
+
 export function formatDuration(seconds: number | null): string {
   if (seconds == null || seconds <= 0) return ''
   if (seconds < 60) return `${seconds}s`

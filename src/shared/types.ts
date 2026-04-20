@@ -288,6 +288,82 @@ export interface FileHistoryEntry {
   startedAt: string | null
 }
 
+// ── 儲存管理（v1.9.0） ──
+
+/** 排除規則：project_id / date_from / date_to 任一組合（至少一非空） */
+export interface ExclusionRule {
+  id: number
+  projectId: string | null
+  dateFrom: string | null  // ISO date YYYY-MM-DD
+  dateTo: string | null    // ISO date YYYY-MM-DD
+  createdAt: string
+}
+
+/** 建立排除規則的輸入（未分配 id） */
+export interface ExclusionRuleInput {
+  projectId: string | null
+  dateFrom: string | null
+  dateTo: string | null
+}
+
+/** 套用規則前的影響預覽 */
+export interface ExclusionPreview {
+  sessionCount: number
+  messageCount: number
+  estimatedBytes: number
+}
+
+/** IPC 層 preview 回傳：附一次性 applyToken，apply 必須消費對應 token */
+export interface ExclusionPreviewResult extends ExclusionPreview {
+  applyToken: string
+}
+
+/** 儲存總覽 */
+export interface StorageStats {
+  dbBytes: number
+  sessionCount: number
+  messageCount: number
+  projectCount: number
+  earliestTimestamp: string | null
+  latestTimestamp: string | null
+}
+
+/** 各專案占用 */
+export interface ProjectBreakdown {
+  projectId: string
+  displayName: string
+  sessionCount: number
+  messageCount: number
+  estimatedBytes: number
+  earliestTimestamp: string | null
+  latestTimestamp: string | null
+}
+
+/** 不活動 session 建議項 */
+export interface InactiveSession {
+  sessionId: string
+  projectId: string
+  projectName: string
+  title: string | null
+  lastActivity: string | null
+  messageCount: number
+}
+
+/** 儲存管理頁聚合 payload（一次拉齊 UI 所有區塊資料） */
+export interface StorageOverview {
+  stats: StorageStats
+  projects: ProjectBreakdown[]
+  inactiveSessions: InactiveSession[]
+  rules: ExclusionRule[]
+}
+
+/** applyExclusion 結果 */
+export interface ApplyExclusionResult {
+  rule: ExclusionRule
+  releasedBytes: number
+  vacuumed: boolean
+}
+
 /** Renderer 透過 contextBridge 取得的 API */
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>
@@ -336,6 +412,14 @@ export interface ElectronAPI {
   openReleasePage: () => Promise<void>
   /** 略過此版本的更新提示 */
   dismissUpdate: (version: string) => Promise<void>
+  /** 儲存管理總覽（stats + projects + inactive + rules 一次拉齊） */
+  getStorageOverview: (thresholdDays?: number) => Promise<StorageOverview>
+  /** 預覽排除規則影響（不刪任何資料，同時取得一次性 applyToken） */
+  previewExclusion: (rule: ExclusionRuleInput) => Promise<ExclusionPreviewResult>
+  /** 套用排除規則（消費 preview 的 applyToken，hard delete + FTS sync + best-effort VACUUM） */
+  applyExclusion: (applyToken: string) => Promise<ApplyExclusionResult>
+  /** 移除指定規則 */
+  removeExclusionRule: (id: number) => Promise<void>
 }
 
 /** 更新檢查狀態 */

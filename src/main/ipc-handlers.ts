@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
-import type { IndexerStatus, SearchOptions } from '../shared/types'
+import type { ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
@@ -10,6 +11,22 @@ function parseOptionalString(v: unknown): string | null {
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** 將 unknown 轉為 ExclusionRuleInput（IPC 參數驗證用；DB 層 normalizeRule 會做日期格式嚴驗） */
+function parseExclusionRuleInput(v: unknown): ExclusionRuleInput {
+  if (v == null || typeof v !== 'object') throw new Error('Invalid exclusion rule input')
+  const obj = v as Record<string, unknown>
+  const field = (f: unknown): string | null => {
+    if (f == null) return null
+    if (typeof f === 'string') return f
+    throw new Error('Exclusion rule fields must be string or null')
+  }
+  return {
+    projectId: field(obj.projectId),
+    dateFrom: field(obj.dateFrom),
+    dateTo: field(obj.dateTo),
+  }
+}
 
 /** 將 unknown 轉為 SearchOptions（IPC 參數驗證用） */
 function parseSearchOptions(v: unknown): SearchOptions | undefined {
@@ -131,6 +148,55 @@ export function registerIpcHandlers(db: Database): void {
   })
 
   ipcMain.handle('stats:project-health', () => db.getProjectHealth())
+
+  // ── v1.9.0: 儲存管理 ──
+  //
+  // Apply-token handshake（防 renderer trust-boundary 繞過）：
+  // preview 時 main 產一個 one-time token 並綁定 rule；apply 必須附 token，
+  // main 才會執行刪除。renderer 即使被 XSS 或 devtools script 操控，也無法
+  // 憑空 apply 任意 rule — 必須先走 preview 流程。token 60 秒後過期。
+  let applyToken: { id: string; rule: ExclusionRuleInput; expiresAt: number } | null = null
+  const APPLY_TOKEN_TTL_MS = 60_000
+
+  ipcMain.handle('storage:overview', (_event, thresholdDays?: unknown) => {
+    const days = typeof thresholdDays === 'number' && Number.isInteger(thresholdDays) && thresholdDays >= 0
+      ? Math.min(thresholdDays, 3650)
+      : 60
+    return {
+      stats: db.getStorageStats(),
+      projects: db.getProjectBreakdown(),
+      inactiveSessions: db.getInactiveSessions(days),
+      rules: db.getExclusionRules(),
+    }
+  })
+
+  ipcMain.handle('storage:preview', (_event, rule: unknown) => {
+    const parsed = parseExclusionRuleInput(rule)
+    const preview = db.previewExclusion(parsed)
+    const id = randomUUID()
+    applyToken = { id, rule: parsed, expiresAt: Date.now() + APPLY_TOKEN_TTL_MS }
+    return { ...preview, applyToken: id }
+  })
+
+  ipcMain.handle('storage:apply', (_event, token: unknown) => {
+    if (typeof token !== 'string' || token.length === 0) {
+      throw new Error('Invalid apply token')
+    }
+    if (!applyToken || applyToken.id !== token || applyToken.expiresAt < Date.now()) {
+      applyToken = null
+      throw new Error('Apply token expired or invalid. Please preview again.')
+    }
+    const rule = applyToken.rule
+    applyToken = null // one-time consume
+    return db.applyExclusion(rule)
+  })
+
+  ipcMain.handle('storage:remove-rule', (_event, id: unknown) => {
+    if (typeof id !== 'number' || !Number.isInteger(id) || id < 0) {
+      throw new Error('Invalid rule id')
+    }
+    db.removeExclusionRule(id)
+  })
 
   // ── 更新檢查 ──
 

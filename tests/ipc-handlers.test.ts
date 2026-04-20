@@ -79,6 +79,10 @@ describe('IPC Handlers', () => {
       expect(channels).toContain('sessions:list')
       expect(channels).toContain('session:load')
       expect(channels).toContain('search:query')
+      expect(channels).toContain('storage:overview')
+      expect(channels).toContain('storage:preview')
+      expect(channels).toContain('storage:apply')
+      expect(channels).toContain('storage:remove-rule')
     })
   })
 
@@ -187,6 +191,157 @@ describe('IPC Handlers', () => {
       const page = handler(event, 'Hello', 'proj-2')
       expect(page.results).toHaveLength(1)
       expect(page.results[0].projectId).toBe('proj-2')
+    })
+  })
+
+  // ── v1.9.0: 儲存管理 handlers ──
+
+  describe('storage:overview', () => {
+    it('returns aggregated { stats, projects, inactiveSessions, rules }', () => {
+      seedData(db)
+      const handler = getHandler('storage:overview')
+      const result = handler(event)
+      expect(result.stats.sessionCount).toBe(1)
+      expect(result.stats.messageCount).toBe(2)
+      expect(Array.isArray(result.projects)).toBe(true)
+      expect(result.projects[0].projectId).toBe('proj-1')
+      expect(Array.isArray(result.inactiveSessions)).toBe(true)
+      expect(result.rules).toEqual([])
+    })
+
+    it('threshold 0 marks all sessions as inactive', () => {
+      seedData(db)
+      const handler = getHandler('storage:overview')
+      const result = handler(event, 0)
+      expect(result.inactiveSessions.length).toBeGreaterThan(0)
+    })
+
+    it('invalid thresholdDays falls back to default (no throw)', () => {
+      seedData(db)
+      const handler = getHandler('storage:overview')
+      expect(() => handler(event, -1)).not.toThrow()
+      expect(() => handler(event, 'bad')).not.toThrow()
+      expect(() => handler(event, 3.14)).not.toThrow()
+    })
+  })
+
+  describe('storage:preview', () => {
+    it('returns non-zero preview with applyToken for matching rule', () => {
+      seedData(db)
+      const handler = getHandler('storage:preview')
+      const preview = handler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      expect(preview.sessionCount).toBe(1)
+      expect(preview.messageCount).toBe(2)
+      expect(typeof preview.applyToken).toBe('string')
+      expect(preview.applyToken.length).toBeGreaterThan(0)
+    })
+
+    it('returns zero counts for rule matching nothing (still includes applyToken)', () => {
+      seedData(db)
+      const handler = getHandler('storage:preview')
+      const preview = handler(event, { projectId: 'no-such-proj', dateFrom: null, dateTo: null })
+      expect(preview.sessionCount).toBe(0)
+      expect(preview.messageCount).toBe(0)
+      expect(preview.estimatedBytes).toBe(0)
+      expect(typeof preview.applyToken).toBe('string')
+    })
+
+    it('issues a fresh applyToken on each call (latest overwrites previous)', () => {
+      seedData(db)
+      const handler = getHandler('storage:preview')
+      const a = handler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      const b = handler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      expect(a.applyToken).not.toBe(b.applyToken)
+    })
+
+    it('throws on non-object input', () => {
+      const handler = getHandler('storage:preview')
+      expect(() => handler(event, null)).toThrow(/Invalid exclusion rule input/)
+      expect(() => handler(event, 'not-an-object')).toThrow(/Invalid exclusion rule input/)
+    })
+
+    it('throws on wrong-type field', () => {
+      const handler = getHandler('storage:preview')
+      expect(() => handler(event, { projectId: 123, dateFrom: null, dateTo: null })).toThrow(/string or null/)
+    })
+
+    it('throws when all fields are null (DB normalizeRule rejects empty rule)', () => {
+      const handler = getHandler('storage:preview')
+      expect(() => handler(event, { projectId: null, dateFrom: null, dateTo: null })).toThrow(/at least one/)
+    })
+  })
+
+  describe('storage:apply (apply-token handshake)', () => {
+    it('consumes a preview token to delete bound rule', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+
+      const applyHandler = getHandler('storage:apply')
+      const result = applyHandler(event, applyToken)
+      expect(result.rule.projectId).toBe('proj-1')
+      expect(typeof result.releasedBytes).toBe('number')
+      expect(typeof result.vacuumed).toBe('boolean')
+      expect(db.getMessages('sess-1')).toEqual([])
+      expect(db.getExclusionRules()).toHaveLength(1)
+    })
+
+    it('rejects a non-string / empty token', () => {
+      const handler = getHandler('storage:apply')
+      expect(() => handler(event, null)).toThrow(/Invalid apply token/)
+      expect(() => handler(event, 123)).toThrow(/Invalid apply token/)
+      expect(() => handler(event, '')).toThrow(/Invalid apply token/)
+    })
+
+    it('rejects an unknown token (defense against renderer-forged calls)', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+
+      const applyHandler = getHandler('storage:apply')
+      expect(() => applyHandler(event, 'forged-token-not-issued-by-main')).toThrow(/expired or invalid/)
+      // Valid session is NOT deleted
+      expect(db.getMessages('sess-1')).toHaveLength(2)
+    })
+
+    it('token is one-time: second apply with same token throws', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      const applyHandler = getHandler('storage:apply')
+      applyHandler(event, applyToken)
+      expect(() => applyHandler(event, applyToken)).toThrow(/expired or invalid/)
+    })
+
+    it('new preview invalidates the previous token', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const first = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null }) // overwrite
+      const applyHandler = getHandler('storage:apply')
+      expect(() => applyHandler(event, first.applyToken)).toThrow(/expired or invalid/)
+    })
+  })
+
+  describe('storage:remove-rule', () => {
+    it('removes the rule by id', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      const applyHandler = getHandler('storage:apply')
+      const { rule } = applyHandler(event, applyToken)
+      expect(db.getExclusionRules()).toHaveLength(1)
+
+      const removeHandler = getHandler('storage:remove-rule')
+      removeHandler(event, rule.id)
+      expect(db.getExclusionRules()).toEqual([])
+    })
+
+    it('throws on non-integer or negative id', () => {
+      const handler = getHandler('storage:remove-rule')
+      expect(() => handler(event, 'not-a-number')).toThrow(/Invalid rule id/)
+      expect(() => handler(event, -1)).toThrow(/Invalid rule id/)
+      expect(() => handler(event, 1.5)).toThrow(/Invalid rule id/)
     })
   })
 

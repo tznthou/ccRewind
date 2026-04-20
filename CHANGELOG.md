@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-04-21
+
+### Added
+
+- **Storage Management** — User-controlled disk usage for the local index database (`~/.ccrewind/index.db`). Reach it from the new database icon in the title bar.
+  - Overview cards: DB size (including WAL / SHM sidecars), session / message / project counts, earliest-to-latest activity span.
+  - Per-project breakdown with a size bar and a one-click "exclude this project" button, sorted by estimated bytes descending.
+  - Collapsed advanced panel for date-range exclusion: project picker + two native date inputs with a debounced live preview of the affected counts.
+  - Existing rules list with a per-rule remove button.
+  - Unified confirm dialog: no typed confirmation, just an "I understand this is irreversible" checkbox (disabled until ticked). A red banner warns when the hit ratio exceeds 50 %. Backdrop / buttons / checkbox freeze during apply and the button label swaps to "刪除中..." — prevents double-submit.
+  - Four new IPC handlers (`storage:overview` / `preview` / `apply` / `remove-rule`) expose the DB layer to the renderer via invoke/handle + preload. `storage:overview` aggregates stats + project breakdown + inactive sessions + rules in a single round-trip.
+
+- **Indexer skip for rule-matched sessions** — The indexer now reads active exclusion rules once per run and skips new sessions that match. Prevents re-importing the JSONL-backed sessions that `applyExclusion` just hard-deleted. Skip only applies to new (unindexed) sessions — already-indexed rows keep their normal mtime-driven update behaviour.
+  - `readFirstTimestamp` scans the full JSONL to find the first timestamped line, matching `parser.parseSession.startedAt` semantics so the skip decision lines up with what `applyExclusion` used to delete. Files over 64 MiB are treated as "timestamp unknown" (DoS guard) and fall back to the full parse path.
+  - `matchesExclusionRule` normalises timestamps to UTC via `new Date → toISOString().substring(0,10)` so offset-bearing inputs (e.g. `2024-07-01T00:30:00+08:00`) agree with SQLite's `DATE()` normalisation; invalid timestamps conservatively return false.
+
+- **Storage Management DB layer** (infrastructure for the above): `exclusion_rules` table (migration v16) with composite project + date range rules, nullable columns, and `CHECK` ensuring at least one non-null criterion. Database methods cover storage stats, per-project breakdown, inactive session detection, exclusion rule CRUD, preview (aggregate-only, no ID materialization), and apply (hard delete + FTS sync + CASCADE + best-effort `VACUUM` within a single atomic transaction). Session-to-date mapping uses first message timestamp (conservative: cross-day sessions stay with their start day). `applyExclusion` returns `vacuumed: boolean` so a post-commit `VACUUM` failure does not mislead callers into retrying an already-deleted operation.
+
+### Security
+
+- **IPC apply-token handshake** — `storage:apply` no longer accepts an exclusion rule directly. Each `storage:preview` issues a one-time UUID bound to the parsed rule (60-second TTL, single-slot, one-time consume); `apply` requires that token and rejects unknown / expired / re-used values. Closes a renderer trust-boundary gap where a compromised renderer (XSS, injected devtools script) could otherwise bypass the UI checkbox and hard-delete arbitrary rules.
+
+### Changed
+
+- **DB schema**: migration v16 adds `exclusion_rules` table with `project_id` FK and `idx_exclusion_project` index.
+- `getDbBytes` now sums `-wal` and `-shm` sidecar files for accurate WAL-mode disk usage reporting.
+- Exclusion rule input hardening: rejects empty/whitespace criteria, enforces `YYYY-MM-DD` date format, and validates `thresholdDays` as a non-negative integer — preventing SQL comparison bypasses (`DATE(started_at) >= ''` or `DATE('bad-input')` returning `NULL`) that could cause mass accidental deletion.
+- Internal: `chunkedIn` helper centralises 500-row `IN (...)` batching across exclusion-related queries; FTS5 `sessions_fts` rowid deletion extracted to `deleteSessionsFromFts` helper.
+- Renderer API: `applyExclusion` signature changes from `(rule)` to `(applyToken)` to match the handshake.
+
 ## [1.8.0] - 2026-04-11
 
 ### Added
