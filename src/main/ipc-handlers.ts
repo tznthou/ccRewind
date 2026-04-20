@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import type { Database } from './database'
-import type { IndexerStatus, SearchOptions } from '../shared/types'
+import type { ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
@@ -10,6 +10,22 @@ function parseOptionalString(v: unknown): string | null {
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+/** 將 unknown 轉為 ExclusionRuleInput（IPC 參數驗證用；DB 層 normalizeRule 會做日期格式嚴驗） */
+function parseExclusionRuleInput(v: unknown): ExclusionRuleInput {
+  if (v == null || typeof v !== 'object') throw new Error('Invalid exclusion rule input')
+  const obj = v as Record<string, unknown>
+  const field = (f: unknown): string | null => {
+    if (f == null) return null
+    if (typeof f === 'string') return f
+    throw new Error('Exclusion rule fields must be string or null')
+  }
+  return {
+    projectId: field(obj.projectId),
+    dateFrom: field(obj.dateFrom),
+    dateTo: field(obj.dateTo),
+  }
+}
 
 /** 將 unknown 轉為 SearchOptions（IPC 參數驗證用） */
 function parseSearchOptions(v: unknown): SearchOptions | undefined {
@@ -131,6 +147,35 @@ export function registerIpcHandlers(db: Database): void {
   })
 
   ipcMain.handle('stats:project-health', () => db.getProjectHealth())
+
+  // ── v1.9.0: 儲存管理 ──
+
+  ipcMain.handle('storage:overview', (_event, thresholdDays?: unknown) => {
+    const days = typeof thresholdDays === 'number' && Number.isInteger(thresholdDays) && thresholdDays >= 0
+      ? Math.min(thresholdDays, 3650)
+      : 60
+    return {
+      stats: db.getStorageStats(),
+      projects: db.getProjectBreakdown(),
+      inactiveSessions: db.getInactiveSessions(days),
+      rules: db.getExclusionRules(),
+    }
+  })
+
+  ipcMain.handle('storage:preview', (_event, rule: unknown) => {
+    return db.previewExclusion(parseExclusionRuleInput(rule))
+  })
+
+  ipcMain.handle('storage:apply', (_event, rule: unknown) => {
+    return db.applyExclusion(parseExclusionRuleInput(rule))
+  })
+
+  ipcMain.handle('storage:remove-rule', (_event, id: unknown) => {
+    if (typeof id !== 'number' || !Number.isInteger(id) || id < 0) {
+      throw new Error('Invalid rule id')
+    }
+    db.removeExclusionRule(id)
+  })
 
   // ── 更新檢查 ──
 
