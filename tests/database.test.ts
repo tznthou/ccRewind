@@ -1324,6 +1324,21 @@ describe('exclusion_rules schema (v16)', () => {
       db.addExclusionRule({ projectId: null, dateFrom: null, dateTo: null }),
     ).toThrow()
   })
+
+  it('normalize: empty-string criteria are rejected (all empty → throw)', () => {
+    expect(() =>
+      db.addExclusionRule({ projectId: '', dateFrom: '', dateTo: '' }),
+    ).toThrow(/non-empty/)
+    expect(() =>
+      db.previewExclusion({ projectId: '  ', dateFrom: '', dateTo: '  ' }),
+    ).toThrow(/non-empty/)
+  })
+
+  it('normalize: empty-string criteria are coerced to null (mixed)', () => {
+    db.upsertProject('proj-norm', '/n')
+    const preview = db.previewExclusion({ projectId: 'proj-norm', dateFrom: '', dateTo: '  ' })
+    expect(preview.sessionCount).toBe(0)  // project has no sessions; '' ignored — not matching all dates
+  })
 })
 
 describe('exclusion rules CRUD', () => {
@@ -1400,8 +1415,9 @@ describe('applyExclusion', () => {
   })
 
   it('hard-deletes matching sessions + messages + FTS entries', () => {
-    const { rule } = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
-    expect(rule.projectId).toBe('proj-a')
+    const result = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(result.rule.projectId).toBe('proj-a')
+    expect(result.vacuumed).toBe(true)  // happy path: VACUUM succeeded
 
     const remaining = db.rawAll<{ id: string }>("SELECT id FROM sessions")
     expect(remaining.map(r => r.id)).toEqual(['s-b1'])

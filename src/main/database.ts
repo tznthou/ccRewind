@@ -1704,6 +1704,23 @@ export class Database {
     }
   }
 
+  /**
+   * 將規則 normalize：空字串→null，trim whitespace。
+   * 防止空字串 criteria 在 SQL 比對時 match 所有 row（例：`DATE(x) >= ''` 對非 null date 恆真）。
+   */
+  private normalizeRule(rule: ExclusionRuleInput): ExclusionRuleInput {
+    const norm = (v: string | null): string | null => {
+      if (v == null) return null
+      const t = v.trim()
+      return t === '' ? null : t
+    }
+    const r = { projectId: norm(rule.projectId), dateFrom: norm(rule.dateFrom), dateTo: norm(rule.dateTo) }
+    if (!r.projectId && !r.dateFrom && !r.dateTo) {
+      throw new Error('Exclusion rule requires at least one non-empty criterion')
+    }
+    return r
+  }
+
   /** 組出規則匹配的 WHERE clause 與 params（動態，不填 NULL 欄位）*/
   private buildExclusionWhere(rule: ExclusionRuleInput): { clause: string; params: string[] } {
     const clauses: string[] = [`id ${Database.EXCLUDE_SUBAGENTS}`]
@@ -1723,9 +1740,14 @@ export class Database {
     return { clause: clauses.join(' AND '), params }
   }
 
+  /** DB 磁碟占用：WAL 模式下需同時計 -wal 與 -shm sidecar 檔 */
   getDbBytes(): number {
     if (this.db.name === ':memory:') return 0
-    try { return statSync(this.db.name).size } catch { return 0 }
+    let total = 0
+    for (const suffix of ['', '-wal', '-shm']) {
+      try { total += statSync(this.db.name + suffix).size } catch { /* sidecar may not exist */ }
+    }
+    return total
   }
 
   getStorageStats(): StorageStats {
@@ -1835,7 +1857,8 @@ export class Database {
       .all(...w.params) as Array<{ id: string; project_id: string }>
   }
 
-  previewExclusion(rule: ExclusionRuleInput): ExclusionPreview {
+  previewExclusion(rawRule: ExclusionRuleInput): ExclusionPreview {
+    const rule = this.normalizeRule(rawRule)
     const w = this.buildExclusionWhere(rule)
     const main = this.db.prepare(`
       SELECT COUNT(*) AS session_count, COALESCE(SUM(message_count), 0) AS message_count
@@ -1860,7 +1883,8 @@ export class Database {
     }
   }
 
-  addExclusionRule(rule: ExclusionRuleInput): ExclusionRule {
+  addExclusionRule(rawRule: ExclusionRuleInput): ExclusionRule {
+    const rule = this.normalizeRule(rawRule)
     const row = this.db.prepare(`
       INSERT INTO exclusion_rules (project_id, date_from, date_to) VALUES (?, ?, ?)
       RETURNING id, project_id, date_from, date_to, created_at
@@ -1887,8 +1911,10 @@ export class Database {
   /**
    * 套用規則：找出匹配 session → 刪除（含 subagent、sessions_fts manual delete、CASCADE 連帶）→ 寫規則 → VACUUM
    * 注意：VACUUM 不能在 transaction 內執行，已在 tx 外。呼叫端勿將本方法包入另一層 transaction。
+   * VACUUM 為「已 commit delete 後」的 best-effort 壓縮；失敗不 throw，避免讓 caller 以為刪除失敗（資料已永久刪除）。
    */
-  applyExclusion(rule: ExclusionRuleInput): { rule: ExclusionRule; releasedBytes: number } {
+  applyExclusion(rawRule: ExclusionRuleInput): { rule: ExclusionRule; releasedBytes: number; vacuumed: boolean } {
+    const rule = this.normalizeRule(rawRule)
     const bytesBefore = this.getDbBytes()
     const sessions = this.findMatchingSessionIds(rule)
     const sessionIds = sessions.map(s => s.id)
@@ -1908,8 +1934,11 @@ export class Database {
       return r
     })()
 
-    if (allIds.length > 0) this.db.exec('VACUUM')
-    return { rule: createdRule, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()) }
+    let vacuumed = false
+    if (allIds.length > 0) {
+      try { this.db.exec('VACUUM'); vacuumed = true } catch { /* delete already committed */ }
+    }
+    return { rule: createdRule, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()), vacuumed }
   }
 
   /** 將多個 session 從 sessions_fts 移除（external content FTS5 需手動維護）*/
