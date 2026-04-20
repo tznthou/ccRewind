@@ -28,7 +28,7 @@ const api: ElectronAPI = {
   dismissUpdate: (version) => ipcRenderer.invoke('updates:dismiss', version),
   getStorageOverview: (thresholdDays) => ipcRenderer.invoke('storage:overview', thresholdDays),
   previewExclusion: (rule) => ipcRenderer.invoke('storage:preview', rule),
-  applyExclusion: (rule) => ipcRenderer.invoke('storage:apply', rule),
+  applyExclusion: (applyToken) => ipcRenderer.invoke('storage:apply', applyToken),
   removeExclusionRule: (id) => ipcRenderer.invoke('storage:remove-rule', id),
   onIndexerStatus: (callback) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron IPC event param

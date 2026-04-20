@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
 import type { ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
@@ -149,6 +150,13 @@ export function registerIpcHandlers(db: Database): void {
   ipcMain.handle('stats:project-health', () => db.getProjectHealth())
 
   // ── v1.9.0: 儲存管理 ──
+  //
+  // Apply-token handshake（防 renderer trust-boundary 繞過）：
+  // preview 時 main 產一個 one-time token 並綁定 rule；apply 必須附 token，
+  // main 才會執行刪除。renderer 即使被 XSS 或 devtools script 操控，也無法
+  // 憑空 apply 任意 rule — 必須先走 preview 流程。token 60 秒後過期。
+  let applyToken: { id: string; rule: ExclusionRuleInput; expiresAt: number } | null = null
+  const APPLY_TOKEN_TTL_MS = 60_000
 
   ipcMain.handle('storage:overview', (_event, thresholdDays?: unknown) => {
     const days = typeof thresholdDays === 'number' && Number.isInteger(thresholdDays) && thresholdDays >= 0
@@ -163,11 +171,24 @@ export function registerIpcHandlers(db: Database): void {
   })
 
   ipcMain.handle('storage:preview', (_event, rule: unknown) => {
-    return db.previewExclusion(parseExclusionRuleInput(rule))
+    const parsed = parseExclusionRuleInput(rule)
+    const preview = db.previewExclusion(parsed)
+    const id = randomUUID()
+    applyToken = { id, rule: parsed, expiresAt: Date.now() + APPLY_TOKEN_TTL_MS }
+    return { ...preview, applyToken: id }
   })
 
-  ipcMain.handle('storage:apply', (_event, rule: unknown) => {
-    return db.applyExclusion(parseExclusionRuleInput(rule))
+  ipcMain.handle('storage:apply', (_event, token: unknown) => {
+    if (typeof token !== 'string' || token.length === 0) {
+      throw new Error('Invalid apply token')
+    }
+    if (!applyToken || applyToken.id !== token || applyToken.expiresAt < Date.now()) {
+      applyToken = null
+      throw new Error('Apply token expired or invalid. Please preview again.')
+    }
+    const rule = applyToken.rule
+    applyToken = null // one-time consume
+    return db.applyExclusion(rule)
   })
 
   ipcMain.handle('storage:remove-rule', (_event, id: unknown) => {

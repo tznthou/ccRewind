@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { StorageOverview, ExclusionRuleInput, ExclusionPreview } from '../../../shared/types'
+import type { StorageOverview, ExclusionRuleInput, ExclusionPreviewResult } from '../../../shared/types'
 import StorageOverviewCards from './StorageOverviewCards'
 import ProjectBreakdownList from './ProjectBreakdown'
 import DateRangeExclusionForm from './DateRangeExclusionForm'
@@ -8,8 +8,7 @@ import ConfirmExclusionDialog from './ConfirmExclusionDialog'
 import styles from './Storage.module.css'
 
 interface PendingExclusion {
-  rule: ExclusionRuleInput
-  preview: ExclusionPreview
+  preview: ExclusionPreviewResult
   title: string
 }
 
@@ -18,6 +17,7 @@ export default function StoragePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState<PendingExclusion | null>(null)
+  const [isApplying, setIsApplying] = useState(false)
 
   const refresh = useCallback(async () => {
     try {
@@ -39,25 +39,30 @@ export default function StoragePage() {
     try {
       const preview = await window.api.previewExclusion(rule)
       if (preview.sessionCount === 0) {
-        // 防禦：沒影響就不開 dialog
+        // 防禦：沒影響就不開 dialog（也不消費 main 剛產的 token，讓它自然過期）
         return
       }
-      setPending({ rule, preview, title })
+      setPending({ preview, title })
     } catch (err) {
       setError(err instanceof Error ? err.message : '預覽失敗')
     }
   }, [])
 
   const confirmApply = useCallback(async () => {
-    if (!pending) return
+    // Re-entrant guard：若正在 apply，後續按鈕點擊直接 no-op；snapshot pending 避免 cleanup 時 race
+    if (!pending || isApplying) return
+    const snapshot = pending
+    setIsApplying(true)
     try {
-      await window.api.applyExclusion(pending.rule)
+      await window.api.applyExclusion(snapshot.preview.applyToken)
       setPending(null)
       await refresh()
     } catch (err) {
       setError(err instanceof Error ? err.message : '套用失敗')
+    } finally {
+      setIsApplying(false)
     }
-  }, [pending, refresh])
+  }, [pending, isApplying, refresh])
 
   const removeRule = useCallback(async (id: number) => {
     try {
@@ -132,8 +137,9 @@ export default function StoragePage() {
           title={pending.title}
           preview={pending.preview}
           totalSessions={overview.stats.sessionCount}
+          isApplying={isApplying}
           onConfirm={confirmApply}
-          onCancel={() => setPending(null)}
+          onCancel={() => { if (!isApplying) setPending(null) }}
         />
       )}
     </div>

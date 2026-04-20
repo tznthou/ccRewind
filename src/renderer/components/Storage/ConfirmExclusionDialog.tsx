@@ -7,19 +7,20 @@ interface Props {
   title: string
   preview: ExclusionPreview
   totalSessions: number
+  isApplying?: boolean
   onConfirm: () => void
   onCancel: () => void
 }
 
 const HIGH_IMPACT_RATIO = 0.5
 
-export default function ConfirmExclusionDialog({ title, preview, totalSessions, onConfirm, onCancel }: Props) {
+export default function ConfirmExclusionDialog({ title, preview, totalSessions, isApplying, onConfirm, onCancel }: Props) {
   const [acknowledged, setAcknowledged] = useState(false)
   const impactRatio = totalSessions > 0 ? preview.sessionCount / totalSessions : 0
   const highImpact = impactRatio > HIGH_IMPACT_RATIO
 
   return (
-    <div className={styles.backdrop} onClick={onCancel}>
+    <div className={styles.backdrop} onClick={() => { if (!isApplying) onCancel() }}>
       <div className={styles.dialog} onClick={e => e.stopPropagation()}>
         <div className={styles.dialogTitle}>{title}</div>
         <div className={styles.dialogSummary}>
@@ -39,19 +40,20 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
           <input
             type="checkbox"
             checked={acknowledged}
+            disabled={isApplying}
             onChange={e => setAcknowledged(e.target.checked)}
           />
           我了解此操作不可復原
         </label>
 
         <div className={styles.dialogActions}>
-          <button className={styles.button} onClick={onCancel}>取消</button>
+          <button className={styles.button} onClick={onCancel} disabled={isApplying}>取消</button>
           <button
             className={`${styles.button} ${styles.dangerButton}`}
-            disabled={!acknowledged}
+            disabled={!acknowledged || isApplying}
             onClick={onConfirm}
           >
-            確認刪除
+            {isApplying ? '刪除中...' : '確認刪除'}
           </button>
         </div>
       </div>

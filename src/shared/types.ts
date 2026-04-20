@@ -313,6 +313,11 @@ export interface ExclusionPreview {
   estimatedBytes: number
 }
 
+/** IPC 層 preview 回傳：附一次性 applyToken，apply 必須消費對應 token */
+export interface ExclusionPreviewResult extends ExclusionPreview {
+  applyToken: string
+}
+
 /** 儲存總覽 */
 export interface StorageStats {
   dbBytes: number
@@ -409,10 +414,10 @@ export interface ElectronAPI {
   dismissUpdate: (version: string) => Promise<void>
   /** 儲存管理總覽（stats + projects + inactive + rules 一次拉齊） */
   getStorageOverview: (thresholdDays?: number) => Promise<StorageOverview>
-  /** 預覽排除規則影響（不刪任何資料） */
-  previewExclusion: (rule: ExclusionRuleInput) => Promise<ExclusionPreview>
-  /** 套用排除規則（hard delete + FTS sync + best-effort VACUUM） */
-  applyExclusion: (rule: ExclusionRuleInput) => Promise<ApplyExclusionResult>
+  /** 預覽排除規則影響（不刪任何資料，同時取得一次性 applyToken） */
+  previewExclusion: (rule: ExclusionRuleInput) => Promise<ExclusionPreviewResult>
+  /** 套用排除規則（消費 preview 的 applyToken，hard delete + FTS sync + best-effort VACUUM） */
+  applyExclusion: (applyToken: string) => Promise<ApplyExclusionResult>
   /** 移除指定規則 */
   removeExclusionRule: (id: number) => Promise<void>
 }
