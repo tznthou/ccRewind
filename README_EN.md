@@ -67,6 +67,7 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Active Time** | Session duration prioritizes active time (excluding >5min idle periods), with wall-clock time shown in parentheses. Dashboard averages use active time |
 | **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
+| **Storage Management** | Inspect index DB footprint (size, session/message counts, per-project breakdown with visual bars) and reclaim space via exclusion rules — exclude an entire project in one click, or a date range, or remove existing rules. Every destructive action funnels through a unified confirm dialog (checkbox acknowledgement + red banner above 50% impact), with an apply-token IPC handshake closing the renderer trust-boundary gap |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
@@ -102,6 +103,20 @@ Below the search bar, filter controls let you narrow results:
 
 Both modes support "All projects / Current project" scope filtering. Search result groups display the session date, and session search results show outcome status badges.
 
+### Storage Management
+
+The index database at `~/.ccrewind/index.db` grows with your Claude Code usage. Click the cylindrical database icon in the title bar to open the storage page:
+
+- **Overview cards**: DB size (including WAL/SHM sidecars), counts of sessions / messages / projects, earliest-to-latest activity span
+- **Project breakdown**: each project shown with a visual size bar sorted by bytes descending, with a one-click "Exclude this project" button per row
+- **Date-range exclusion**: a collapsed advanced panel with a project picker plus two native date inputs; a debounced live preview shows the exact session / message / byte impact as you pick conditions
+- **Existing rules**: listed with a per-rule remove button — removing a rule lets the indexer rebuild the matching sessions on the next run
+- **Unified confirm dialog**: every destructive action funnels through the same dialog — a single "I understand this is irreversible" checkbox (nothing to type), a red banner when the hit ratio exceeds 50%, and backdrop/buttons/checkbox all frozen during apply to prevent double-submit
+
+**Security**: `storage:apply` does not accept a rule directly. Each `storage:preview` issues a one-time UUID bound to the rule (60-second TTL, single-slot); `apply` can only consume that token. A compromised renderer (XSS, injected devtools script) cannot forge an apply call — it must first go through a preview issued by the main process.
+
+The indexer reads active rules once per run and silently skips new sessions that match, so a hard-deleted session is not re-imported while its JSONL still sits on disk. Skip applies to new sessions only; already-indexed rows keep their normal mtime-driven update path.
+
 ---
 
 ## Architecture
@@ -110,9 +125,10 @@ Both modes support "All projects / Current project" scope filtering. Search resu
 graph TB
     subgraph Main Process
         FS[File Scanner<br>~/.claude/projects/] --> JP[JSONL Parser]
-        JP --> DB[(SQLite + FTS5)]
-        DB --> IPC[IPC Handlers]
+        JP --> DB[(SQLite + FTS5<br>+ session_files<br>+ exclusion_rules)]
+        DB --> IPC[IPC Handlers<br>sessions · search · stats · files<br>related · export · storage]
         EX[Markdown Exporter] --> IPC
+        AT[Apply-Token Handshake<br>one-time UUID · 60s TTL] --> IPC
     end
 
     subgraph Renderer Process
@@ -120,12 +136,14 @@ graph TB
         CV[ChatView<br>Conversation Reader + Token Budget<br>+ File Chips + Related Sessions]
         DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Waste Detection · Tool/Tag Distribution · Work Patterns]
         FH[FileHistoryDrawer<br>Cross-Session File History Timeline]
+        SP[StoragePage<br>Overview cards · Project bars<br>Exclusion rules · Confirm Dialog]
     end
 
     IPC <-->|invoke / handle| SB
     IPC <-->|invoke / handle| CV
     IPC <-->|invoke / handle| DB_UI
     IPC <-->|invoke / handle| FH
+    IPC <-->|invoke / handle| SP
 ```
 
 ---
@@ -140,7 +158,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 231 tests, run through Electron |
+| Vitest 3 | Test framework | 294 tests, run through Electron |
 
 ---
 
@@ -201,6 +219,7 @@ ccRewind/
 │   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + export
 │   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
+│   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
 │   │   │   └── UpdateBanner/  # Update notification banner
@@ -209,7 +228,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext (theme persistence)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (231)
+├── tests/                     # Vitest tests (294)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -255,6 +274,8 @@ See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
 | 4.5 | ✅ Done | Search UX: date filter, sort toggle, intent_text search, result date & outcome badges |
 | 5 | ✅ Done | Active time calculation + subagent indexing + requestId token dedup |
 | 5.5 | ✅ Done | Subagent frontend UI: chip navigation + breadcrumb back |
+| 6 | ✅ Done | Storage management: exclusion_rules + overview page + project breakdown + date-range rules + IPC apply-token handshake + indexer skip (v1.9.0) |
+| — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 
 ---
