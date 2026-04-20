@@ -144,7 +144,9 @@ Session 列表的每筆項目旁顯示 token 總量（如 1.2M），並可點擊
 
 ### 儲存管理
 
-ccRewind 的索引資料庫（`~/.ccrewind/index.db`）會隨著 Claude Code 使用量成長。點擊標題列的資料庫圖示（圓柱形）進入儲存管理頁：
+Claude Code 的原始 JSONL（`~/.claude/projects/`）有自己的定時清理機制，不需要我們擔心——ccRewind 是純唯讀應用，絕不碰你的原始資料。這裡管理的是 ccRewind **自己的索引資料庫**（`~/.ccrewind/index.db`），它會隨著 Claude Code 使用量成長。
+
+點擊標題列的資料庫圖示（圓柱形）進入儲存管理頁：
 
 - **總覽卡**：DB 大小（含 WAL/SHM sidecar）、Session / Message 數、專案數、最早到最新的活動時間範圍
 - **專案佔用**：以視覺化 bar 呈現各專案相對容量，按大小降冪排序；每列附「排除此專案」一鍵按鈕

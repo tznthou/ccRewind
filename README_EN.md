@@ -105,7 +105,9 @@ Both modes support "All projects / Current project" scope filtering. Search resu
 
 ### Storage Management
 
-The index database at `~/.ccrewind/index.db` grows with your Claude Code usage. Click the cylindrical database icon in the title bar to open the storage page:
+Claude Code has its own periodic cleanup for the raw JSONL under `~/.claude/projects/`, so you don't need to worry about those — ccRewind is a strictly read-only tool and never touches your source data. What this page manages is ccRewind's **own index database** at `~/.ccrewind/index.db`, which grows with your Claude Code usage.
+
+Click the cylindrical database icon in the title bar to open the storage page:
 
 - **Overview cards**: DB size (including WAL/SHM sidecars), counts of sessions / messages / projects, earliest-to-latest activity span
 - **Project breakdown**: each project shown with a visual size bar sorted by bytes descending, with a one-click "Exclude this project" button per row
