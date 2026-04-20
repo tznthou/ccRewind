@@ -3,6 +3,7 @@ import { ThemeProvider } from './context/ThemeContext'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatView from './components/ChatView/ChatView'
 import DashboardPage from './components/Dashboard/DashboardPage'
+import StoragePage from './components/Storage/StoragePage'
 import FileHistoryDrawer from './components/Archaeology/FileHistoryDrawer'
 import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher'
 import styles from './App.module.css'
@@ -24,11 +25,26 @@ function AppContent() {
             <rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
           </svg>
         </button>
+        <button
+          className={`${styles.viewToggle} ${viewMode === 'storage' ? styles.viewToggleActive : ''}`}
+          onClick={() => dispatch({ type: 'SET_VIEW_MODE', mode: viewMode === 'storage' ? 'sessions' : 'storage' })}
+          title="Storage Management"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <ellipse cx="12" cy="5" rx="9" ry="3" />
+            <path d="M3 5v14a9 3 0 0 0 18 0V5" />
+            <path d="M3 12a9 3 0 0 0 18 0" />
+          </svg>
+        </button>
         <ThemeSwitcher />
       </div>
       {viewMode === 'dashboard' ? (
         <main className={`${styles.main} ${styles.mainFull}`}>
           <DashboardPage />
+        </main>
+      ) : viewMode === 'storage' ? (
+        <main className={`${styles.main} ${styles.mainFull}`}>
+          <StoragePage />
         </main>
       ) : (
         <>

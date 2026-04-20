@@ -1,7 +1,7 @@
 import { createContext, useContext, useReducer, type ReactNode, type Dispatch } from 'react'
 import type { SearchResult, SessionSearchResult, SearchScope, SearchOptions } from '../../shared/types'
 
-export type ViewMode = 'sessions' | 'dashboard'
+export type ViewMode = 'sessions' | 'dashboard' | 'storage'
 
 interface AppState {
   viewMode: ViewMode
