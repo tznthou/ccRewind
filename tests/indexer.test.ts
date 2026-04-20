@@ -461,6 +461,19 @@ describe('readFirstTimestamp', () => {
     await writeFile(filePath, lines.join('\n'))
     expect(await readFirstTimestamp(filePath)).toBe('2024-09-01T00:00:00.000Z')
   })
+
+  it('returns null for files exceeding size guard (DoS protection)', async () => {
+    // 防回歸：無 size guard 時，惡意/異常大檔會被 readFile 全載入記憶體。
+    // 超過 maxBytes 應直接回 null（null 對 date rule 保守不匹配，不破壞 skip 語意）。
+    const filePath = path.join(tmpDir, 'oversized.jsonl')
+    await writeFile(filePath, makeJsonl([
+      { timestamp: '2024-06-01T10:00:00.000Z', type: 'user' },
+    ]))
+    // 檔案 size ~60 bytes；設 guard 為 10 bytes → 應觸發 guard
+    expect(await readFirstTimestamp(filePath, 10)).toBeNull()
+    // 正常 guard 下仍能讀到
+    expect(await readFirstTimestamp(filePath)).toBe('2024-06-01T10:00:00.000Z')
+  })
 })
 
 // ── matchesExclusionRule ──

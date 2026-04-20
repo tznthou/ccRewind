@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { readFile } from 'node:fs/promises'
+import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents } from './scanner'
@@ -12,10 +12,19 @@ export type ProgressCallback = (status: IndexerStatus) => void
  * 掃整份 JSONL，回傳第一個帶 timestamp 的行。與 parser.parseSession 的 startedAt
  * 來源一致（整檔掃）——否則 applyExclusion 依完整掃描的 started_at 刪了 session，
  * re-index 時因 peek 截斷拿不到 timestamp 就會讓它被 re-import，破壞 skip 契約。
+ * DoS guard：大於 maxBytes 的檔案直接回 null（null 對 date rule 保守不匹配，
+ * 下游走 parseSession 路徑保持原有行為）。
  */
-export async function readFirstTimestamp(filePath: string): Promise<string | null> {
+export const READ_FIRST_TIMESTAMP_MAX_BYTES = 64 * 1024 * 1024
+
+export async function readFirstTimestamp(
+  filePath: string,
+  maxBytes: number = READ_FIRST_TIMESTAMP_MAX_BYTES,
+): Promise<string | null> {
   let content: string
   try {
+    const { size } = await stat(filePath)
+    if (size > maxBytes) return null
     content = await readFile(filePath, 'utf-8')
   } catch {
     return null
