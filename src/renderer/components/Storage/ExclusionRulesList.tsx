@@ -1,5 +1,6 @@
 import type { ExclusionRule, ProjectBreakdown } from '../../../shared/types'
 import { lastSegment } from '../../utils/pathDisplay'
+import { formatDateOnly } from '../../utils/formatTime'
 import styles from './Storage.module.css'
 
 interface Props {
@@ -34,7 +35,7 @@ export default function ExclusionRulesList({ rules, projects, onRemove }: Props)
       {rules.map(rule => (
         <div key={rule.id} className={styles.ruleRow}>
           <div className={styles.ruleText}>{formatRule(rule, projects)}</div>
-          <div className={styles.ruleMeta}>{rule.createdAt.substring(0, 10)}</div>
+          <div className={styles.ruleMeta}>{formatDateOnly(rule.createdAt)}</div>
           <button
             className={`${styles.button} ${styles.ghostButton}`}
             onClick={() => onRemove(rule.id)}

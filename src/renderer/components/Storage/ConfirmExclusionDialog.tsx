@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import type { ExclusionPreview } from '../../../shared/types'
-import { formatBytes } from '../../utils/formatBytes'
+import ExclusionPreviewSummary from './ExclusionPreviewSummary'
 import styles from './Storage.module.css'
 
 interface Props {
@@ -24,7 +24,7 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
       <div className={styles.dialog} onClick={e => e.stopPropagation()}>
         <div className={styles.dialogTitle}>{title}</div>
         <div className={styles.dialogSummary}>
-          將刪除 <strong>{preview.sessionCount}</strong> 個 session · <strong>{preview.messageCount.toLocaleString()}</strong> 條訊息 · 約 <strong>{formatBytes(preview.estimatedBytes)}</strong>
+          <ExclusionPreviewSummary preview={preview} />
           {totalSessions > 0 && (
             <span>（佔全部 {(impactRatio * 100).toFixed(1)}%）</span>
           )}

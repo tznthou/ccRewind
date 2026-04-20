@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { ExclusionPreview, ExclusionRuleInput, ProjectBreakdown } from '../../../shared/types'
-import { formatBytes } from '../../utils/formatBytes'
 import { lastSegment } from '../../utils/pathDisplay'
+import ExclusionPreviewSummary from './ExclusionPreviewSummary'
 import styles from './Storage.module.css'
 
 interface Props {
@@ -106,9 +106,7 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
           ) : preview.sessionCount === 0 ? (
             <span className={styles.previewEmpty}>無符合條件的 session</span>
           ) : (
-            <>
-              將刪除 <strong>{preview.sessionCount}</strong> 個 session · <strong>{preview.messageCount.toLocaleString()}</strong> 條訊息 · 約 <strong>{formatBytes(preview.estimatedBytes)}</strong>
-            </>
+            <ExclusionPreviewSummary preview={preview} />
           )}
         </div>
 

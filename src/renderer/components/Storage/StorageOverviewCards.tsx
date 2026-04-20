@@ -1,14 +1,10 @@
 import type { StorageStats } from '../../../shared/types'
 import { formatBytes } from '../../utils/formatBytes'
+import { formatDateOnly } from '../../utils/formatTime'
 import styles from './Storage.module.css'
 
 interface Props {
   stats: StorageStats
-}
-
-function formatDateOnly(iso: string | null): string {
-  if (!iso) return '—'
-  return iso.substring(0, 10)
 }
 
 export default function StorageOverviewCards({ stats }: Props) {
