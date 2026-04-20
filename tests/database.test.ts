@@ -1278,3 +1278,248 @@ describe('Phase 4: getProjectHealth', () => {
     expect(h.avgTokensPerTurn).toBe(694)
   })
 })
+
+// ── 儲存管理（v1.9.0） ──
+
+function seedSession(sessionId: string, projectId: string, projectName: string, startedAt: string, messageCount = 2): void {
+  const messages: MessageInput[] = []
+  for (let i = 0; i < messageCount; i++) {
+    messages.push(msg({
+      type: i % 2 === 0 ? 'user' : 'assistant',
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      contentText: `msg ${i} in ${sessionId}`,
+      sequence: i,
+      timestamp: startedAt,
+    }))
+  }
+  db.indexSession({
+    sessionId,
+    projectId,
+    projectDisplayName: projectName,
+    title: `session ${sessionId}`,
+    messageCount: messages.length,
+    filePath: `/tmp/${sessionId}.jsonl`,
+    fileSize: 1024,
+    fileMtime: startedAt,
+    startedAt,
+    endedAt: startedAt,
+    messages,
+  })
+}
+
+describe('exclusion_rules schema (v16)', () => {
+  it('creates exclusion_rules table and index', () => {
+    const table = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='exclusion_rules'",
+    )
+    expect(table).toHaveLength(1)
+    const idx = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_exclusion_project'",
+    )
+    expect(idx).toHaveLength(1)
+  })
+
+  it('CHECK constraint rejects all-null rule', () => {
+    expect(() =>
+      db.addExclusionRule({ projectId: null, dateFrom: null, dateTo: null }),
+    ).toThrow()
+  })
+})
+
+describe('exclusion rules CRUD', () => {
+  beforeEach(() => {
+    db.upsertProject('proj-a', '/Users/test/a')
+  })
+
+  it('add → list → remove', () => {
+    const r1 = db.addExclusionRule({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    const r2 = db.addExclusionRule({ projectId: null, dateFrom: '2026-01-01', dateTo: '2026-01-31' })
+    const rules = db.getExclusionRules()
+    expect(rules).toHaveLength(2)
+    expect(rules.map(r => r.id)).toContain(r1.id)
+    expect(rules.map(r => r.id)).toContain(r2.id)
+
+    db.removeExclusionRule(r1.id)
+    expect(db.getExclusionRules()).toHaveLength(1)
+    expect(db.getExclusionRules()[0].id).toBe(r2.id)
+  })
+})
+
+describe('previewExclusion', () => {
+  beforeEach(() => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    seedSession('s-a2', 'proj-a', '/a', '2026-02-15T00:00:00.000Z', 4)
+    seedSession('s-b1', 'proj-b', '/b', '2026-01-20T00:00:00.000Z', 2)
+  })
+
+  it('project-only rule matches all sessions in that project', () => {
+    const p = db.previewExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(p.sessionCount).toBe(2)
+    expect(p.messageCount).toBe(7)
+  })
+
+  it('date-range rule matches across projects by first timestamp', () => {
+    const p = db.previewExclusion({ projectId: null, dateFrom: '2026-01-01', dateTo: '2026-01-31' })
+    expect(p.sessionCount).toBe(2)     // s-a1, s-b1
+    expect(p.messageCount).toBe(5)
+  })
+
+  it('composite rule intersects project and date', () => {
+    const p = db.previewExclusion({ projectId: 'proj-a', dateFrom: '2026-02-01', dateTo: '2026-02-28' })
+    expect(p.sessionCount).toBe(1)     // s-a2
+    expect(p.messageCount).toBe(4)
+  })
+
+  it('returns zero when nothing matches', () => {
+    const p = db.previewExclusion({ projectId: 'proj-a', dateFrom: '2099-01-01', dateTo: '2099-12-31' })
+    expect(p.sessionCount).toBe(0)
+    expect(p.messageCount).toBe(0)
+  })
+
+  it('NULL started_at: unmatchable by date rules, matchable by project-only rule', () => {
+    db.indexSession({
+      sessionId: 's-null-ts', projectId: 'proj-a', projectDisplayName: '/a',
+      title: 'null-ts session', messageCount: 1,
+      filePath: '/tmp/s-null-ts.jsonl', fileSize: 100, fileMtime: '2026-01-01',
+      startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', contentText: 'x', sequence: 0 })],
+    })
+    const byDate = db.previewExclusion({ projectId: null, dateFrom: '2020-01-01', dateTo: '2099-12-31' })
+    expect(byDate.sessionCount).toBe(3)  // s-a1, s-a2, s-b1；s-null-ts 被排除（started_at NULL）
+
+    const byProject = db.previewExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(byProject.sessionCount).toBe(3)  // s-a1, s-a2, s-null-ts
+  })
+})
+
+describe('applyExclusion', () => {
+  beforeEach(() => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    seedSession('s-a2', 'proj-a', '/a', '2026-02-15T00:00:00.000Z', 4)
+    seedSession('s-b1', 'proj-b', '/b', '2026-01-20T00:00:00.000Z', 2)
+  })
+
+  it('hard-deletes matching sessions + messages + FTS entries', () => {
+    const { rule } = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(rule.projectId).toBe('proj-a')
+
+    const remaining = db.rawAll<{ id: string }>("SELECT id FROM sessions")
+    expect(remaining.map(r => r.id)).toEqual(['s-b1'])
+
+    const msgs = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM messages")
+    expect(msgs[0].c).toBe(2)     // only s-b1 remains
+
+    const ftsRows = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM sessions_fts")
+    expect(ftsRows[0].c).toBe(1)  // only s-b1 in FTS
+  })
+
+  it('cascades CASCADE-bound side tables (message_archive, session_files)', () => {
+    seedSession('s-c1', 'proj-c', '/c', '2026-03-01T00:00:00.000Z', 2)
+    db.applyExclusion({ projectId: 'proj-c', dateFrom: null, dateTo: null })
+    const arch = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM message_archive WHERE message_id IN (SELECT id FROM messages)")
+    // 沒 orphan archive row
+    const orphan = db.rawAll<{ c: number }>(
+      "SELECT COUNT(*) AS c FROM message_archive WHERE message_id NOT IN (SELECT id FROM messages)",
+    )
+    expect(orphan[0].c).toBe(0)
+    expect(arch[0].c).toBeGreaterThanOrEqual(0)
+  })
+
+  it('persists rule so future re-index can skip — rule row exists after apply', () => {
+    db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    const rules = db.getExclusionRules()
+    expect(rules).toHaveLength(1)
+    expect(rules[0].projectId).toBe('proj-a')
+  })
+
+  it('updates project stats after deletion', () => {
+    db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    const projects = db.getProjects()
+    const a = projects.find(p => p.id === 'proj-a')!
+    expect(a.sessionCount).toBe(0)
+  })
+
+  it('no-op apply still writes the rule (prevents future re-index of unmatched sessions matching rule later)', () => {
+    db.upsertProject('proj-empty', '/empty')
+    const before = db.getStorageStats()
+    const result = db.applyExclusion({ projectId: 'proj-empty', dateFrom: null, dateTo: null })
+    const after = db.getStorageStats()
+    expect(result.releasedBytes).toBe(0)
+    expect(after.sessionCount).toBe(before.sessionCount)
+    expect(db.getExclusionRules()).toHaveLength(1)
+  })
+
+  it('removes subagent sessions whose parent is deleted', () => {
+    seedSession('s-parent', 'proj-a', '/a', '2026-04-01T00:00:00.000Z', 2)
+    db.indexSubagentSession({
+      id: 's-parent/sub1',
+      parentSessionId: 's-parent',
+      agentType: 'Explore',
+      filePath: '/tmp/sub1.jsonl',
+      fileSize: 100,
+      fileMtime: '2026-04-01T00:00:00.000Z',
+      messageCount: 1,
+      startedAt: '2026-04-01T00:00:00.000Z',
+      endedAt: '2026-04-01T00:00:00.000Z',
+    })
+    seedSession('s-parent/sub1', 'proj-a', '/a', '2026-04-01T00:00:00.000Z', 1)
+    db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    const subs = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM subagent_sessions")
+    expect(subs[0].c).toBe(0)
+  })
+})
+
+describe('removeExclusionRule does not restore data', () => {
+  it('removing a rule after apply keeps sessions deleted', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 2)
+    const { rule } = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(db.getStorageStats().sessionCount).toBe(0)
+    db.removeExclusionRule(rule.id)
+    expect(db.getExclusionRules()).toHaveLength(0)
+    expect(db.getStorageStats().sessionCount).toBe(0) // 資料仍已刪
+  })
+})
+
+describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
+  beforeEach(() => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    seedSession('s-a2', 'proj-a', '/a', '2026-02-15T00:00:00.000Z', 4)
+    seedSession('s-b1', 'proj-b', '/b', '2026-03-20T00:00:00.000Z', 2)
+  })
+
+  it('stats: counts and range', () => {
+    const s = db.getStorageStats()
+    expect(s.sessionCount).toBe(3)
+    expect(s.messageCount).toBe(9)
+    expect(s.projectCount).toBe(2)
+    expect(s.earliestTimestamp).toBe('2026-01-10T00:00:00.000Z')
+    expect(s.latestTimestamp).toBe('2026-03-20T00:00:00.000Z')
+    expect(s.dbBytes).toBeGreaterThan(0)
+  })
+
+  it('breakdown: per-project counts, messages proportional', () => {
+    const bd = db.getProjectBreakdown()
+    expect(bd).toHaveLength(2)
+    const a = bd.find(b => b.projectId === 'proj-a')!
+    const b = bd.find(b => b.projectId === 'proj-b')!
+    expect(a.sessionCount).toBe(2)
+    expect(a.messageCount).toBe(7)
+    expect(b.sessionCount).toBe(1)
+    expect(b.messageCount).toBe(2)
+    expect(a.estimatedBytes).toBeGreaterThan(b.estimatedBytes)
+  })
+
+  it('inactive: threshold picks old sessions only', () => {
+    // 所有 seeded session 都是 2026-01 ~ 03 的，當前時間為 2026-04-20（見 env context）
+    const inactive90 = db.getInactiveSessions(90)
+    // 超過 90 天的 → s-a1 (100+ 天) 應該被挑
+    expect(inactive90.map(s => s.sessionId)).toContain('s-a1')
+    // 最近的 s-b1 (~30 天) 不應該被挑
+    expect(inactive90.map(s => s.sessionId)).not.toContain('s-b1')
+  })
+
+  it('inactive: threshold 0 picks all sessions with ended_at', () => {
+    const inactive0 = db.getInactiveSessions(0)
+    expect(inactive0.length).toBe(3)
+  })
+})

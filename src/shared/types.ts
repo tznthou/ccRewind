@@ -288,6 +288,62 @@ export interface FileHistoryEntry {
   startedAt: string | null
 }
 
+// ── 儲存管理（v1.9.0） ──
+
+/** 排除規則：project_id / date_from / date_to 任一組合（至少一非空） */
+export interface ExclusionRule {
+  id: number
+  projectId: string | null
+  dateFrom: string | null  // ISO date YYYY-MM-DD
+  dateTo: string | null    // ISO date YYYY-MM-DD
+  createdAt: string
+}
+
+/** 建立排除規則的輸入（未分配 id） */
+export interface ExclusionRuleInput {
+  projectId: string | null
+  dateFrom: string | null
+  dateTo: string | null
+}
+
+/** 套用規則前的影響預覽 */
+export interface ExclusionPreview {
+  sessionCount: number
+  messageCount: number
+  estimatedBytes: number
+}
+
+/** 儲存總覽 */
+export interface StorageStats {
+  dbBytes: number
+  sessionCount: number
+  messageCount: number
+  projectCount: number
+  earliestTimestamp: string | null
+  latestTimestamp: string | null
+}
+
+/** 各專案占用 */
+export interface ProjectBreakdown {
+  projectId: string
+  displayName: string
+  sessionCount: number
+  messageCount: number
+  estimatedBytes: number
+  earliestTimestamp: string | null
+  latestTimestamp: string | null
+}
+
+/** 不活動 session 建議項 */
+export interface InactiveSession {
+  sessionId: string
+  projectId: string
+  projectName: string
+  title: string | null
+  lastActivity: string | null
+  messageCount: number
+}
+
 /** Renderer 透過 contextBridge 取得的 API */
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>

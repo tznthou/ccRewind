@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -376,6 +376,27 @@ const migrations: Migration[] = [
       db.exec("UPDATE subagent_sessions SET file_mtime = NULL")
     },
   },
+  {
+    version: 16,
+    description: 'add exclusion_rules table for storage management (composite project + date range rules)',
+    up: (db) => {
+      const exists = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='exclusion_rules'",
+      ).get()
+      if (exists) return
+      db.exec(`
+        CREATE TABLE exclusion_rules (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          project_id TEXT REFERENCES projects(id),
+          date_from TEXT,
+          date_to TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          CHECK (project_id IS NOT NULL OR date_from IS NOT NULL OR date_to IS NOT NULL)
+        );
+        CREATE INDEX idx_exclusion_project ON exclusion_rules(project_id);
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -518,11 +539,21 @@ export class Database {
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
 
+      CREATE TABLE IF NOT EXISTS exclusion_rules (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        project_id TEXT REFERENCES projects(id),
+        date_from TEXT,
+        date_to TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        CHECK (project_id IS NOT NULL OR date_from IS NOT NULL OR date_to IS NOT NULL)
+      );
+
       CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id, sequence);
       CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id, started_at DESC);
       CREATE INDEX IF NOT EXISTS idx_session_files_path ON session_files(file_path);
       CREATE INDEX IF NOT EXISTS idx_session_files_session ON session_files(session_id);
       CREATE INDEX IF NOT EXISTS idx_subagent_parent ON subagent_sessions(parent_session_id);
+      CREATE INDEX IF NOT EXISTS idx_exclusion_project ON exclusion_rules(project_id);
     `)
 
     // FTS5 虛擬表不支援 IF NOT EXISTS，先查 sqlite_master
@@ -1661,5 +1692,256 @@ export class Database {
     return results
       .sort((a, b) => b.jaccard - a.jaccard)
       .slice(0, limit)
+  }
+
+  // ── 儲存管理（v1.9.0） ──
+
+  /** 切 500 一批執行 SQL，callback 提供 placeholders 與 chunk 內容 */
+  private chunkedIn(ids: readonly string[], fn: (placeholders: string, chunk: readonly string[]) => void): void {
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500)
+      fn(chunk.map(() => '?').join(','), chunk)
+    }
+  }
+
+  /** 組出規則匹配的 WHERE clause 與 params（動態，不填 NULL 欄位）*/
+  private buildExclusionWhere(rule: ExclusionRuleInput): { clause: string; params: string[] } {
+    const clauses: string[] = [`id ${Database.EXCLUDE_SUBAGENTS}`]
+    const params: string[] = []
+    if (rule.projectId != null) {
+      clauses.push('project_id = ?')
+      params.push(rule.projectId)
+    }
+    if (rule.dateFrom != null) {
+      clauses.push('started_at IS NOT NULL AND DATE(started_at) >= ?')
+      params.push(rule.dateFrom)
+    }
+    if (rule.dateTo != null) {
+      clauses.push('started_at IS NOT NULL AND DATE(started_at) <= ?')
+      params.push(rule.dateTo)
+    }
+    return { clause: clauses.join(' AND '), params }
+  }
+
+  getDbBytes(): number {
+    if (this.db.name === ':memory:') return 0
+    try { return statSync(this.db.name).size } catch { return 0 }
+  }
+
+  getStorageStats(): StorageStats {
+    const counts = this.db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM sessions WHERE id ${Database.EXCLUDE_SUBAGENTS}) AS session_count,
+        (SELECT COUNT(*) FROM messages) AS message_count,
+        (SELECT COUNT(*) FROM projects) AS project_count
+    `).get() as { session_count: number; message_count: number; project_count: number }
+    const range = this.db.prepare(`
+      SELECT MIN(started_at) AS earliest, MAX(ended_at) AS latest
+      FROM sessions WHERE id ${Database.EXCLUDE_SUBAGENTS}
+    `).get() as { earliest: string | null; latest: string | null }
+    return {
+      dbBytes: this.getDbBytes(),
+      sessionCount: counts.session_count,
+      messageCount: counts.message_count,
+      projectCount: counts.project_count,
+      earliestTimestamp: range.earliest,
+      latestTimestamp: range.latest,
+    }
+  }
+
+  getProjectBreakdown(): ProjectBreakdown[] {
+    const dbBytes = this.getDbBytes()
+    const rows = this.db.prepare(`
+      SELECT p.id, p.display_name,
+        SUM(CASE WHEN s.id IS NOT NULL AND sub.id IS NULL THEN 1 ELSE 0 END) AS session_count,
+        COALESCE(SUM(s.message_count), 0) AS message_count,
+        MIN(CASE WHEN sub.id IS NULL THEN s.started_at END) AS earliest,
+        MAX(CASE WHEN sub.id IS NULL THEN s.ended_at END) AS latest
+      FROM projects p
+      LEFT JOIN sessions s ON s.project_id = p.id
+      LEFT JOIN subagent_sessions sub ON sub.id = s.id
+      GROUP BY p.id
+      ORDER BY message_count DESC
+    `).all() as Array<{
+      id: string
+      display_name: string
+      session_count: number
+      message_count: number
+      earliest: string | null
+      latest: string | null
+    }>
+    const totalMsg = rows.reduce((s, r) => s + r.message_count, 0)
+    return rows.map(r => ({
+      projectId: r.id,
+      displayName: r.display_name,
+      sessionCount: r.session_count,
+      messageCount: r.message_count,
+      estimatedBytes: totalMsg > 0 ? Math.round((r.message_count / totalMsg) * dbBytes) : 0,
+      earliestTimestamp: r.earliest,
+      latestTimestamp: r.latest,
+    }))
+  }
+
+  getInactiveSessions(thresholdDays: number): InactiveSession[] {
+    const rows = this.db.prepare(`
+      SELECT s.id, s.project_id, p.display_name, s.title, s.ended_at, s.message_count
+      FROM sessions s JOIN projects p ON p.id = s.project_id
+      WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
+        AND s.ended_at IS NOT NULL
+        AND DATE(s.ended_at) < DATE('now', ? || ' days')
+      ORDER BY s.ended_at ASC
+    `).all(`-${thresholdDays}`) as Array<{
+      id: string
+      project_id: string
+      display_name: string
+      title: string | null
+      ended_at: string | null
+      message_count: number
+    }>
+    return rows.map(r => ({
+      sessionId: r.id,
+      projectId: r.project_id,
+      projectName: r.display_name,
+      title: r.title,
+      lastActivity: r.ended_at,
+      messageCount: r.message_count,
+    }))
+  }
+
+  getExclusionRules(): ExclusionRule[] {
+    const rows = this.db.prepare(`
+      SELECT id, project_id, date_from, date_to, created_at
+      FROM exclusion_rules ORDER BY created_at DESC
+    `).all() as Array<{
+      id: number
+      project_id: string | null
+      date_from: string | null
+      date_to: string | null
+      created_at: string
+    }>
+    return rows.map(r => ({
+      id: r.id,
+      projectId: r.project_id,
+      dateFrom: r.date_from,
+      dateTo: r.date_to,
+      createdAt: r.created_at,
+    }))
+  }
+
+  /** 查規則匹配的主 session ID 與 project id（apply 用；preview 走純 aggregate 路徑）*/
+  private findMatchingSessionIds(rule: ExclusionRuleInput): Array<{ id: string; project_id: string }> {
+    const w = this.buildExclusionWhere(rule)
+    return this.db.prepare(`SELECT id, project_id FROM sessions WHERE ${w.clause}`)
+      .all(...w.params) as Array<{ id: string; project_id: string }>
+  }
+
+  previewExclusion(rule: ExclusionRuleInput): ExclusionPreview {
+    const w = this.buildExclusionWhere(rule)
+    const main = this.db.prepare(`
+      SELECT COUNT(*) AS session_count, COALESCE(SUM(message_count), 0) AS message_count
+      FROM sessions WHERE ${w.clause}
+    `).get(...w.params) as { session_count: number; message_count: number }
+    if (main.session_count === 0) return { sessionCount: 0, messageCount: 0, estimatedBytes: 0 }
+
+    const subagentMsg = this.db.prepare(`
+      SELECT COALESCE(SUM(s.message_count), 0) AS c
+      FROM sessions s
+      JOIN subagent_sessions sub ON sub.id = s.id
+      WHERE sub.parent_session_id IN (SELECT id FROM sessions WHERE ${w.clause})
+    `).get(...w.params) as { c: number }
+
+    const totalMsg = (this.db.prepare('SELECT COALESCE(SUM(message_count), 0) AS c FROM sessions').get() as { c: number }).c
+    const combinedMsg = main.message_count + subagentMsg.c
+    const dbBytes = this.getDbBytes()
+    return {
+      sessionCount: main.session_count,
+      messageCount: combinedMsg,
+      estimatedBytes: totalMsg > 0 ? Math.round((combinedMsg / totalMsg) * dbBytes) : 0,
+    }
+  }
+
+  addExclusionRule(rule: ExclusionRuleInput): ExclusionRule {
+    const row = this.db.prepare(`
+      INSERT INTO exclusion_rules (project_id, date_from, date_to) VALUES (?, ?, ?)
+      RETURNING id, project_id, date_from, date_to, created_at
+    `).get(rule.projectId, rule.dateFrom, rule.dateTo) as {
+      id: number
+      project_id: string | null
+      date_from: string | null
+      date_to: string | null
+      created_at: string
+    }
+    return {
+      id: row.id,
+      projectId: row.project_id,
+      dateFrom: row.date_from,
+      dateTo: row.date_to,
+      createdAt: row.created_at,
+    }
+  }
+
+  removeExclusionRule(id: number): void {
+    this.db.prepare('DELETE FROM exclusion_rules WHERE id = ?').run(id)
+  }
+
+  /**
+   * 套用規則：找出匹配 session → 刪除（含 subagent、sessions_fts manual delete、CASCADE 連帶）→ 寫規則 → VACUUM
+   * 注意：VACUUM 不能在 transaction 內執行，已在 tx 外。呼叫端勿將本方法包入另一層 transaction。
+   */
+  applyExclusion(rule: ExclusionRuleInput): { rule: ExclusionRule; releasedBytes: number } {
+    const bytesBefore = this.getDbBytes()
+    const sessions = this.findMatchingSessionIds(rule)
+    const sessionIds = sessions.map(s => s.id)
+    const subagentIds: string[] = []
+    this.chunkedIn(sessionIds, (ph, chunk) => {
+      const rows = this.db.prepare(`SELECT id FROM subagent_sessions WHERE parent_session_id IN (${ph})`)
+        .all(...chunk) as Array<{ id: string }>
+      for (const r of rows) subagentIds.push(r.id)
+    })
+    const allIds = [...sessionIds, ...subagentIds]
+    const affectedProjects = new Set(sessions.map(s => s.project_id))
+
+    const createdRule = this.db.transaction(() => {
+      this.deleteSessionsBatch(allIds, sessionIds)
+      const r = this.addExclusionRule(rule)
+      for (const pid of affectedProjects) this.updateProjectStats(pid)
+      return r
+    })()
+
+    if (allIds.length > 0) this.db.exec('VACUUM')
+    return { rule: createdRule, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()) }
+  }
+
+  /** 將多個 session 從 sessions_fts 移除（external content FTS5 需手動維護）*/
+  private deleteSessionsFromFts(sessionIds: readonly string[]): void {
+    if (sessionIds.length === 0) return
+    const ftsDelete = this.db.prepare(
+      "INSERT INTO sessions_fts(sessions_fts, rowid, title, tags, files_touched, summary_text, intent_text) VALUES ('delete', ?, ?, ?, ?, ?, ?)",
+    )
+    this.chunkedIn(sessionIds, (ph, chunk) => {
+      const rows = this.db.prepare(
+        `SELECT rowid, title, tags, files_touched, summary_text, intent_text FROM sessions WHERE id IN (${ph})`,
+      ).all(...chunk) as Array<{ rowid: number; title: string | null; tags: string | null; files_touched: string | null; summary_text: string | null; intent_text: string | null }>
+      for (const old of rows) {
+        ftsDelete.run(old.rowid, old.title ?? '', old.tags ?? '', old.files_touched ?? '', old.summary_text ?? '', old.intent_text ?? '')
+      }
+    })
+  }
+
+  /** 批次刪除 sessions（含 FTS sync、messages、session_files、subagent_sessions）*/
+  private deleteSessionsBatch(allSessionIds: string[], parentSessionIds: string[]): void {
+    if (allSessionIds.length === 0) return
+    this.deleteSessionsFromFts(allSessionIds)
+    this.chunkedIn(allSessionIds, (ph, chunk) => {
+      this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...chunk)
+      this.db.prepare(`DELETE FROM session_files WHERE session_id IN (${ph})`).run(...chunk)
+      this.db.prepare(`DELETE FROM subagent_sessions WHERE id IN (${ph})`).run(...chunk)
+    })
+    this.chunkedIn(parentSessionIds, (ph, chunk) => {
+      this.db.prepare(`DELETE FROM subagent_sessions WHERE parent_session_id IN (${ph})`).run(...chunk)
+    })
+    this.chunkedIn(allSessionIds, (ph, chunk) => {
+      this.db.prepare(`DELETE FROM sessions WHERE id IN (${ph})`).run(...chunk)
+    })
   }
 }
