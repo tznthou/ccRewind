@@ -621,8 +621,10 @@ export class Database {
 
   /** 依序執行尚未套用的 migrations */
   private runMigrations(): void {
+    // 刻意不在結尾 VACUUM：free pages 會透過 Storage 維護 card 顯示「可回收空間」，
+    // 由 user 主動觸發 compact。啟動時強制 VACUUM 會讓大 DB（~1GB+）卡 10-30 秒，
+    // 也跟 v1.9.1 引入的手動 compact UX 衝突。
     const current = this.getSchemaVersion()
-    let migrated = false
     for (const m of migrations) {
       if (m.version <= current) continue
       const migrate = this.db.transaction(() => {
@@ -630,12 +632,7 @@ export class Database {
         this.db.prepare('INSERT INTO schema_version (version, description) VALUES (?, ?)').run(m.version, m.description)
       })
       migrate()
-      migrated = true
     }
-    // 刻意不在此 VACUUM：free pages 會透過 Storage 維護 card 顯示「可回收空間」，
-    // 由 user 主動觸發 compact。啟動時強制 VACUUM 會讓大 DB（~1GB+）卡 10-30 秒，
-    // 也跟 v1.9.1 引入的手動 compact UX 衝突。
-    void migrated
   }
 
   /** 取得目前 schema 版本 */
