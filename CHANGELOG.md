@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-04-21
+
+### Added
+
+- **Database maintenance card** on the Storage page — shows live DB size and reclaimable space (`freelist_count × page_size` from live PRAGMA reads, never hard-coded) with a one-click "Compact database" button that runs `VACUUM` on demand. Copy on the card and inside the confirm banner spells out that compaction only reorganizes file structure and never deletes conversations, sessions, or messages.
+- Two IPC handlers (`storage:db-stats` / `storage:compact`) exposing the maintenance surface to the renderer via invoke/handle + preload.
+
+### Changed
+
+- **Parser no longer unconditionally archives every JSONL line.** A `KNOWN_MESSAGE_TYPES` whitelist now decides whether `raw_json` survives: known types drop it (the parsed `content_json` is sufficient), unknown types keep it as a debug / future-re-parse fallback. This matches CLAUDE.md's "lenient parser: preserve raw JSON for unknown structures" intent — the previous implementation preserved everything, accumulating hundreds of megabytes of redundant rows on a typical install.
+- Migration v17 clears legacy `message_archive` rows scoped by the v17 whitelist snapshot, so any unknown-type `raw_json` the old parser wrote survives the upgrade. The DB file itself does not shrink until the user triggers the new compact flow (pure SQLite semantics — DELETE frees pages, `VACUUM` reclaims them).
+- **Removed automatic `VACUUM` at the end of `runMigrations`.** Startup `VACUUM` conflicted with the new user-triggered compaction UX and could block app launch 10-30 seconds on a 1 GB+ DB. Free pages now surface in the Storage maintenance card; compaction is a deliberate user action.
+
 ## [1.9.0] - 2026-04-21
 
 ### Added
