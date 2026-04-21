@@ -1,7 +1,7 @@
 # Context Budget 視覺化 — 詳細規格
 
-> Phase 2.5 | 狀態：規劃中
-> 回到路線圖：[PHASE-2-3.md](PHASE-2-3.md)
+> Phase 2.5 | 狀態：✅ 已交付（v1.1.0）
+> 回到路線圖：[ROADMAP.md](ROADMAP.md)
 
 ---
 

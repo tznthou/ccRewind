@@ -228,7 +228,7 @@ ccRewind 刻意不做這些事：
 
 ### Roadmap
 
-詳見 [docs/PHASE-2-3.md](docs/PHASE-2-3.md)。
+詳見 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
 | Phase | 狀態 | 主題 |
 |-------|------|------|

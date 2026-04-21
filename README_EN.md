@@ -223,7 +223,7 @@ If what you need is "make Claude remember what was said before," look at memory 
 
 ### Roadmap
 
-See [docs/PHASE-2-3.md](docs/PHASE-2-3.md) for details.
+See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 
 | Phase | Status | Theme |
 |-------|--------|-------|
