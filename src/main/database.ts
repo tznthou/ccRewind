@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -397,6 +397,26 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 17,
+    description: 'clear legacy message_archive rows for known types (keep unknown-type raw_json as debug fallback)',
+    up: (db) => {
+      // v17 白名單快照：對齊撰寫當下 parser.ts 的 KNOWN_MESSAGE_TYPES。
+      // 不動態 import parser 常數——migration 是歷史紀錄，未來 parser 新增 type 時，
+      // 那些新 type 會在新 DB 裡直接被寫為「unknown」並保留 raw_json，不需要再清。
+      const KNOWN_AT_V17 = [
+        'user', 'assistant', 'system',
+        'queue-operation', 'last-prompt',
+        'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
+        'custom-title', 'ai-title', 'agent-name', 'pr-link',
+      ]
+      const placeholders = KNOWN_AT_V17.map(() => '?').join(',')
+      db.prepare(
+        `DELETE FROM message_archive
+         WHERE message_id IN (SELECT id FROM messages WHERE type IN (${placeholders}))`,
+      ).run(...KNOWN_AT_V17)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -466,6 +486,11 @@ export class Database {
   /** ⚠️ 測試專用：接受任意 SQL，禁止接到 IPC handler */
   rawAll<T>(sql: string): T[] {
     return this.db.prepare(sql).all() as T[]
+  }
+
+  /** ⚠️ 測試專用：執行 DML / DDL（DELETE / UPDATE / INSERT），禁止接到 IPC handler */
+  rawExec(sql: string, ...params: ReadonlyArray<string | number | bigint | Buffer | null>): void {
+    this.db.prepare(sql).run(...params)
   }
 
   private initSchema(): void {
@@ -596,8 +621,10 @@ export class Database {
 
   /** 依序執行尚未套用的 migrations */
   private runMigrations(): void {
+    // 刻意不在結尾 VACUUM：free pages 會透過 Storage 維護 card 顯示「可回收空間」，
+    // 由 user 主動觸發 compact。啟動時強制 VACUUM 會讓大 DB（~1GB+）卡 10-30 秒，
+    // 也跟 v1.9.1 引入的手動 compact UX 衝突。
     const current = this.getSchemaVersion()
-    let migrated = false
     for (const m of migrations) {
       if (m.version <= current) continue
       const migrate = this.db.transaction(() => {
@@ -605,10 +632,6 @@ export class Database {
         this.db.prepare('INSERT INTO schema_version (version, description) VALUES (?, ?)').run(m.version, m.description)
       })
       migrate()
-      migrated = true
-    }
-    if (migrated) {
-      this.db.exec('VACUUM')
     }
   }
 
@@ -1757,6 +1780,33 @@ export class Database {
       try { total += statSync(this.db.name + suffix).size } catch { /* sidecar may not exist */ }
     }
     return total
+  }
+
+  /**
+   * DB 維護資訊：總大小、可回收空間（free pages × page_size）。
+   * freelist_count 反映 DELETE 後尚未 VACUUM 的 free pages，可直接算出 compact 能釋放多少。
+   */
+  getDatabaseMaintenanceStats(): DatabaseMaintenanceStats {
+    const freelistPages = this.db.pragma('freelist_count', { simple: true }) as number
+    const pageSize = this.db.pragma('page_size', { simple: true }) as number
+    return {
+      dbBytes: this.getDbBytes(),
+      freelistPages,
+      pageSize,
+      reclaimableBytes: freelistPages * pageSize,
+    }
+  }
+
+  /**
+   * 壓縮 DB：執行 VACUUM。回傳壓縮前後 bytes。
+   * VACUUM 會鎖整個 DB，期間其他 query 會等待。1GB 資料上可能 10-30s。
+   * VACUUM 不能在 transaction 內執行（SQLite 限制）。
+   */
+  compactDatabase(): CompactResult {
+    const bytesBefore = this.getDbBytes()
+    this.db.exec('VACUUM')
+    const bytesAfter = this.getDbBytes()
+    return { bytesBefore, bytesAfter, releasedBytes: Math.max(0, bytesBefore - bytesAfter) }
   }
 
   getStorageStats(): StorageStats {

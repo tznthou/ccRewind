@@ -198,6 +198,12 @@ export function registerIpcHandlers(db: Database): void {
     db.removeExclusionRule(id)
   })
 
+  ipcMain.handle('storage:db-stats', () => db.getDatabaseMaintenanceStats())
+
+  // VACUUM 期間其他 query 會被阻塞。1GB 資料上可能 10-30 秒。
+  // 呼叫端負責 UX（loading 狀態 / 禁止其他操作）。
+  ipcMain.handle('storage:compact', () => db.compactDatabase())
+
   // ── 更新檢查 ──
 
   ipcMain.handle('updates:check', () => checkForUpdates())
