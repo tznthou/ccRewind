@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2026-04-21
+
+### Fixed
+
+- **Cross-project navigation now syncs the Sidebar project context** ([#3](https://github.com/tznthou/ccRewind/issues/3)). Clicking a Related Session, File History entry, session/message search result, or Waste Detection card that belongs to a different project used to load the new session in the main view but leave the Sidebar stuck on the old project — users lost their sense of which project the current session actually belonged to. `NAVIGATE_TO_RESULT` has been renamed to `NAVIGATE_TO_SESSION` and extended with required `projectId` + optional `messageId`; the reducer atomically updates `selectedProjectId` + `selectedSessionId` + `targetMessageId` while preserving search state (no more reset-and-rebuild via `SELECT_PROJECT`). All five cross-project callsites migrated. Backend `getRelatedSessions` / `getWasteSessions` queries now return `project_id`; `RelatedSession` / `WasteSession` types gained `projectId`.
+
 ## [1.9.1] - 2026-04-21
 
 ### Added
