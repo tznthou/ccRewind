@@ -42,7 +42,16 @@ export default function DatabaseMaintenanceCard({ onAfterCompact }: Props) {
     }
   }, [onAfterCompact])
 
-  if (!stats) return null
+  if (!stats) {
+    // stats 載入失敗時仍顯示錯誤 banner，避免 IPC 掛掉後 UI 靜默消失
+    if (!error) return null
+    return (
+      <div className={styles.section}>
+        <div className={styles.sectionTitle}>資料庫維護</div>
+        <div className={styles.errorText}>無法載入維護資訊：{error}</div>
+      </div>
+    )
+  }
 
   // 平常隱藏；有可回收空間或剛壓縮完才顯示
   const hasSignificantReclaimable = stats.reclaimableBytes >= MIN_RECLAIMABLE_TO_SHOW_BYTES

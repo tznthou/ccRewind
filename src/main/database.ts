@@ -399,9 +399,22 @@ const migrations: Migration[] = [
   },
   {
     version: 17,
-    description: 'clear legacy message_archive rows (parser now only stores raw_json for unknown types)',
+    description: 'clear legacy message_archive rows for known types (keep unknown-type raw_json as debug fallback)',
     up: (db) => {
-      db.exec('DELETE FROM message_archive')
+      // v17 白名單快照：對齊撰寫當下 parser.ts 的 KNOWN_MESSAGE_TYPES。
+      // 不動態 import parser 常數——migration 是歷史紀錄，未來 parser 新增 type 時，
+      // 那些新 type 會在新 DB 裡直接被寫為「unknown」並保留 raw_json，不需要再清。
+      const KNOWN_AT_V17 = [
+        'user', 'assistant', 'system',
+        'queue-operation', 'last-prompt',
+        'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
+        'custom-title', 'ai-title', 'agent-name', 'pr-link',
+      ]
+      const placeholders = KNOWN_AT_V17.map(() => '?').join(',')
+      db.prepare(
+        `DELETE FROM message_archive
+         WHERE message_id IN (SELECT id FROM messages WHERE type IN (${placeholders}))`,
+      ).run(...KNOWN_AT_V17)
     },
   },
 ]
@@ -473,6 +486,11 @@ export class Database {
   /** ⚠️ 測試專用：接受任意 SQL，禁止接到 IPC handler */
   rawAll<T>(sql: string): T[] {
     return this.db.prepare(sql).all() as T[]
+  }
+
+  /** ⚠️ 測試專用：執行 DML / DDL（DELETE / UPDATE / INSERT），禁止接到 IPC handler */
+  rawExec(sql: string, ...params: ReadonlyArray<string | number | bigint | Buffer | null>): void {
+    this.db.prepare(sql).run(...params)
   }
 
   private initSchema(): void {
@@ -614,9 +632,10 @@ export class Database {
       migrate()
       migrated = true
     }
-    if (migrated) {
-      this.db.exec('VACUUM')
-    }
+    // 刻意不在此 VACUUM：free pages 會透過 Storage 維護 card 顯示「可回收空間」，
+    // 由 user 主動觸發 compact。啟動時強制 VACUUM 會讓大 DB（~1GB+）卡 10-30 秒，
+    // 也跟 v1.9.1 引入的手動 compact UX 衝突。
+    void migrated
   }
 
   /** 取得目前 schema 版本 */

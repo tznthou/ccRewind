@@ -1556,7 +1556,7 @@ describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
   })
 })
 
-describe('migration v17: clear legacy message_archive', () => {
+describe('migration v17: clear legacy message_archive for known types only', () => {
   it('after migration, DB at current version has no legacy archive rows from baseline', () => {
     // 新建的 DB 走全部 migrations 到 v17，message_archive 應為空
     const rows = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM message_archive")
@@ -1568,6 +1568,44 @@ describe('migration v17: clear legacy message_archive', () => {
       "SELECT name FROM sqlite_master WHERE type='table' AND name='message_archive'",
     )
     expect(tables).toHaveLength(1)
+  })
+
+  it('conditional DELETE preserves raw_json for types outside the v17 whitelist', () => {
+    // 模擬舊 DB 狀態：seed known type 和未知 type 的 archive rows
+    db.indexSession({
+      sessionId: 'v17-known', projectId: 'pv17', projectDisplayName: '/v17',
+      title: 't', messageCount: 1, filePath: '/tmp/v17k.jsonl', fileSize: 1,
+      fileMtime: '2026-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', rawJson: '{"known":"should-be-cleared"}', sequence: 0 })],
+    })
+    db.indexSession({
+      sessionId: 'v17-unknown', projectId: 'pv17', projectDisplayName: '/v17',
+      title: 't', messageCount: 1, filePath: '/tmp/v17u.jsonl', fileSize: 1,
+      fileMtime: '2026-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'future-reasoning-trace', role: null, rawJson: '{"unknown":"must-be-kept"}', sequence: 0 })],
+    })
+
+    // 手動 re-run v17 邏輯（migration 本身已在建構時 apply 到空 DB 上，re-run 驗語意）
+    const KNOWN_AT_V17 = [
+      'user', 'assistant', 'system',
+      'queue-operation', 'last-prompt',
+      'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
+      'custom-title', 'ai-title', 'agent-name', 'pr-link',
+    ]
+    const placeholders = KNOWN_AT_V17.map(() => '?').join(',')
+    db.rawExec(
+      `DELETE FROM message_archive WHERE message_id IN (SELECT id FROM messages WHERE type IN (${placeholders}))`,
+      ...KNOWN_AT_V17,
+    )
+
+    const survivors = db.rawAll<{ type: string; raw_json: string }>(`
+      SELECT m.type, ma.raw_json FROM message_archive ma
+      JOIN messages m ON m.id = ma.message_id
+      WHERE m.session_id LIKE 'v17-%'
+    `)
+    expect(survivors).toHaveLength(1)
+    expect(survivors[0].type).toBe('future-reasoning-trace')
+    expect(survivors[0].raw_json).toBe('{"unknown":"must-be-kept"}')
   })
 })
 
