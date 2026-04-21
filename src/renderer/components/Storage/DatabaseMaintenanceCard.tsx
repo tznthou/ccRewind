@@ -61,6 +61,11 @@ export default function DatabaseMaintenanceCard({ onAfterCompact }: Props) {
     <div className={styles.section}>
       <div className={styles.sectionTitle}>資料庫維護</div>
 
+      <div className={styles.maintenanceHint}>
+        「可回收空間」是資料庫內已刪除資料（例如排除規則清掉的 session）留下的空白頁。
+        壓縮只整理檔案結構，<strong>不會影響任何對話、session 或 message</strong>。
+      </div>
+
       <div className={styles.overviewGrid}>
         <div className={styles.card}>
           <div className={styles.cardLabel}>DB 大小</div>
@@ -70,7 +75,7 @@ export default function DatabaseMaintenanceCard({ onAfterCompact }: Props) {
         <div className={styles.card}>
           <div className={styles.cardLabel}>可回收空間</div>
           <div className={styles.cardValue}>{formatBytes(stats.reclaimableBytes)}</div>
-          <div className={styles.cardSub}>{stats.freelistPages.toLocaleString()} free pages</div>
+          <div className={styles.cardSub}>已刪除資料留下的空檔</div>
         </div>
       </div>
 
@@ -92,6 +97,9 @@ export default function DatabaseMaintenanceCard({ onAfterCompact }: Props) {
           <div>
             將執行 VACUUM，預計釋放 <strong>{formatBytes(stats.reclaimableBytes)}</strong>。
             壓縮期間 app 會暫停回應約 10 至 30 秒（視資料量而定），請勿關閉視窗。
+          </div>
+          <div className={styles.maintenanceDisclaimer}>
+            僅整理資料庫檔案結構，不會刪除任何對話或訊息。
           </div>
           <div className={styles.dialogActions}>
             <button className={styles.button} onClick={() => setMode('idle')}>取消</button>

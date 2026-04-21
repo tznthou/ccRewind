@@ -393,3 +393,20 @@
   color: var(--color-text-secondary);
   line-height: 1.6;
 }
+
+.maintenanceHint {
+  margin-top: calc(var(--space-md) * -0.25);
+  margin-bottom: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  line-height: 1.6;
+  border-left: 2px solid var(--color-border);
+}
+
+.maintenanceDisclaimer {
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-style: italic;
+}
