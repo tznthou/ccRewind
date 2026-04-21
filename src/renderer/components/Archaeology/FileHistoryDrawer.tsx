@@ -25,9 +25,9 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
     return () => { cancelled = true }
   }, [filePath])
 
-  const handleNavigate = (sessionId: string) => {
+  const handleNavigate = (projectId: string, sessionId: string) => {
     dispatch({ type: 'SET_VIEW_MODE', mode: 'sessions' })
-    dispatch({ type: 'SELECT_SESSION', sessionId })
+    dispatch({ type: 'NAVIGATE_TO_SESSION', projectId, sessionId })
     onClose()
   }
 
@@ -58,7 +58,7 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
                   key={`${entry.sessionId}-${entry.operation}-${i}`}
                   className={styles.timelineEntry}
                   data-op={entry.operation}
-                  onClick={() => handleNavigate(entry.sessionId)}
+                  onClick={() => handleNavigate(entry.projectId, entry.sessionId)}
                 >
                   <div className={styles.entryDate}>
                     {entry.startedAt ? new Date(entry.startedAt).toLocaleDateString('zh-TW', {

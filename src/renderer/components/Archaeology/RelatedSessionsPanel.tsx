@@ -38,7 +38,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
           <div
             key={r.sessionId}
             className={styles.relatedCard}
-            onClick={() => dispatch({ type: 'SELECT_SESSION', sessionId: r.sessionId })}
+            onClick={() => dispatch({ type: 'NAVIGATE_TO_SESSION', projectId: r.projectId, sessionId: r.sessionId })}
           >
             <div className={styles.relatedCardBody}>
               <div className={styles.relatedCardTitle}>
