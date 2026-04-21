@@ -78,7 +78,7 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 
 ## Usage Guide
 
-See **[docs/USER-GUIDE_EN.md](docs/USER-GUIDE_EN.md)** for detailed usage — Session Summaries & Tags, Search, Storage Management.
+See **[docs/USER-GUIDE_EN.md](docs/USER-GUIDE_EN.md)** for detailed usage — Session Summaries & Tags, Search, Context Budget, Dashboard, Cross-Session Archaeology, Storage Management.
 
 ---
 
