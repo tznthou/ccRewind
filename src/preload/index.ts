@@ -30,6 +30,8 @@ const api: ElectronAPI = {
   previewExclusion: (rule) => ipcRenderer.invoke('storage:preview', rule),
   applyExclusion: (applyToken) => ipcRenderer.invoke('storage:apply', applyToken),
   removeExclusionRule: (id) => ipcRenderer.invoke('storage:remove-rule', id),
+  getDatabaseStats: () => ipcRenderer.invoke('storage:db-stats'),
+  compactDatabase: () => ipcRenderer.invoke('storage:compact'),
   onIndexerStatus: (callback) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Electron IPC event param
     const listener = (_event: any, status: IndexerStatus) => callback(status)

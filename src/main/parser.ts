@@ -20,6 +20,18 @@ const UNWRAP_RE = new RegExp(
   `<(${UNWRAP_TAGS.join('|')})>([\\s\\S]*?)</\\1>`, 'g',
 )
 
+/**
+ * parser 認識的 JSONL type 白名單。
+ * 不在此集合 → parseFailed=true，保留 raw_json 作為未來除錯 / re-parse 證據。
+ * 新增 type 時同步更新此列表。
+ */
+const KNOWN_MESSAGE_TYPES = new Set([
+  'user', 'assistant', 'system',
+  'queue-operation', 'last-prompt',
+  'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
+  'custom-title', 'ai-title', 'agent-name', 'pr-link',
+])
+
 /** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
 export function stripSystemXml(text: string): string {
   return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, _tag: string, content: string) => content).trim()
@@ -116,6 +128,7 @@ export function parseLine(line: string): ParsedLine | null {
   if (typeof obj !== 'object' || obj === null) return null
 
   const type = typeof obj.type === 'string' ? obj.type : 'unknown'
+  const parseFailed = !KNOWN_MESSAGE_TYPES.has(type)
   const rawUuid = typeof obj.uuid === 'string' ? obj.uuid.trim() : null
   const uuid = rawUuid && rawUuid.length <= 128 ? rawUuid : null
   const parentUuid = typeof obj.parentUuid === 'string' ? obj.parentUuid : null
@@ -173,7 +186,7 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolUse,
     hasToolResult,
     toolNames,
-    rawJson: line,
+    rawJson: parseFailed ? line : null,
     inputTokens,
     outputTokens,
     cacheReadTokens,

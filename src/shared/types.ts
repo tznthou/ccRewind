@@ -364,6 +364,25 @@ export interface ApplyExclusionResult {
   vacuumed: boolean
 }
 
+/** DB 維護資訊：用於 Storage 頁的 compact UI */
+export interface DatabaseMaintenanceStats {
+  /** 含 WAL/SHM 的總磁碟占用 */
+  dbBytes: number
+  /** free pages 數量（freelist_count） */
+  freelistPages: number
+  /** 單頁 bytes（page_size） */
+  pageSize: number
+  /** 可回收 bytes = freelistPages × pageSize */
+  reclaimableBytes: number
+}
+
+/** compactDatabase 結果 */
+export interface CompactResult {
+  bytesBefore: number
+  bytesAfter: number
+  releasedBytes: number
+}
+
 /** Renderer 透過 contextBridge 取得的 API */
 export interface ElectronAPI {
   getProjects: () => Promise<Project[]>
@@ -420,6 +439,10 @@ export interface ElectronAPI {
   applyExclusion: (applyToken: string) => Promise<ApplyExclusionResult>
   /** 移除指定規則 */
   removeExclusionRule: (id: number) => Promise<void>
+  /** 取得 DB 維護資訊（dbBytes + 可回收空間） */
+  getDatabaseStats: () => Promise<DatabaseMaintenanceStats>
+  /** 壓縮 DB（執行 VACUUM，可能耗時 10-30 秒） */
+  compactDatabase: () => Promise<CompactResult>
 }
 
 /** 更新檢查狀態 */
@@ -497,7 +520,8 @@ export interface ParsedLine {
   hasToolUse: boolean
   hasToolResult: boolean
   toolNames: string[]
-  rawJson: string
+  /** 原始 JSONL 整行。只在 parser 不認識 type（未來 schema 演進）時保留作為除錯證據；正常 entry 為 null */
+  rawJson: string | null
   /** Token usage（僅 assistant 訊息有值） */
   inputTokens: number | null
   outputTokens: number | null

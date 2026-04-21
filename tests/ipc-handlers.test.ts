@@ -83,6 +83,8 @@ describe('IPC Handlers', () => {
       expect(channels).toContain('storage:preview')
       expect(channels).toContain('storage:apply')
       expect(channels).toContain('storage:remove-rule')
+      expect(channels).toContain('storage:db-stats')
+      expect(channels).toContain('storage:compact')
     })
   })
 
@@ -342,6 +344,27 @@ describe('IPC Handlers', () => {
       expect(() => handler(event, 'not-a-number')).toThrow(/Invalid rule id/)
       expect(() => handler(event, -1)).toThrow(/Invalid rule id/)
       expect(() => handler(event, 1.5)).toThrow(/Invalid rule id/)
+    })
+  })
+
+  describe('storage:db-stats', () => {
+    it('returns maintenance stats with expected shape', () => {
+      const handler = getHandler('storage:db-stats')
+      const stats = handler(event)
+      expect(typeof stats.dbBytes).toBe('number')
+      expect(typeof stats.freelistPages).toBe('number')
+      expect(typeof stats.pageSize).toBe('number')
+      expect(stats.reclaimableBytes).toBe(stats.freelistPages * stats.pageSize)
+    })
+  })
+
+  describe('storage:compact', () => {
+    it('executes VACUUM and returns byte deltas', () => {
+      const handler = getHandler('storage:compact')
+      const result = handler(event)
+      expect(typeof result.bytesBefore).toBe('number')
+      expect(typeof result.bytesAfter).toBe('number')
+      expect(result.releasedBytes).toBeGreaterThanOrEqual(0)
     })
   })
 

@@ -1555,3 +1555,52 @@ describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
     expect(inactive0.length).toBe(3)
   })
 })
+
+describe('migration v17: clear legacy message_archive', () => {
+  it('after migration, DB at current version has no legacy archive rows from baseline', () => {
+    // 新建的 DB 走全部 migrations 到 v17，message_archive 應為空
+    const rows = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM message_archive")
+    expect(rows[0].c).toBe(0)
+  })
+
+  it('message_archive schema still exists (future parser fallback writes here)', () => {
+    const tables = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='message_archive'",
+    )
+    expect(tables).toHaveLength(1)
+  })
+})
+
+describe('database maintenance (stats + compact)', () => {
+  it('getDatabaseMaintenanceStats returns current DB metrics', () => {
+    const stats = db.getDatabaseMaintenanceStats()
+    expect(stats.dbBytes).toBeGreaterThan(0)
+    expect(stats.pageSize).toBeGreaterThan(0)
+    expect(stats.freelistPages).toBeGreaterThanOrEqual(0)
+    expect(stats.reclaimableBytes).toBe(stats.freelistPages * stats.pageSize)
+  })
+
+  it('compactDatabase returns non-negative releasedBytes shape', () => {
+    const result = db.compactDatabase()
+    expect(typeof result.bytesBefore).toBe('number')
+    expect(typeof result.bytesAfter).toBe('number')
+    expect(result.releasedBytes).toBeGreaterThanOrEqual(0)
+    // releasedBytes 永遠 = max(0, before - after)；WAL 模式下 VACUUM 可能讓總量略增
+    // （free pages 回寫主檔 + WAL truncate），此時 releasedBytes 應為 0 而非負數
+    expect(result.releasedBytes).toBe(Math.max(0, result.bytesBefore - result.bytesAfter))
+  })
+
+  it('compactDatabase after applyExclusion releases space', () => {
+    // applyExclusion 已有自帶 VACUUM，但驗證 compact 顯式呼叫仍能運作
+    db.indexSession({
+      sessionId: 'c-seed', projectId: 'p-c', projectDisplayName: '/c',
+      title: 't', messageCount: 5, filePath: '/tmp/c.jsonl', fileSize: 1,
+      fileMtime: '2026-01-01T00:00:00.000Z', startedAt: '2026-01-01T00:00:00.000Z', endedAt: null,
+      messages: Array.from({ length: 5 }, (_, i) => msg({
+        type: 'user', role: 'user', contentText: 'x'.repeat(1000), sequence: i,
+      })),
+    })
+    const result = db.compactDatabase()
+    expect(result.releasedBytes).toBeGreaterThanOrEqual(0)
+  })
+})

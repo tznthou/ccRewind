@@ -373,3 +373,23 @@
   color: var(--color-danger, #dc2626);
   font-size: var(--font-size-sm);
 }
+
+/* ── Database maintenance card ── */
+
+.maintenanceActions {
+  margin-top: var(--space-md);
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-sm);
+}
+
+.maintenanceBanner {
+  margin-top: var(--space-md);
+  padding: var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}

@@ -312,6 +312,55 @@ describe('parseLine', () => {
   })
 })
 
+describe('parseLine rawJson preservation (parseFailed fallback)', () => {
+  it('known type (user) → rawJson is null', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'u1',
+      timestamp: '2024-06-01T10:00:00.000Z',
+      sessionId: 's1',
+      message: { role: 'user', content: 'Hello' },
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBeNull()
+  })
+
+  it('known type (file-history-snapshot) → rawJson is null', () => {
+    const line = JSON.stringify({ type: 'file-history-snapshot', sessionId: 's1' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBeNull()
+  })
+
+  it('unknown type → rawJson preserves entire original line (debug fallback)', () => {
+    const line = JSON.stringify({
+      type: 'reasoning-trace',
+      sessionId: 's1',
+      payload: { steps: ['a', 'b'] },
+    })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe('reasoning-trace')
+    expect(result!.rawJson).toBe(line)
+  })
+
+  it('missing type field → rawJson preserved (parser cannot classify)', () => {
+    const line = JSON.stringify({ sessionId: 's1', message: 'no type field' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.type).toBe('unknown')
+    expect(result!.rawJson).toBe(line)
+  })
+
+  it('non-string type field → rawJson preserved', () => {
+    const line = JSON.stringify({ type: 42, sessionId: 's1' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBe(line)
+  })
+})
+
 describe('parseSession', () => {
   it('sample.jsonl → full parse with correct structure', async () => {
     const result = await parseSession(path.join(FIXTURES, 'sample.jsonl'), 'test-session-001')

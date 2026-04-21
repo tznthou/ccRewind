@@ -5,6 +5,7 @@ import ProjectBreakdownList from './ProjectBreakdown'
 import DateRangeExclusionForm from './DateRangeExclusionForm'
 import ExclusionRulesList from './ExclusionRulesList'
 import ConfirmExclusionDialog from './ConfirmExclusionDialog'
+import DatabaseMaintenanceCard from './DatabaseMaintenanceCard'
 import styles from './Storage.module.css'
 
 interface PendingExclusion {
@@ -104,6 +105,8 @@ export default function StoragePage() {
         <div className={styles.sectionTitle}>總覽</div>
         <StorageOverviewCards stats={overview.stats} />
       </div>
+
+      <DatabaseMaintenanceCard onAfterCompact={refresh} />
 
       <div className={styles.section}>
         <div className={styles.sectionTitle}>專案佔用</div>

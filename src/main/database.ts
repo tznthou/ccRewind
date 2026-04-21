@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -395,6 +395,13 @@ const migrations: Migration[] = [
         );
         CREATE INDEX idx_exclusion_project ON exclusion_rules(project_id);
       `)
+    },
+  },
+  {
+    version: 17,
+    description: 'clear legacy message_archive rows (parser now only stores raw_json for unknown types)',
+    up: (db) => {
+      db.exec('DELETE FROM message_archive')
     },
   },
 ]
@@ -1757,6 +1764,33 @@ export class Database {
       try { total += statSync(this.db.name + suffix).size } catch { /* sidecar may not exist */ }
     }
     return total
+  }
+
+  /**
+   * DB 維護資訊：總大小、可回收空間（free pages × page_size）。
+   * freelist_count 反映 DELETE 後尚未 VACUUM 的 free pages，可直接算出 compact 能釋放多少。
+   */
+  getDatabaseMaintenanceStats(): DatabaseMaintenanceStats {
+    const freelistPages = this.db.pragma('freelist_count', { simple: true }) as number
+    const pageSize = this.db.pragma('page_size', { simple: true }) as number
+    return {
+      dbBytes: this.getDbBytes(),
+      freelistPages,
+      pageSize,
+      reclaimableBytes: freelistPages * pageSize,
+    }
+  }
+
+  /**
+   * 壓縮 DB：執行 VACUUM。回傳壓縮前後 bytes。
+   * VACUUM 會鎖整個 DB，期間其他 query 會等待。1GB 資料上可能 10-30s。
+   * VACUUM 不能在 transaction 內執行（SQLite 限制）。
+   */
+  compactDatabase(): CompactResult {
+    const bytesBefore = this.getDbBytes()
+    this.db.exec('VACUUM')
+    const bytesAfter = this.getDbBytes()
+    return { bytesBefore, bytesAfter, releasedBytes: Math.max(0, bytesBefore - bytesAfter) }
   }
 
   getStorageStats(): StorageStats {
