@@ -129,7 +129,7 @@ export default function SearchResults() {
                       </button>
                       <button
                         className={styles.item}
-                        onClick={() => dispatch({ type: 'NAVIGATE_TO_RESULT', sessionId: g.sessionId, messageId: m.messageId })}
+                        onClick={() => dispatch({ type: 'NAVIGATE_TO_SESSION', projectId: g.projectId, sessionId: g.sessionId, messageId: m.messageId })}
                       >
                         <div className={styles.snippet}>{renderSnippet(m.snippet)}</div>
                         {m.timestamp && <span className={styles.time}>{formatTime(m.timestamp)}</span>}

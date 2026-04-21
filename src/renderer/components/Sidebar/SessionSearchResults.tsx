@@ -37,7 +37,7 @@ export default function SessionSearchResults() {
         <button
           key={r.sessionId}
           className={styles.group}
-          onClick={() => dispatch({ type: 'SELECT_SESSION', sessionId: r.sessionId })}
+          onClick={() => dispatch({ type: 'NAVIGATE_TO_SESSION', projectId: r.projectId, sessionId: r.sessionId })}
         >
           <div className={styles.groupHeader}>
             <span className={styles.sessionTitle}>{r.sessionTitle ?? r.sessionId.slice(0, 8)}</span>

@@ -3,7 +3,7 @@ import type { SearchResult, SessionSearchResult, SearchScope, SearchOptions } fr
 
 export type ViewMode = 'sessions' | 'dashboard' | 'storage'
 
-interface AppState {
+export interface AppState {
   viewMode: ViewMode
   fileHistoryPath: string | null
   selectedProjectId: string | null
@@ -18,7 +18,7 @@ interface AppState {
   targetMessageId: number | null
 }
 
-type AppAction =
+export type AppAction =
   | { type: 'SET_VIEW_MODE'; mode: ViewMode }
   | { type: 'OPEN_FILE_HISTORY'; filePath: string }
   | { type: 'CLOSE_FILE_HISTORY' }
@@ -30,10 +30,10 @@ type AppAction =
   | { type: 'APPEND_SEARCH_RESULTS'; results: SearchResult[]; hasMore: boolean }
   | { type: 'APPEND_SESSION_SEARCH_RESULTS'; results: SessionSearchResult[]; hasMore: boolean }
   | { type: 'CLEAR_SEARCH' }
-  | { type: 'NAVIGATE_TO_RESULT'; sessionId: string; messageId: number }
+  | { type: 'NAVIGATE_TO_SESSION'; projectId: string; sessionId: string; messageId?: number }
   | { type: 'CLEAR_TARGET_MESSAGE' }
 
-const initialState: AppState = {
+export const initialState: AppState = {
   viewMode: 'sessions',
   fileHistoryPath: null,
   selectedProjectId: null,
@@ -48,7 +48,7 @@ const initialState: AppState = {
   targetMessageId: null,
 }
 
-function appReducer(state: AppState, action: AppAction): AppState {
+export function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_VIEW_MODE':
       return { ...state, viewMode: action.mode }
@@ -73,8 +73,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, sessionSearchResults: [...state.sessionSearchResults, ...action.results], searchHasMore: action.hasMore }
     case 'CLEAR_SEARCH':
       return { ...state, searchQuery: '', searchScope: 'messages', searchResults: [], sessionSearchResults: [], searchHasMore: false, searchProjectId: null, searchOptions: undefined, targetMessageId: null }
-    case 'NAVIGATE_TO_RESULT':
-      return { ...state, selectedSessionId: action.sessionId, targetMessageId: action.messageId }
+    case 'NAVIGATE_TO_SESSION':
+      return {
+        ...state,
+        selectedProjectId: action.projectId,
+        selectedSessionId: action.sessionId,
+        targetMessageId: action.messageId ?? null,
+      }
     case 'CLEAR_TARGET_MESSAGE':
       return { ...state, targetMessageId: null }
   }

@@ -5,7 +5,7 @@ import styles from './Dashboard.module.css'
 
 interface Props {
   data: WasteSession[]
-  onSessionClick?: (sessionId: string) => void
+  onSessionClick?: (projectId: string, sessionId: string) => void
 }
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -24,7 +24,7 @@ export default function WasteDetection({ data, onSessionClick }: Props) {
         <div
           key={s.sessionId}
           className={styles.wasteItem}
-          onClick={() => onSessionClick?.(s.sessionId)}
+          onClick={() => onSessionClick?.(s.projectId, s.sessionId)}
         >
           <div className={styles.wasteName} title={s.intentText ?? undefined}>
             {s.intentText || 'No description'}

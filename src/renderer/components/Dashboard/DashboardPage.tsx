@@ -156,9 +156,9 @@ export default function DashboardPage() {
             <div className={styles.cardTitle}>Waste Detection</div>
             <WasteDetection
               data={waste}
-              onSessionClick={(sessionId) => {
+              onSessionClick={(projectId, sessionId) => {
                 dispatch({ type: 'SET_VIEW_MODE', mode: 'sessions' })
-                dispatch({ type: 'SELECT_SESSION', sessionId })
+                dispatch({ type: 'NAVIGATE_TO_SESSION', projectId, sessionId })
               }}
             />
           </div>

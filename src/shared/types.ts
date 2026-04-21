@@ -244,6 +244,7 @@ export interface WasteSession {
   outcomeStatus: OutcomeStatus
   fileCount: number
   startedAt: string | null
+  projectId: string
   projectName: string
 }
 
@@ -269,6 +270,7 @@ export interface ProjectHealth {
 export interface RelatedSession {
   sessionId: string
   sessionTitle: string | null
+  projectId: string
   projectName: string
   intentText: string | null
   outcomeStatus: OutcomeStatus

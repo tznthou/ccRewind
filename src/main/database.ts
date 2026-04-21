@@ -1542,7 +1542,7 @@ export class Database {
       SELECT s.id AS session_id, s.intent_text,
              COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0) AS total_tokens,
              s.duration_seconds, s.outcome_status, s.started_at,
-             p.display_name AS project_name,
+             p.id AS project_id, p.display_name AS project_name,
              CASE WHEN s.files_touched IS NOT NULL AND s.files_touched != ''
                THEN LENGTH(s.files_touched) - LENGTH(REPLACE(s.files_touched, ',', '')) + 1
                ELSE 0
@@ -1571,6 +1571,7 @@ export class Database {
       duration_seconds: number | null
       outcome_status: string | null
       started_at: string | null
+      project_id: string
       project_name: string
       file_count: number
     }>
@@ -1582,6 +1583,7 @@ export class Database {
       outcomeStatus: r.outcome_status as OutcomeStatus,
       fileCount: r.file_count,
       startedAt: r.started_at,
+      projectId: r.project_id,
       projectName: r.project_name,
     }))
   }
@@ -1653,7 +1655,7 @@ export class Database {
     const placeholders = targetFiles.map(() => '?').join(',')
     const candidates = this.db.prepare(`
       SELECT DISTINCT sf.session_id, s.title, s.intent_text, s.outcome_status, s.started_at,
-             p.display_name AS project_name
+             p.id AS project_id, p.display_name AS project_name
       FROM session_files sf
       JOIN sessions s ON s.id = sf.session_id
       JOIN projects p ON p.id = s.project_id
@@ -1667,6 +1669,7 @@ export class Database {
       intent_text: string | null
       outcome_status: string | null
       started_at: string | null
+      project_id: string
       project_name: string
     }>
 
@@ -1702,6 +1705,7 @@ export class Database {
         results.push({
           sessionId: cid,
           sessionTitle: meta.title,
+          projectId: meta.project_id,
           projectName: meta.project_name,
           intentText: meta.intent_text,
           outcomeStatus: (meta.outcome_status as OutcomeStatus) ?? null,
