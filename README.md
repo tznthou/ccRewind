@@ -130,6 +130,24 @@ graph TB
 
 ---
 
+## 下載安裝
+
+從 [Releases](https://github.com/tznthou/ccRewind/releases) 頁下載對應平台的預編譯版：
+
+- **macOS**（arm64）：DMG 拖曳到 Applications，或 ZIP 解壓後直接執行
+- **Windows**（x64）：NSIS installer 或 ZIP
+
+系統需求：macOS 11+ / Windows 10+
+
+### 首次啟動警告
+
+ccRewind 尚未取得 Apple Developer ID / Microsoft 程式碼簽章，首次執行時作業系統會顯示未簽章應用的警告，這是正常行為：
+
+- **macOS**：出現「無法驗證開發者」時，開啟「系統設定 → 隱私與安全性」，找到 ccRewind 並點擊「仍要打開」
+- **Windows**：SmartScreen 顯示「Windows 已保護您的電腦」時，點擊「其他資訊」→「仍要執行」
+
+---
+
 ## 快速開始
 
 ### 環境需求

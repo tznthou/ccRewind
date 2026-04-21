@@ -125,6 +125,24 @@ graph TB
 
 ---
 
+## Installation
+
+Download the pre-built binary for your platform from [Releases](https://github.com/tznthou/ccRewind/releases):
+
+- **macOS** (arm64): DMG (drag into Applications) or ZIP (extract and run)
+- **Windows** (x64): NSIS installer or ZIP
+
+System requirements: macOS 11+ / Windows 10+
+
+### First-launch warning
+
+ccRewind is not yet signed with an Apple Developer ID or Microsoft code-signing certificate, so your OS will show the standard warning for unsigned apps on first launch:
+
+- **macOS**: If you see "cannot verify developer", open **System Settings → Privacy & Security**, find ccRewind, and click **Open Anyway**
+- **Windows**: If SmartScreen shows "Windows protected your PC", click **More info** → **Run anyway**
+
+---
+
 ## Quick Start
 
 ### Prerequisites
