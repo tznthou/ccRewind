@@ -1,8 +1,9 @@
-import { memo, type ReactNode } from 'react'
+import { memo } from 'react'
 import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import { formatTime } from '../../utils/formatTime'
+import { highlightText } from '../../utils/highlightText'
 import { getHeatProps, type HeatInfo } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
 
@@ -10,18 +11,6 @@ interface MessageBubbleProps {
   message: Message
   searchQuery?: string
   heat?: HeatInfo
-}
-
-function highlightText(text: string, query: string): ReactNode {
-  if (!query) return text
-  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  const regex = new RegExp(`(${escaped})`, 'gi')
-  const parts = text.split(regex)
-  if (parts.length === 1) return text
-  const lower = query.toLowerCase()
-  return parts.map((part, i) =>
-    part.toLowerCase() === lower ? <mark key={i}>{part}</mark> : part,
-  )
 }
 
 interface ToolUseBlock {
@@ -93,7 +82,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
           {isUser ? (
             <p className={styles.plainText}>{highlightText(message.contentText, searchQuery)}</p>
           ) : (
-            <MarkdownRenderer content={message.contentText} />
+            <MarkdownRenderer content={message.contentText} searchQuery={searchQuery} />
           )}
         </div>
       )}
@@ -105,6 +94,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
             toolName={block.name}
             content={JSON.stringify(block.input, null, 2)}
             type="tool_use"
+            searchQuery={searchQuery}
           />
         ) : (
           <ToolBlock
@@ -112,6 +102,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
             toolName={block.tool_use_id.slice(0, 12)}
             content={typeof block.content === 'string' ? block.content : JSON.stringify(block.content, null, 2)}
             type="tool_result"
+            searchQuery={searchQuery}
           />
         ),
       )}
