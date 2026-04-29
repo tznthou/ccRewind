@@ -21,12 +21,15 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   const dispatch = useAppDispatch()
   const containerRef = useRef<HTMLDivElement>(null)
 
-  // 一般換 session 時 scroll to top
+  // 換 session 時若無搜尋目標就 scroll to top；用 ref 追蹤前一個 sessionId 避免 targetMessageId 變化時誤觸（會蓋掉 search scroll）
+  const prevSessionIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (!targetMessageId) {
+    const sessionChanged = prevSessionIdRef.current !== sessionId
+    prevSessionIdRef.current = sessionId
+    if (sessionChanged && !targetMessageId) {
       containerRef.current?.parentElement?.scrollTo(0, 0)
     }
-  }, [messages, targetMessageId])
+  }, [sessionId, targetMessageId])
 
   // 搜尋跳轉：targetMessageId 設定後（含同 session 重複點擊），loading 結束時跳轉
   useEffect(() => {
@@ -45,7 +48,19 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     }
     el.addEventListener('animationend', onEnd)
 
+    // 等 markdown render 後嘗試 scroll 到第一個關鍵字 mark；若所在 <details> 摺疊則先展開
+    let innerRafId = 0
+    const outerRafId = requestAnimationFrame(() => {
+      const mark = el.querySelector<HTMLElement>('mark[data-search-match="true"]')
+      if (!mark) return
+      const details = mark.closest('details')
+      if (details && !details.open) details.open = true
+      innerRafId = requestAnimationFrame(() => mark.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    })
+
     return () => {
+      cancelAnimationFrame(outerRafId)
+      cancelAnimationFrame(innerRafId)
       el.classList.remove(styles.highlightTarget)
       el.removeEventListener('animationend', onEnd)
     }
