@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.3] - 2026-04-29
+
+### Added
+
+- **Search keyword highlight inside Assistant Markdown and Tool blocks** ([#6](https://github.com/tznthou/ccRewind/issues/6)). Previously only User messages got `<mark>` highlighting on the matched term; clicking a search result that landed in an Assistant message or a `tool_result` (which can run to thousands of lines for grep/Read output) would scroll to the bubble but leave the reader hunting for the keyword. A new `rehypeSearchHighlight` plugin wraps matches in Markdown text nodes — including inline `code` for function names / file paths — while intentionally skipping fenced `<pre><code>` blocks to preserve highlight.js token structure. `ToolBlock` now memoizes `highlightText` over its `<pre>` content. When the matched mark sits inside a collapsed `<details>` (typical for `tool_result`), the block auto-opens and the viewport scrolls precisely to the first match.
+
+### Fixed
+
+- **Search-result clicks no longer randomly fail to scroll to the matched message.** A `useEffect` race condition in `ChatView` made first-time clicks frequently leave the viewport pinned at the top: the search effect dispatched `CLEAR_TARGET_MESSAGE`, which retriggered a sibling "scroll-to-top" effect (which had `targetMessageId` in its dependency array) and overrode the search scroll. The reset effect now uses `prevSessionIdRef` to fire only on actual session changes, and both outer/inner `requestAnimationFrame` callbacks are cancelled in cleanup to avoid stale callbacks under rapid clicks.
+
 ## [1.9.2] - 2026-04-21
 
 ### Fixed
