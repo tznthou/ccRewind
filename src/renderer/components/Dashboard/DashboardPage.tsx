@@ -31,6 +31,7 @@ export default function DashboardPage() {
 
   // Data states
   const [usage, setUsage] = useState<DailyUsage[]>([])
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [projectStats, setProjectStats] = useState<ProjectStats[]>([])
   const [tools, setTools] = useState<DistributionItem[]>([])
   const [tags, setTags] = useState<DistributionItem[]>([])

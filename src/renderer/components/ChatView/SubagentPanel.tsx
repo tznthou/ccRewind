@@ -21,6 +21,7 @@ export default function SubagentPanel({ sessionId }: Props) {
 
   useEffect(() => {
     const queryId = parentId ?? sessionId
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- queryId 變更時的 reset pattern，改寫成 derived state 風險高，留待後續 refactor
     setSubagents([])
     let cancelled = false
     window.api.getSubagentSessions(queryId)

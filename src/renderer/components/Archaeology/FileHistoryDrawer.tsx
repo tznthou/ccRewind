@@ -15,6 +15,7 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
   const dispatch = useAppDispatch()
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- filePath 變更時的 reset pattern，改寫成 derived state 風險高，留待後續 refactor
     setLoading(true)
     setEntries([])
     let cancelled = false
