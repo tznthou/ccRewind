@@ -136,7 +136,9 @@ const zhTW = {
   'app.languageSwitcher.en': 'EN',
 } as const
 
-const en: typeof zhTW = {
+type MessageCatalog = Record<keyof typeof zhTW, string>
+
+const en = {
   'sidebar.subtitle': 'Claude Code session replay tool',
   'sidebar.section.projects': 'Projects',
   'sidebar.section.sessions': 'Sessions',
@@ -272,7 +274,7 @@ const en: typeof zhTW = {
   'app.languageSwitcher.label': 'Language',
   'app.languageSwitcher.zh': '中',
   'app.languageSwitcher.en': 'EN',
-}
+} satisfies MessageCatalog
 
 export type Locale = 'zh-TW' | 'en'
 export type MessageKey = keyof typeof zhTW
