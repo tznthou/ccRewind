@@ -37,11 +37,12 @@ export default function EfficiencyTrendChart({ data }: Props) {
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
-          formatter={(value: number, name: string) =>
-            name === 'avgTokensPerTurn'
-              ? [formatTokens(value), 'Tokens/Turn']
-              : [value, 'Sessions']
-          }
+          formatter={(value, name) => {
+            const num = Number(value)
+            return name === 'avgTokensPerTurn'
+              ? [formatTokens(num), 'Tokens/Turn']
+              : [num, 'Sessions']
+          }}
           labelFormatter={(label) => `Date: ${label}`}
         />
         <Area

@@ -45,9 +45,10 @@ export default function UsageTrendChart({ data }: Props) {
         />
         <Tooltip
           contentStyle={CHART_TOOLTIP_STYLE}
-          formatter={(value: number, name: string) =>
-            name === 'totalTokens' ? [formatTokens(value), 'Tokens'] : [value, 'Sessions']
-          }
+          formatter={(value, name) => {
+            const num = Number(value)
+            return name === 'totalTokens' ? [formatTokens(num), 'Tokens'] : [num, 'Sessions']
+          }}
           labelFormatter={(label) => `Date: ${label}`}
         />
         <Area
