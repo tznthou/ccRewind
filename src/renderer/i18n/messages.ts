@@ -285,10 +285,10 @@ export function getDateLocale(locale: Locale): string {
   return locale === 'en' ? 'en-US' : 'zh-TW'
 }
 
-export const messages: Record<Locale, Record<MessageKey, string>> = {
+export const messages = {
   'zh-TW': zhTW,
   en,
-}
+} satisfies Record<Locale, Record<MessageKey, string>>
 
 export type TranslateParams = Record<string, string | number>
 
