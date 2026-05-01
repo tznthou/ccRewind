@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { RelatedSession } from '../../../shared/types'
 import { useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
+import { getDateLocale } from '../../i18n/messages'
 import { lastSegment, basename } from '../../utils/pathDisplay'
 import styles from './Archaeology.module.css'
 
@@ -13,6 +15,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState(false)
   const dispatch = useAppDispatch()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sessionId 變更時的 reset pattern，改寫成 derived state 風險高，留待後續 refactor
@@ -33,7 +36,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
 
   return (
     <div className={styles.relatedPanel}>
-      <div className={styles.relatedHeader}>Related Sessions</div>
+      <div className={styles.relatedHeader}>{t('related.title')}</div>
       <div className={styles.relatedList}>
         {displayed.map(r => (
           <div
@@ -47,7 +50,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
               </div>
               <div className={styles.relatedCardMeta}>
                 {lastSegment(r.projectName)}
-                {r.startedAt && ` · ${new Date(r.startedAt).toLocaleDateString('zh-TW')}`}
+                {r.startedAt && ` · ${new Date(r.startedAt).toLocaleDateString(getDateLocale(locale))}`}
                 {r.outcomeStatus && ` · ${r.outcomeStatus}`}
               </div>
               <div className={styles.sharedFiles}>
@@ -64,7 +67,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
           style={{ justifyContent: 'center', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: 'var(--font-size-xs)' }}
           onClick={() => setExpanded(true)}
         >
-          Show {related.length - 3} more
+          {t('related.showMore', { count: related.length - 3 })}
         </button>
       )}
     </div>

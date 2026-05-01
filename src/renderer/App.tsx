@@ -1,5 +1,7 @@
 import { AppProvider, useAppState, useAppDispatch } from './context/AppContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { I18nProvider, useI18n } from './i18n/useI18n'
+import LanguageSwitcher from './i18n/LanguageSwitcher'
 import Sidebar from './components/Sidebar/Sidebar'
 import ChatView from './components/ChatView/ChatView'
 import DashboardPage from './components/Dashboard/DashboardPage'
@@ -11,6 +13,7 @@ import styles from './App.module.css'
 function AppContent() {
   const { selectedSessionId, viewMode, fileHistoryPath } = useAppState()
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
 
   return (
     <div className={styles.layout}>
@@ -18,7 +21,8 @@ function AppContent() {
         <button
           className={`${styles.viewToggle} ${viewMode === 'dashboard' ? styles.viewToggleActive : ''}`}
           onClick={() => dispatch({ type: 'SET_VIEW_MODE', mode: viewMode === 'dashboard' ? 'sessions' : 'dashboard' })}
-          title="Dashboard"
+          title={t('app.tooltip.dashboard')}
+          aria-label={t('app.tooltip.dashboard')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
@@ -28,7 +32,8 @@ function AppContent() {
         <button
           className={`${styles.viewToggle} ${viewMode === 'storage' ? styles.viewToggleActive : ''}`}
           onClick={() => dispatch({ type: 'SET_VIEW_MODE', mode: viewMode === 'storage' ? 'sessions' : 'storage' })}
-          title="Storage Management"
+          title={t('app.tooltip.storage')}
+          aria-label={t('app.tooltip.storage')}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <ellipse cx="12" cy="5" rx="9" ry="3" />
@@ -37,6 +42,7 @@ function AppContent() {
           </svg>
         </button>
         <ThemeSwitcher />
+        <LanguageSwitcher />
       </div>
       {viewMode === 'dashboard' ? (
         <main className={`${styles.main} ${styles.mainFull}`}>
@@ -59,7 +65,7 @@ function AppContent() {
                 <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
                 </svg>
-                <span>選擇一個 Session 開始瀏覽</span>
+                <span>{t('app.placeholder.selectSession')}</span>
               </div>
             )}
           </main>
@@ -77,10 +83,12 @@ function AppContent() {
 
 export default function App() {
   return (
-    <ThemeProvider>
-      <AppProvider>
-        <AppContent />
-      </AppProvider>
-    </ThemeProvider>
+    <I18nProvider>
+      <ThemeProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
+      </ThemeProvider>
+    </I18nProvider>
   )
 }

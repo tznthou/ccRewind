@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import type { ProjectBreakdown } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import { formatBytes } from '../../utils/formatBytes'
 import { lastSegment } from '../../utils/pathDisplay'
 import styles from './Storage.module.css'
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function ProjectBreakdownList({ projects, onExcludeProject }: Props) {
+  const { t } = useI18n()
   const sorted = useMemo(
     () => [...projects].sort((a, b) => b.estimatedBytes - a.estimatedBytes),
     [projects],
@@ -17,7 +19,7 @@ export default function ProjectBreakdownList({ projects, onExcludeProject }: Pro
   const maxBytes = sorted[0]?.estimatedBytes ?? 0
 
   if (sorted.length === 0) {
-    return <div className={styles.empty}>尚無專案</div>
+    return <div className={styles.empty}>{t('storage.projects.empty')}</div>
   }
 
   return (
@@ -40,7 +42,7 @@ export default function ProjectBreakdownList({ projects, onExcludeProject }: Pro
             className={`${styles.button} ${styles.dangerButton}`}
             onClick={() => onExcludeProject(p.projectId, p.displayName)}
           >
-            排除此專案
+            {t('storage.projects.exclude')}
           </button>
         </div>
       ))}

@@ -1,5 +1,6 @@
 import { useProjects } from '../../hooks/useProjects'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
 import styles from './Sidebar.module.css'
 
 /** Shorten absolute path to ~/... for display */
@@ -14,25 +15,26 @@ export default function ProjectList() {
   const { projects, loading, error } = useProjects()
   const { selectedProjectId } = useAppState()
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
 
   if (loading) {
-    return <div className={styles.statusText}>載入專案中...</div>
+    return <div className={styles.statusText}>{t('sidebar.projectList.loading')}</div>
   }
 
   if (error) {
-    return <div className={styles.errorText}>錯誤：{error}</div>
+    return <div className={styles.errorText}>{t('common.error', { message: error })}</div>
   }
 
   if (projects.length === 0) {
     return (
       <div className={styles.statusText}>
-        尚未找到專案。請確認 ~/.claude/projects/ 目錄存在。
+        {t('sidebar.projectList.empty')}
       </div>
     )
   }
 
   return (
-    <ul className={styles.projectList} role="listbox" aria-label="專案列表">
+    <ul className={styles.projectList} role="listbox" aria-label={t('sidebar.projectList.aria.label')}>
       {projects.map((project) => (
         <li
           key={project.id}

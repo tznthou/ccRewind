@@ -4,6 +4,7 @@ import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import { formatTime } from '../../utils/formatTime'
 import { highlightText } from '../../utils/highlightText'
+import { useI18n } from '../../i18n/useI18n'
 import { getHeatProps, type HeatInfo } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
 
@@ -47,6 +48,7 @@ function extractToolBlocks(contentJson: string | null): ContentBlock[] {
 }
 
 export default memo(function MessageBubble({ message, searchQuery = '', heat }: MessageBubbleProps) {
+  const { t } = useI18n()
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
@@ -62,9 +64,9 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   if (isSystem) {
     return (
       <div className={styles.systemMessage}>
-        <span className={styles.systemLabel}>系統</span>
+        <span className={styles.systemLabel}>{t('chatView.message.system')}</span>
         <span className={styles.systemText}>
-          {message.contentText?.slice(0, 200) ?? '(queue operation)'}
+          {message.contentText?.slice(0, 200) ?? t('chatView.message.queueOperation')}
         </span>
       </div>
     )

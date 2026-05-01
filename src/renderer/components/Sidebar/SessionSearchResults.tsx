@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
 import { formatTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
 import type { SessionSearchResult } from '../../../shared/types'
@@ -8,6 +9,7 @@ import styles from './SearchResults.module.css'
 export default function SessionSearchResults() {
   const { sessionSearchResults, searchQuery, searchHasMore, searchProjectId, searchOptions } = useAppState()
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(false)
 
   const handleLoadMore = async () => {
@@ -25,14 +27,14 @@ export default function SessionSearchResults() {
   if (sessionSearchResults.length === 0) {
     return (
       <div className={styles.empty}>
-        找不到「{searchQuery}」的 session
+        {t('sidebar.sessionSearchResults.empty', { query: searchQuery })}
       </div>
     )
   }
 
   return (
     <div className={styles.container}>
-      <div className={styles.count}>{sessionSearchResults.length} 個 session</div>
+      <div className={styles.count}>{t('sidebar.sessionSearchResults.count', { count: sessionSearchResults.length })}</div>
       {sessionSearchResults.map((r: SessionSearchResult) => (
         <button
           key={r.sessionId}
@@ -59,7 +61,7 @@ export default function SessionSearchResults() {
       ))}
       {searchHasMore && (
         <button className={styles.loadMore} onClick={handleLoadMore} disabled={loading}>
-          {loading ? '載入中...' : '載入更多'}
+          {loading ? t('common.loading') : t('common.loadMore')}
         </button>
       )}
     </div>

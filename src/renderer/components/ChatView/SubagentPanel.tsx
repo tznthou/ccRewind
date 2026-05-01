@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { SubagentSession } from '../../../shared/types'
 import { useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
+import { getDateLocale } from '../../i18n/messages'
 import styles from './ChatView.module.css'
 
 interface Props {
@@ -9,6 +11,7 @@ interface Props {
 
 export default function SubagentPanel({ sessionId }: Props) {
   const dispatch = useAppDispatch()
+  const { t, locale } = useI18n()
 
   const slashIndex = sessionId.indexOf('/')
   const isSubagent = slashIndex > 0
@@ -39,7 +42,7 @@ export default function SubagentPanel({ sessionId }: Props) {
           className={styles.subagentBack}
           onClick={() => dispatch({ type: 'SELECT_SESSION', sessionId: parentId! })}
         >
-          &larr; Back to parent
+          &larr; {t('chatView.subagent.back')}
         </button>
         {self?.agentType && (
           <span className={styles.subagentTypeBadge}>{self.agentType}</span>
@@ -53,7 +56,7 @@ export default function SubagentPanel({ sessionId }: Props) {
 
   return (
     <div className={styles.subagentChips}>
-      <span className={styles.subagentLabel}>Subagents</span>
+      <span className={styles.subagentLabel}>{t('chatView.subagent.label')}</span>
       {subagents.map(sub => (
         <button
           key={sub.id}
@@ -61,11 +64,11 @@ export default function SubagentPanel({ sessionId }: Props) {
           onClick={() => dispatch({ type: 'SELECT_SESSION', sessionId: sub.id })}
           title={[
             sub.agentType,
-            `${sub.messageCount} msgs`,
-            sub.startedAt && new Date(sub.startedAt).toLocaleString('zh-TW'),
+            t('chatView.subagent.msgs', { count: sub.messageCount }),
+            sub.startedAt && new Date(sub.startedAt).toLocaleString(getDateLocale(locale)),
           ].filter(Boolean).join(' \u00b7 ')}
         >
-          {sub.agentType || 'agent'}
+          {sub.agentType || t('chatView.subagent.fallback')}
           <span className={styles.subagentCount}>{sub.messageCount}</span>
         </button>
       ))}
