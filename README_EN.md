@@ -72,7 +72,11 @@ When Claude Code deletes a session, ccRewind automatically archives that convers
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
-| **Accessibility** | WCAG 2.1 AA contrast, ARIA labels, keyboard navigation, focus management |
+| **Internationalization** | Traditional Chinese (zh-TW) and English UI, toggled from the title bar. All UI strings flow through a type-safe `MessageKey` catalog (zh-TW default), persisted in localStorage |
+| **Font Scale** | Three-tier font zoom (normal 1.0× / large 1.1× / xlarge 1.25×) driven by a `--font-scale` CSS variable on `:root`, with a synchronous boot-time script preventing FOUC |
+| **Sync Awareness** | Auto-reindex when the window regains focus (in-flight Promises de-duplicate to prevent indexer thrashing), manual "Sync now" button, and a "Last indexed Xs ago" staleness label |
+| **Sidebar Keyboard Navigation** | Project list, session list, message search, and session search all support ↑↓ arrow navigation. ArrowDown from the search bar hands focus to the first result. Virtualized lists use `aria-activedescendant` so focus stays stable as the active row scrolls in and out of the viewport |
+| **Accessibility** | WCAG 2.1 AA contrast, ARIA labels (incl. radio keyboard pattern), focus management |
 
 ---
 
@@ -121,7 +125,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 294 tests, run through Electron |
+| Vitest 3 | Test framework | 342 tests, run through Electron |
 
 ---
 
@@ -203,13 +207,15 @@ ccRewind/
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
+│   │   │   ├── FontScaleSwitcher/ # Three-tier font zoom with ARIA radio keyboard pattern
 │   │   │   └── UpdateBanner/  # Update notification banner
-│   │   ├── hooks/             # useSession, useSessions, useProjects
+│   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav
+│   │   ├── i18n/              # LanguageSwitcher + message catalog + useI18n (zh-TW + en)
 │   │   ├── utils/             # formatTokens, formatTime, formatDuration, pathDisplay, renderSnippet
-│   │   └── context/           # AppContext + ThemeContext (theme persistence)
+│   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (294)
+├── tests/                     # Vitest tests (342)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
