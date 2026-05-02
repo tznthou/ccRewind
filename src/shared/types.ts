@@ -425,6 +425,8 @@ export interface ElectronAPI {
   getSubagentSessions: (parentSessionId: string) => Promise<SubagentSession[]>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
+  /** 手動觸發 reindex（與 focus auto-trigger 共用 in-flight 合併） */
+  reindex: () => Promise<void>
   /** 檢查更新（回傳最新狀態） */
   checkForUpdates: () => Promise<UpdateState>
   /** 取得目前更新狀態（不發請求） */
@@ -455,12 +457,20 @@ export interface UpdateState {
   releaseUrl: string | null
 }
 
-/** 索引進度 */
-export interface IndexerStatus {
+/** Indexer 內部進度（runIndexer onProgress 用，不含 lastIndexedAt）*/
+export interface IndexerProgress {
   phase: 'scanning' | 'parsing' | 'indexing' | 'done'
   progress: number
   total: number
   current: number
+}
+
+/** IPC 對外索引狀態（含 lastIndexedAt）。
+ *  lastIndexedAt: ISO 8601 字串（main 用 new Date().toISOString() 寫入），
+ *  只在 phase='done' 時帶值，scanning/indexing 期間為 null。
+ *  Renderer 用 Date.parse() 取 epoch ms 與 Date.now() 計算 ago。 */
+export interface IndexerStatus extends IndexerProgress {
+  lastIndexedAt: string | null
 }
 
 // ── Scanner 中間型別 ──

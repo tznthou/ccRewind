@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import type { IndexerStatus } from '../../shared/types'
 
 export function useIndexerStatus() {
@@ -9,5 +9,9 @@ export function useIndexerStatus() {
     return cleanup
   }, [])
 
-  return status
+  const triggerSync = useCallback(async () => {
+    await window.api.reindex()
+  }, [])
+
+  return { status, triggerSync }
 }
