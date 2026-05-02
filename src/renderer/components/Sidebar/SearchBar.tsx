@@ -43,6 +43,7 @@ export default function SearchBar() {
   const [sortBy, setSortBy] = useState<SearchSortBy>('rank')
   const searchTypeRef = useRef(searchType)
   const scopeRef = useRef(scope)
+  const searchSeqRef = useRef(0)
   searchTypeRef.current = searchType
   scopeRef.current = scope
 
@@ -63,19 +64,25 @@ export default function SearchBar() {
     if (!q) return
     const projectId = scopeRef.current === 'project' ? selectedProjectId : null
     const type = searchTypeRef.current
+    // monotonic seq：filter 連按時，舊請求的 promise resolve 若晚到必須整個丟棄
+    // （否則 stale results 覆蓋 visible UI 且 announce 錯誤計數給 SR）
+    const seq = ++searchSeqRef.current
     setSearching(true)
     try {
       if (type === 'sessions') {
         const page = await window.api.searchSessions(q, projectId, undefined, opts)
+        if (seq !== searchSeqRef.current) return
         dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
         announceResult('sessions', page.results.length, 0, q)
       } else {
         const page = await window.api.search(q, projectId, undefined, opts)
+        if (seq !== searchSeqRef.current) return
         dispatch({ type: 'SET_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
         const groupSet = new Set(page.results.map(r => r.sessionId))
         announceResult('messages', page.results.length, groupSet.size, q)
       }
     } catch {
+      if (seq !== searchSeqRef.current) return
       if (type === 'sessions') {
         dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: [], hasMore: false, projectId })
       } else {
@@ -83,7 +90,7 @@ export default function SearchBar() {
       }
       announceResult(type, 0, 0, q)
     } finally {
-      setSearching(false)
+      if (seq === searchSeqRef.current) setSearching(false)
     }
   }, [selectedProjectId, dispatch, announceResult])
 
