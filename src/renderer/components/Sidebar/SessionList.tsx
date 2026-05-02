@@ -4,6 +4,8 @@ import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { useI18n } from '../../i18n/useI18n'
+import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
+import type { SessionMeta } from '../../../shared/types'
 import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
@@ -44,6 +46,14 @@ export default function SessionList() {
     overscan: 5,
   })
 
+  const { listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
+    items: sortedSessions,
+    getItemId: (s) => s.id,
+    onActivate: (s) => dispatch({ type: 'SELECT_SESSION', sessionId: s.id }),
+    dispatchOnArrow: true,
+    onActiveChange: (i) => virtualizer.scrollToIndex(i, { align: 'auto' }),
+  })
+
   if (!selectedProjectId) {
     return <div className={styles.statusText}>{t('sidebar.sessionList.empty.noProject')}</div>
   }
@@ -76,7 +86,12 @@ export default function SessionList() {
           Tokens
         </button>
       </div>
-    <div ref={parentRef} className={styles.sessionListContainer} role="listbox" aria-label={t('sidebar.sessionList.aria.label')}>
+    <div
+      ref={parentRef}
+      className={styles.sessionListContainer}
+      aria-label={t('sidebar.sessionList.aria.label')}
+      {...listboxProps}
+    >
       <div
         style={{
           height: virtualizer.getTotalSize(),
@@ -87,10 +102,11 @@ export default function SessionList() {
         {virtualizer.getVirtualItems().map((virtualItem) => {
           const session = sortedSessions[virtualItem.index]
           const isSelected = session.id === selectedSessionId
+          const active = isActive(virtualItem.index)
           return (
             <div
               key={session.id}
-              className={`${styles.sessionItem} ${isSelected ? styles.selected : ''}`}
+              className={`${styles.sessionItem} ${isSelected ? styles.selected : ''} ${active ? styles.optionActive : ''}`}
               style={{
                 position: 'absolute',
                 top: 0,
@@ -99,11 +115,12 @@ export default function SessionList() {
                 height: virtualItem.size,
                 transform: `translateY(${virtualItem.start}px)`,
               }}
-              role="option"
               aria-selected={isSelected}
-              tabIndex={0}
-              onClick={() => dispatch({ type: 'SELECT_SESSION', sessionId: session.id })}
-              onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dispatch({ type: 'SELECT_SESSION', sessionId: session.id }) } }}
+              {...getOptionProps(session)}
+              onClick={() => {
+                setActiveIndex(virtualItem.index)
+                dispatch({ type: 'SELECT_SESSION', sessionId: session.id })
+              }}
             >
               <div className={styles.sessionTitle}>
                 {session.intentText || session.title || session.id.slice(0, 8)}

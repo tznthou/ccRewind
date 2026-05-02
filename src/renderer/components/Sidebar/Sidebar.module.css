@@ -100,6 +100,12 @@
   background-color: var(--color-bg-selected);
 }
 
+/* Keyboard active option（aria-activedescendant 視覺化）— 與 hover、selected 區分 */
+.optionActive {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
 .projectName {
   font-size: var(--font-size-sm);
   overflow: hidden;

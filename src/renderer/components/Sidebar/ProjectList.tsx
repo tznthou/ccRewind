@@ -1,6 +1,8 @@
 import { useProjects } from '../../hooks/useProjects'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useI18n } from '../../i18n/useI18n'
+import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
+import type { Project } from '../../../shared/types'
 import styles from './Sidebar.module.css'
 
 /** Shorten absolute path to ~/... for display */
@@ -16,6 +18,13 @@ export default function ProjectList() {
   const { selectedProjectId } = useAppState()
   const dispatch = useAppDispatch()
   const { t } = useI18n()
+
+  const { listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<Project>({
+    items: projects,
+    getItemId: (p) => p.id,
+    onActivate: (p) => dispatch({ type: 'SELECT_PROJECT', projectId: p.id }),
+    dispatchOnArrow: true,
+  })
 
   if (loading) {
     return <div className={styles.statusText}>{t('sidebar.projectList.loading')}</div>
@@ -34,16 +43,21 @@ export default function ProjectList() {
   }
 
   return (
-    <ul className={styles.projectList} role="listbox" aria-label={t('sidebar.projectList.aria.label')}>
-      {projects.map((project) => (
+    <ul
+      className={styles.projectList}
+      aria-label={t('sidebar.projectList.aria.label')}
+      {...listboxProps}
+    >
+      {projects.map((project, i) => (
         <li
           key={project.id}
-          className={`${styles.projectItem} ${project.id === selectedProjectId ? styles.selected : ''}`}
-          role="option"
+          className={`${styles.projectItem} ${project.id === selectedProjectId ? styles.selected : ''} ${isActive(i) ? styles.optionActive : ''}`}
           aria-selected={project.id === selectedProjectId}
-          tabIndex={0}
-          onClick={() => dispatch({ type: 'SELECT_PROJECT', projectId: project.id })}
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); dispatch({ type: 'SELECT_PROJECT', projectId: project.id }) } }}
+          {...getOptionProps(project)}
+          onClick={() => {
+            setActiveIndex(i)
+            dispatch({ type: 'SELECT_PROJECT', projectId: project.id })
+          }}
         >
           <span className={styles.projectName} title={project.displayName}>{shortenPath(project.displayName)}</span>
           <span className={styles.badge}>{project.sessionCount}</span>
