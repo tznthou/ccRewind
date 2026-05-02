@@ -3,6 +3,7 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import rehypeHighlight from 'rehype-highlight'
 import rehypeSanitize from 'rehype-sanitize'
+import type { PluggableList } from 'unified'
 import rehypeSearchHighlight from '../../utils/rehypeSearchHighlight'
 import 'highlight.js/styles/atom-one-dark.css'
 
@@ -11,11 +12,11 @@ interface MarkdownRendererProps {
   searchQuery?: string
 }
 
-const REMARK_PLUGINS = [remarkGfm]
-const REHYPE_PLUGINS_BASE = [rehypeSanitize, rehypeHighlight]
+const REMARK_PLUGINS: PluggableList = [remarkGfm]
+const REHYPE_PLUGINS_BASE: PluggableList = [rehypeSanitize, rehypeHighlight]
 
 export default memo(function MarkdownRenderer({ content, searchQuery }: MarkdownRendererProps) {
-  const rehypePlugins = useMemo(
+  const rehypePlugins = useMemo<PluggableList>(
     () =>
       searchQuery
         ? [rehypeSanitize, [rehypeSearchHighlight, { query: searchQuery }], rehypeHighlight]

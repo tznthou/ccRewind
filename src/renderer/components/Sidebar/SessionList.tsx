@@ -34,6 +34,7 @@ export default function SessionList() {
     return sessions // already sorted by time from hook
   }, [sessions, sortKey])
 
+  // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual 的 useVirtualizer 跟 React Compiler memoization 不相容（third-party API design 限制）
   const virtualizer = useVirtualizer({
     count: sortedSessions.length,
     getScrollElement: () => parentRef.current,

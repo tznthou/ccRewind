@@ -4,7 +4,7 @@
 
 - dev: `pnpm dev`
 - build: `pnpm build`
-- test: `pnpm vitest run`
+- test: `pnpm test`（必須走此指令！包了 `ELECTRON_RUN_AS_NODE=1` + Electron Node binary，否則 better-sqlite3 ABI 不匹配，163/333 假紅。直接 `pnpm vitest run` 會繞過 ABI 修正）
 - lint: `pnpm eslint . --fix`
 - dist: `pnpm dist`（打包 Electron 應用）
 

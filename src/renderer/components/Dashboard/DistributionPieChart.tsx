@@ -39,7 +39,7 @@ export default function DistributionPieChart({ data, emptyText, unitLabel, color
           dataKey="value"
         />
         <Tooltip
-          formatter={(value: number) => [value.toLocaleString(), unitLabel]}
+          formatter={(value) => [Number(value).toLocaleString(), unitLabel]}
           contentStyle={CHART_TOOLTIP_STYLE}
         />
         <Legend

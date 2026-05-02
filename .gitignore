@@ -2,8 +2,10 @@ node_modules/
 out/
 dist/
 *.db
+*.tsbuildinfo
 .DS_Store
 .vscode/
 .claude
 .claude/RESUME.md
+.draft/
 mockups/
