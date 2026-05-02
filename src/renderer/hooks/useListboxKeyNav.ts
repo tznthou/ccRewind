@@ -1,5 +1,12 @@
 import { useCallback, useId, useState, type KeyboardEvent } from 'react'
 
+/** 把 caller 提供的 itemId 消毒成合法 HTML id 字元集，防 CSS selector / querySelector 注入。
+ *  React 會 escape attribute value 不會 XSS，但若未來有 code 用此 id 走 selector 路徑（如 #foo.bar）
+ *  特殊字元（. # [ ] 等）會破壞 selector 語意。projectId / sessionId 從掃磁碟得來，內部信任但 cheap defense。 */
+function sanitizeId(s: string): string {
+  return s.replace(/[^a-zA-Z0-9\-_:.]/g, '_')
+}
+
 interface Options<T> {
   items: T[]
   getItemId: (item: T) => string
@@ -92,11 +99,11 @@ export function useListboxKeyNav<T>({
   }, [items, safeActiveIndex, dispatchOnArrow, onActivate, onActiveChange])
 
   const activeDescendant = items.length > 0
-    ? `${listboxId}-${getItemId(items[safeActiveIndex])}`
+    ? `${listboxId}-${sanitizeId(getItemId(items[safeActiveIndex]))}`
     : undefined
 
   const getOptionProps = useCallback((item: T): OptionProps => ({
-    id: `${listboxId}-${getItemId(item)}`,
+    id: `${listboxId}-${sanitizeId(getItemId(item))}`,
     role: 'option',
     tabIndex: -1,
   }), [listboxId, getItemId])
