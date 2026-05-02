@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2026-05-02
+
+### Added
+
+- **Internationalization — Traditional Chinese (zh-TW) and English (en) UI localization** ([#9](https://github.com/tznthou/ccRewind/pull/9)). The entire UI surface — sidebar headers, titlebar tooltips, dialogs, error messages, ARIA labels, dashboard copy — is now driven by a type-safe `MessageKey` catalog instead of hard-coded zh-TW strings. A new `LanguageSwitcher` in the title bar toggles the locale; the choice persists to `localStorage` and `<html lang>` updates accordingly. Defaults to `zh-TW`; falls back to `zh-TW` when `localStorage` is unavailable. The catalog uses `satisfies Record<MessageKey, string>` so missing or stale keys fail the strict `tsconfig.web.json` typecheck.
+
+- **Sidebar sync UX — focus-driven auto-reindex, manual "Sync now", and staleness label** ([#10](https://github.com/tznthou/ccRewind/pull/10)). Previously, ccRewind only indexed at startup; new sessions written to `~/.claude/projects/` after launch went unseen until the next restart. The renderer now reindexes when the BrowserWindow regains focus (in-flight Promises de-duplicate so rapid focus-blur cycles don't thrash the indexer), exposes a manual "Sync now" button on the sidebar header, and shows a "Last indexed Xs ago" label so users know how stale the view is. Internally, `IndexerProgress` (used by `runIndexer` while the job is running) is split from `IndexerStatus` (the IPC contract that adds `lastIndexedAt`) so the indexer's internal events stay free of UI-layer concerns.
+
+- **Arrow key navigation across sidebar lists** ([#11](https://github.com/tznthou/ccRewind/pull/11)). Project list, session list, message search results, and session search results now support `ArrowUp` / `ArrowDown` keyboard navigation; pressing `ArrowDown` from the search bar hands off focus to the first result. `ProjectList` and `SessionList` dispatch selection on each arrow press; `SearchResults` and `SessionSearchResults` move only the active highlight on arrows, with `Enter` performing the cross-context navigate (which is heavier and shouldn't fire on every keystroke). Implementation uses `aria-activedescendant` rather than roving `tabIndex` so virtualized lists don't lose focus when the active row unmounts during scroll.
+
+- **Font scale switcher in the title bar** ([#12](https://github.com/tznthou/ccRewind/pull/12)). Three tiers — normal (1.0×), large (1.1×), and xlarge (1.25×) — scale the entire UI's font-size tokens via a `--font-scale` CSS variable on `:root`. The choice persists to `localStorage` and a synchronous `font-scale-init.js` reads the value before React mounts, preventing FOUC. Tiers are scale-up only; a smaller `0.9×` tier was rejected because `0.9 × 11px = 9.9px` would push the smallest font tokens below comfortable readability for the accessibility audience this feature targets. Includes the full ARIA radio keyboard pattern (ArrowLeft/Right/Up/Down + Home/End + roving tabIndex + focus moves with selection).
+
 ## [1.9.3] - 2026-04-29
 
 ### Added
