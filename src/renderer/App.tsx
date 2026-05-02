@@ -1,5 +1,6 @@
 import { AppProvider, useAppState, useAppDispatch } from './context/AppContext'
 import { ThemeProvider } from './context/ThemeContext'
+import { FontScaleProvider } from './context/FontScaleContext'
 import { I18nProvider, useI18n } from './i18n/useI18n'
 import LanguageSwitcher from './i18n/LanguageSwitcher'
 import Sidebar from './components/Sidebar/Sidebar'
@@ -8,6 +9,7 @@ import DashboardPage from './components/Dashboard/DashboardPage'
 import StoragePage from './components/Storage/StoragePage'
 import FileHistoryDrawer from './components/Archaeology/FileHistoryDrawer'
 import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher'
+import FontScaleSwitcher from './components/FontScaleSwitcher/FontScaleSwitcher'
 import styles from './App.module.css'
 
 function AppContent() {
@@ -42,6 +44,7 @@ function AppContent() {
           </svg>
         </button>
         <ThemeSwitcher />
+        <FontScaleSwitcher />
         <LanguageSwitcher />
       </div>
       {viewMode === 'dashboard' ? (
@@ -85,9 +88,11 @@ export default function App() {
   return (
     <I18nProvider>
       <ThemeProvider>
-        <AppProvider>
-          <AppContent />
-        </AppProvider>
+        <FontScaleProvider>
+          <AppProvider>
+            <AppContent />
+          </AppProvider>
+        </FontScaleProvider>
       </ThemeProvider>
     </I18nProvider>
   )

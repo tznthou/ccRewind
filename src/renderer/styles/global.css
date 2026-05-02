@@ -59,11 +59,12 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
 
-  --font-size-xs: 11px;
-  --font-size-sm: 13px;
-  --font-size-base: 14px;
-  --font-size-lg: 16px;
-  --font-size-xl: 18px;
+  --font-scale: 1;
+  --font-size-xs: calc(11px * var(--font-scale));
+  --font-size-sm: calc(13px * var(--font-scale));
+  --font-size-base: calc(14px * var(--font-scale));
+  --font-size-lg: calc(16px * var(--font-scale));
+  --font-size-xl: calc(18px * var(--font-scale));
 
   /* Layout */
   --sidebar-width: 280px;
