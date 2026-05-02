@@ -83,10 +83,16 @@ export default function SearchBar() {
   const handleKeyDown = async (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && input.trim()) {
       executeSearch(input.trim(), buildSearchOptions(dateRange, sortBy))
-    }
-    if (e.key === 'Escape') {
+    } else if (e.key === 'Escape') {
       setInput('')
       dispatch({ type: 'CLEAR_SEARCH' })
+    } else if (e.key === 'ArrowDown') {
+      // 焦點移到搜尋結果列表（若已渲染；同時間只會有一個 search results listbox）
+      const listbox = document.querySelector<HTMLElement>('[data-search-results-listbox="true"]')
+      if (listbox) {
+        e.preventDefault()
+        listbox.focus()
+      }
     }
   }
 

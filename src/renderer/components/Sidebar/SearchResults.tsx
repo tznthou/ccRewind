@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useI18n } from '../../i18n/useI18n'
+import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import { formatTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
@@ -42,6 +43,13 @@ function MessagePreview({ role, text }: { role: string | null; text: string | nu
       <span className={styles.contextText}>{truncated}</span>
     </div>
   )
+}
+
+/** 鍵盤導覽用的扁平化 item（從 visible groups 收集；collapsed group 內的 matches 排除） */
+interface FlatItem {
+  messageId: number
+  sessionId: string
+  projectId: string
 }
 
 export default function SearchResults() {
@@ -94,6 +102,34 @@ export default function SearchResults() {
     }
   }
 
+  // 鍵盤導覽：扁平化 visible navigate items（collapsed group 內的 matches 排除）
+  const flatItems = useMemo<FlatItem[]>(() =>
+    groups.flatMap(g =>
+      collapsedGroups.has(g.sessionId)
+        ? []
+        : g.matches.map(m => ({ messageId: m.messageId, sessionId: g.sessionId, projectId: g.projectId })),
+    ),
+  [groups, collapsedGroups])
+
+  // messageId → flatItems index 對照表（讓 nested loop 內 inline 拿 active state）
+  const itemIndexMap = useMemo(() => {
+    const map = new Map<number, number>()
+    flatItems.forEach((item, i) => map.set(item.messageId, i))
+    return map
+  }, [flatItems])
+
+  const { listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<FlatItem>({
+    items: flatItems,
+    getItemId: (item) => String(item.messageId),
+    onActivate: (item) => dispatch({
+      type: 'NAVIGATE_TO_SESSION',
+      projectId: item.projectId,
+      sessionId: item.sessionId,
+      messageId: item.messageId,
+    }),
+    dispatchOnArrow: false, // 搜尋結果 navigate 跨 context 重，Enter 才 commit
+  })
+
   if (searchResults.length === 0) {
     return (
       <div className={styles.empty}>
@@ -103,7 +139,12 @@ export default function SearchResults() {
   }
 
   return (
-    <div className={styles.container}>
+    <div
+      className={styles.container}
+      aria-label={t('sidebar.section.searchResults')}
+      data-search-results-listbox="true"
+      {...listboxProps}
+    >
       <div className={styles.count}>{t('sidebar.searchResults.count', { count: searchResults.length, groups: groups.length })}</div>
       {groups.map((g) => {
         const collapsed = collapsedGroups.has(g.sessionId)
@@ -118,40 +159,49 @@ export default function SearchResults() {
             {!collapsed && (
               <div className={styles.groupBody}>
                 <div className={styles.projectName}>{g.projectName}</div>
-                {g.matches.map((m) => (
-                  <div key={m.messageId}>
-                    <div className={styles.itemRow}>
-                      <button
-                        className={styles.contextToggle}
-                        onClick={() => toggleContext(m.messageId)}
-                        aria-label={t('sidebar.searchResults.aria.toggleContext')}
-                        title={t('sidebar.searchResults.title.toggleContext')}
-                      >
-                        {expandedContext === m.messageId ? '▾' : '▸'}
-                      </button>
-                      <button
-                        className={styles.item}
-                        onClick={() => dispatch({ type: 'NAVIGATE_TO_SESSION', projectId: g.projectId, sessionId: g.sessionId, messageId: m.messageId })}
-                      >
-                        <div className={styles.snippet}>{renderSnippet(m.snippet)}</div>
-                        {m.timestamp && <span className={styles.time}>{formatTime(m.timestamp)}</span>}
-                      </button>
-                    </div>
-                    {expandedContext === m.messageId && contextCacheRef.current.has(m.messageId) && (
-                      <div className={styles.contextPreview}>
-                        {contextCacheRef.current.get(m.messageId)!.before.map(msg => (
-                          <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
-                        ))}
-                        <div className={styles.contextTarget}>
-                          {renderSnippet(m.snippet)}
-                        </div>
-                        {contextCacheRef.current.get(m.messageId)!.after.map(msg => (
-                          <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
-                        ))}
+                {g.matches.map((m) => {
+                  const flatIdx = itemIndexMap.get(m.messageId)
+                  const active = flatIdx !== undefined && isActive(flatIdx)
+                  const flatItem: FlatItem = { messageId: m.messageId, sessionId: g.sessionId, projectId: g.projectId }
+                  return (
+                    <div key={m.messageId}>
+                      <div className={styles.itemRow}>
+                        <button
+                          className={styles.contextToggle}
+                          onClick={() => toggleContext(m.messageId)}
+                          aria-label={t('sidebar.searchResults.aria.toggleContext')}
+                          title={t('sidebar.searchResults.title.toggleContext')}
+                        >
+                          {expandedContext === m.messageId ? '▾' : '▸'}
+                        </button>
+                        <button
+                          className={`${styles.item} ${active ? styles.itemActive : ''}`}
+                          {...getOptionProps(flatItem)}
+                          onClick={() => {
+                            if (flatIdx !== undefined) setActiveIndex(flatIdx)
+                            dispatch({ type: 'NAVIGATE_TO_SESSION', projectId: g.projectId, sessionId: g.sessionId, messageId: m.messageId })
+                          }}
+                        >
+                          <div className={styles.snippet}>{renderSnippet(m.snippet)}</div>
+                          {m.timestamp && <span className={styles.time}>{formatTime(m.timestamp)}</span>}
+                        </button>
                       </div>
-                    )}
-                  </div>
-                ))}
+                      {expandedContext === m.messageId && contextCacheRef.current.has(m.messageId) && (
+                        <div className={styles.contextPreview}>
+                          {contextCacheRef.current.get(m.messageId)!.before.map(msg => (
+                            <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
+                          ))}
+                          <div className={styles.contextTarget}>
+                            {renderSnippet(m.snippet)}
+                          </div>
+                          {contextCacheRef.current.get(m.messageId)!.after.map(msg => (
+                            <MessagePreview key={msg.id} role={msg.role} text={msg.contentText} />
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
