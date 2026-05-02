@@ -1,3 +1,4 @@
+import { useCallback, useRef, type KeyboardEvent } from 'react'
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { useI18n } from '../../i18n/useI18n'
 import type { MessageKey } from '../../i18n/messages'
@@ -43,18 +44,53 @@ const themes: { id: ThemeId; labelKey: MessageKey; icon: React.ReactNode }[] = [
 export default function ThemeSwitcher() {
   const { theme, setTheme } = useTheme()
   const { t } = useI18n()
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([])
+
+  const handleKeyDown = useCallback(
+    (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
+      let nextIndex = currentIndex
+      switch (event.key) {
+        case 'ArrowRight':
+        case 'ArrowDown':
+          nextIndex = (currentIndex + 1) % themes.length
+          break
+        case 'ArrowLeft':
+        case 'ArrowUp':
+          nextIndex = (currentIndex - 1 + themes.length) % themes.length
+          break
+        case 'Home':
+          nextIndex = 0
+          break
+        case 'End':
+          nextIndex = themes.length - 1
+          break
+        default:
+          return
+      }
+      event.preventDefault()
+      setTheme(themes[nextIndex].id)
+      buttonRefs.current[nextIndex]?.focus()
+    },
+    [setTheme],
+  )
 
   return (
     <div className={styles.container} role="radiogroup" aria-label={t('theme.aria.label')}>
-      {themes.map(({ id, labelKey, icon }) => {
+      {themes.map(({ id, labelKey, icon }, index) => {
         const label = t(labelKey)
+        const isActive = theme === id
         return (
           <button
             key={id}
-            className={`${styles.button} ${theme === id ? styles.active : ''}`}
+            ref={(el) => {
+              buttonRefs.current[index] = el
+            }}
+            className={`${styles.button} ${isActive ? styles.active : ''}`}
             onClick={() => setTheme(id)}
+            onKeyDown={(event) => handleKeyDown(event, index)}
             role="radio"
-            aria-checked={theme === id}
+            aria-checked={isActive}
+            tabIndex={isActive ? 0 : -1}
             aria-label={label}
             title={label}
           >
