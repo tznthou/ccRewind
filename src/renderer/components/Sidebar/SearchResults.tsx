@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import { formatTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
+import SearchSyntaxHints from './SearchSyntaxHints'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
 import styles from './SearchResults.module.css'
 
@@ -132,8 +133,11 @@ export default function SearchResults() {
 
   if (searchResults.length === 0) {
     return (
-      <div className={styles.empty}>
-        {t('sidebar.searchResults.empty', { query: searchQuery })}
+      <div className={styles.container}>
+        <div className={styles.empty}>
+          {t('sidebar.searchResults.empty', { query: searchQuery })}
+        </div>
+        <SearchSyntaxHints variant="messages" />
       </div>
     )
   }

@@ -4,6 +4,7 @@ import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import { formatTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
+import SearchSyntaxHints from './SearchSyntaxHints'
 import type { SessionSearchResult } from '../../../shared/types'
 import styles from './SearchResults.module.css'
 
@@ -34,8 +35,11 @@ export default function SessionSearchResults() {
 
   if (sessionSearchResults.length === 0) {
     return (
-      <div className={styles.empty}>
-        {t('sidebar.sessionSearchResults.empty', { query: searchQuery })}
+      <div className={styles.container}>
+        <div className={styles.empty}>
+          {t('sidebar.sessionSearchResults.empty', { query: searchQuery })}
+        </div>
+        <SearchSyntaxHints variant="sessions" />
       </div>
     )
   }
