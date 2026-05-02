@@ -45,7 +45,7 @@ export default function SubagentPanel({ sessionId }: Props) {
           &larr; {t('chatView.subagent.back')}
         </button>
         {self?.agentType && (
-          <span className={styles.subagentTypeBadge}>{self.agentType}</span>
+          <span className={styles.subagentTypeBadge} title={t('chatView.subagent.typeBadgeTitle')}>{self.agentType}</span>
         )}
       </div>
     )
