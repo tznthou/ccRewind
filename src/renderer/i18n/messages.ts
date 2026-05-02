@@ -156,6 +156,7 @@ const zhTW = {
   'a11y.announcement.searchComplete.messages': '找到 {count} 筆訊息結果，分布於 {groups} 個 session',
   'a11y.announcement.searchComplete.sessions': '找到 {count} 個 session',
   'a11y.announcement.searchEmpty': '找不到「{query}」的結果',
+  'a11y.announcement.searchError': '搜尋「{query}」時發生錯誤，請重試',
   'a11y.announcement.syncComplete': '同步完成',
 } as const
 
@@ -319,6 +320,7 @@ const en = {
   'a11y.announcement.searchComplete.messages': 'Found {count} message results across {groups} sessions',
   'a11y.announcement.searchComplete.sessions': 'Found {count} sessions',
   'a11y.announcement.searchEmpty': 'No results found for "{query}"',
+  'a11y.announcement.searchError': 'Search error for "{query}", please retry',
   'a11y.announcement.syncComplete': 'Sync complete',
 } satisfies MessageCatalog
 

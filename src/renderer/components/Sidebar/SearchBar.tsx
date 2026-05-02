@@ -88,11 +88,11 @@ export default function SearchBar() {
       } else {
         dispatch({ type: 'SET_SEARCH', query: q, results: [], hasMore: false, projectId })
       }
-      announceResult(type, 0, 0, q)
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.searchError', { query: q }) })
     } finally {
       if (seq === searchSeqRef.current) setSearching(false)
     }
-  }, [selectedProjectId, dispatch, announceResult])
+  }, [selectedProjectId, dispatch, announceResult, t])
 
   // filter 變更時，若已有搜尋 query 則自動重新搜尋
   useEffect(() => {
