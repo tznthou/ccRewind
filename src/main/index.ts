@@ -3,7 +3,7 @@ import path from 'path'
 import os from 'os'
 import { Database } from './database'
 import { registerIpcHandlers, sendIndexerStatus } from './ipc-handlers'
-import { runIndexer } from './indexer'
+import { triggerIndexer } from './indexer'
 
 const DB_PATH = path.join(os.homedir(), '.ccrewind', 'index.db')
 
@@ -77,8 +77,16 @@ app.whenReady().then(() => {
 
   // 等 renderer 載入完成再啟動索引，避免早期狀態事件遺失
   mainWindow.webContents.once('did-finish-load', () => {
-    runIndexer(db!, sendIndexerStatus).catch((err) => {
+    triggerIndexer(db!, sendIndexerStatus).catch((err) => {
       console.error('Indexer failed:', err)
+    })
+  })
+
+  // 視窗 focus → 自動 reindex（in-flight 合併防 thrashing；
+  // 跨平台行為：macOS cmd+H/cmd+tab/dock click 與 Win/Linux 切回前台均觸發）
+  mainWindow.on('focus', () => {
+    triggerIndexer(db!, sendIndexerStatus).catch((err) => {
+      console.error('Focus reindex failed:', err)
     })
   })
 

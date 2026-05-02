@@ -270,6 +270,38 @@
   transition: width 0.3s ease;
 }
 
+/* Sync row — phase=done 時顯示「last indexed + sync now」*/
+.syncRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+}
+
+.syncButton {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.syncButton:hover:not(:disabled) {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+  border-color: var(--color-text-secondary);
+}
+
+.syncButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* ============================================================
    Theme A — Archive Room
    ============================================================ */

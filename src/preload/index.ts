@@ -38,6 +38,7 @@ const api: ElectronAPI = {
     ipcRenderer.on('indexer:status', listener)
     return () => { ipcRenderer.removeListener('indexer:status', listener) }
   },
+  reindex: () => ipcRenderer.invoke('indexer:reindex'),
 }
 
 contextBridge.exposeInMainWorld('api', api)

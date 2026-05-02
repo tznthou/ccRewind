@@ -6,7 +6,7 @@ export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const indexerStatus = useIndexerStatus()
+  const { status: indexerStatus } = useIndexerStatus()
 
   // indexer 完成時的 phase 作為 refetch 觸發點
   const indexerPhase = indexerStatus?.phase ?? null

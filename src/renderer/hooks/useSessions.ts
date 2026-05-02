@@ -3,7 +3,7 @@ import type { SessionMeta } from '../../shared/types'
 import { useIndexerStatus } from './useIndexerStatus'
 
 export function useSessions(projectId: string | null) {
-  const indexerStatus = useIndexerStatus()
+  const { status: indexerStatus } = useIndexerStatus()
   const indexerPhase = indexerStatus?.phase ?? null
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [loading, setLoading] = useState(false)

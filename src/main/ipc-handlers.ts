@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
 import type { ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
+import { triggerIndexer } from './indexer'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
 
 /** 將 unknown 轉為 optional string（IPC 參數驗證用） */
@@ -216,6 +217,11 @@ export function registerIpcHandlers(db: Database): void {
     if (typeof version !== 'string') throw new Error('Invalid version')
     dismissUpdate(version)
   })
+
+  // ── Indexer 手動觸發（D-1.5）──
+  // focus auto-trigger 與此 handler 共用 triggerIndexer，in-flight 期間
+  // 並發呼叫拿到同一個 Promise，不會重複跑。
+  ipcMain.handle('indexer:reindex', () => triggerIndexer(db, sendIndexerStatus))
 }
 
 /** 廣播 indexer 進度到所有 renderer window */

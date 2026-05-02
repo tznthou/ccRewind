@@ -1,12 +1,12 @@
 import path from 'node:path'
 import { readFile, stat } from 'node:fs/promises'
-import type { ExclusionRule, IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
+import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents } from './scanner'
 import { parseSession } from './parser'
 import { summarizeSession } from './summarizer'
 
-export type ProgressCallback = (status: IndexerStatus) => void
+export type ProgressCallback = (status: IndexerProgress) => void
 
 /**
  * 掃整份 JSONL，回傳第一個帶 timestamp 的行。與 parser.parseSession 的 startedAt
@@ -316,4 +316,44 @@ export async function runIndexer(
   }
 
   onProgress?.({ phase: 'done', progress: 100, total, current: total })
+}
+
+// ── Indexer runner（in-flight 合併 + lastIndexedAt 追蹤） ──
+// focus auto-trigger 與手動 sync now 共用此入口；in-flight 期間並發呼叫
+// 直接拿到同一個 Promise，runIndexer 不會重複跑。
+
+let inFlight: Promise<void> | null = null
+let lastIndexedAt: string | null = null
+
+/** 取得最近一次成功索引的 ISO timestamp（done 時才有值，啟動到首次完成前為 null）*/
+export function getLastIndexedAt(): string | null {
+  return lastIndexedAt
+}
+
+/**
+ * 觸發索引（in-flight 合併）。已在跑就 return 同一 Promise。
+ * 完成時把 IndexerProgress 補成 IndexerStatus（done 時帶 lastIndexedAt）後給 caller。
+ */
+export async function triggerIndexer(
+  db: Database,
+  onStatus?: (status: IndexerStatus) => void,
+  baseDir?: string,
+): Promise<void> {
+  if (inFlight) return inFlight
+  inFlight = (async () => {
+    try {
+      await runIndexer(db, (progress) => {
+        if (progress.phase === 'done') {
+          lastIndexedAt = new Date().toISOString()
+        }
+        onStatus?.({
+          ...progress,
+          lastIndexedAt: progress.phase === 'done' ? lastIndexedAt : null,
+        })
+      }, baseDir)
+    } finally {
+      inFlight = null
+    }
+  })()
+  return inFlight
 }
