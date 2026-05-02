@@ -80,13 +80,15 @@ app.whenReady().then(() => {
     triggerIndexer(db!, sendIndexerStatus).catch((err) => {
       console.error('Indexer failed:', err)
     })
-  })
 
-  // 視窗 focus → 自動 reindex（in-flight 合併防 thrashing；
-  // 跨平台行為：macOS cmd+H/cmd+tab/dock click 與 Win/Linux 切回前台均觸發）
-  mainWindow.on('focus', () => {
-    triggerIndexer(db!, sendIndexerStatus).catch((err) => {
-      console.error('Focus reindex failed:', err)
+    // focus listener 也在 did-finish-load 後才註冊：避免冷啟時 OS focus
+    // 早於 renderer ready 觸發 reindex，使快速跑完的 done event 在 renderer
+    // 訂閱前被靜默丟棄，連帶讓後續 did-finish-load triggerIndexer 因
+    // inFlight 已重置而重跑一次。
+    mainWindow.on('focus', () => {
+      triggerIndexer(db!, sendIndexerStatus).catch((err) => {
+        console.error('Focus reindex failed:', err)
+      })
     })
   })
 
