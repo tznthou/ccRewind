@@ -3,6 +3,11 @@ import type { SearchResult, SessionSearchResult, SearchScope, SearchOptions } fr
 
 export type ViewMode = 'sessions' | 'dashboard' | 'storage'
 
+export interface LiveAnnouncement {
+  message: string
+  seq: number
+}
+
 export interface AppState {
   viewMode: ViewMode
   fileHistoryPath: string | null
@@ -16,6 +21,7 @@ export interface AppState {
   searchProjectId: string | null
   searchOptions: SearchOptions | undefined
   targetMessageId: number | null
+  liveAnnouncement: LiveAnnouncement
 }
 
 export type AppAction =
@@ -32,6 +38,7 @@ export type AppAction =
   | { type: 'CLEAR_SEARCH' }
   | { type: 'NAVIGATE_TO_SESSION'; projectId: string; sessionId: string; messageId?: number }
   | { type: 'CLEAR_TARGET_MESSAGE' }
+  | { type: 'ANNOUNCE'; message: string }
 
 export const initialState: AppState = {
   viewMode: 'sessions',
@@ -46,6 +53,7 @@ export const initialState: AppState = {
   searchProjectId: null,
   searchOptions: undefined,
   targetMessageId: null,
+  liveAnnouncement: { message: '', seq: 0 },
 }
 
 export function appReducer(state: AppState, action: AppAction): AppState {
@@ -57,8 +65,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
     case 'CLOSE_FILE_HISTORY':
       return { ...state, fileHistoryPath: null }
     case 'SELECT_PROJECT':
-      // 切換專案時清除 session 選取 + 搜尋
-      return { ...initialState, selectedProjectId: action.projectId }
+      // 切換專案時清除 session 選取 + 搜尋；保留 liveAnnouncement（transient feedback channel）
+      return { ...initialState, selectedProjectId: action.projectId, liveAnnouncement: state.liveAnnouncement }
     case 'SELECT_SESSION':
       return { ...state, selectedSessionId: action.sessionId, targetMessageId: null }
     case 'CLEAR_SESSION':
@@ -82,6 +90,8 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       }
     case 'CLEAR_TARGET_MESSAGE':
       return { ...state, targetMessageId: null }
+    case 'ANNOUNCE':
+      return { ...state, liveAnnouncement: { message: action.message, seq: state.liveAnnouncement.seq + 1 } }
   }
 }
 

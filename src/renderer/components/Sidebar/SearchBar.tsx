@@ -49,28 +49,43 @@ export default function SearchBar() {
   // 外部清搜尋（如切換專案）時同步 input
   useEffect(() => { setInput(searchQuery) }, [searchQuery])
 
+  const announceResult = useCallback((type: SearchScope, count: number, groups: number, q: string) => {
+    if (count === 0) {
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.searchEmpty', { query: q }) })
+    } else if (type === 'sessions') {
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.searchComplete.sessions', { count }) })
+    } else {
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.searchComplete.messages', { count, groups }) })
+    }
+  }, [dispatch, t])
+
   const executeSearch = useCallback(async (q: string, opts: SearchOptions | undefined) => {
     if (!q) return
     const projectId = scopeRef.current === 'project' ? selectedProjectId : null
+    const type = searchTypeRef.current
     setSearching(true)
     try {
-      if (searchTypeRef.current === 'sessions') {
+      if (type === 'sessions') {
         const page = await window.api.searchSessions(q, projectId, undefined, opts)
         dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
+        announceResult('sessions', page.results.length, 0, q)
       } else {
         const page = await window.api.search(q, projectId, undefined, opts)
         dispatch({ type: 'SET_SEARCH', query: q, results: page.results, hasMore: page.hasMore, projectId, options: opts })
+        const groupSet = new Set(page.results.map(r => r.sessionId))
+        announceResult('messages', page.results.length, groupSet.size, q)
       }
     } catch {
-      if (searchTypeRef.current === 'sessions') {
+      if (type === 'sessions') {
         dispatch({ type: 'SET_SESSION_SEARCH', query: q, results: [], hasMore: false, projectId })
       } else {
         dispatch({ type: 'SET_SEARCH', query: q, results: [], hasMore: false, projectId })
       }
+      announceResult(type, 0, 0, q)
     } finally {
       setSearching(false)
     }
-  }, [selectedProjectId, dispatch])
+  }, [selectedProjectId, dispatch, announceResult])
 
   // filter 變更時，若已有搜尋 query 則自動重新搜尋
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useIndexerStatus } from '../../hooks/useIndexerStatus'
 import { useI18n } from '../../i18n/useI18n'
+import { useAppDispatch } from '../../context/AppContext'
 import type { MessageKey } from '../../i18n/messages'
 import styles from './Sidebar.module.css'
 
@@ -31,6 +32,7 @@ function formatLastIndexed(
 export default function IndexerStatus() {
   const { status, triggerSync } = useIndexerStatus()
   const { t } = useI18n()
+  const dispatch = useAppDispatch()
   const [now, setNow] = useState(() => Date.now())
   const [syncing, setSyncing] = useState(false)
 
@@ -79,6 +81,7 @@ export default function IndexerStatus() {
     setSyncing(true)
     try {
       await triggerSync()
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.syncComplete') })
     } finally {
       setSyncing(false)
     }
