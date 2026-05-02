@@ -5,13 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.11.0] - 2026-05-03
+
+### Added
+
+- **FTS5 search syntax hints on empty results** ([#13](https://github.com/tznthou/ccRewind/pull/13)). When a search query returns zero results, a new `SearchSyntaxHints` component renders four FTS5 syntax chips (exact phrase, prefix, `OR`, `NOT`) inside both `SearchResults` and `SessionSearchResults` empty states. Surfaces what the query language can do at the moment users need it, instead of leaving them at a dead-end empty page.
+
+- **Live region for screen reader announcements** ([#15](https://github.com/tznthou/ccRewind/pull/15)). A global polite live region announces dynamic results to screen readers: search completion (with result count and session group count), empty results, and manual "Sync now" completion. The new `LiveRegion` component uses `<span key={seq}>` to force remount so identical messages re-announce on repeat triggers (otherwise SR ignores duplicate text). `AppContext` gains an `ANNOUNCE` action with a monotonic `searchSeqRef` guard preventing stale async resolutions from announcing wrong counts when filter buttons are clicked rapidly.
 
 ### Changed
 
 - **BREAKING — License relicensed from AGPL-3.0 to GPL-3.0-or-later.** GPL fits a read-only desktop app better; AGPL's network clause has no practical effect on a non-SaaS application and risked misleading users about the deployment model. `LICENSE` replaced with GPL v3 text; `package.json` now declares the SPDX identifier; license badge and section in both READMEs updated.
+
 - **README features restructured.** 27 individual feature rows grouped into 5 collapsible `<details>` blocks (Browsing & Search and Token & Context open by default; Statistics & Archaeology, Data & Storage, UI & Interaction collapsed). Project Structure tree wrapped in `<details>` to reduce visual weight. DB Compaction (the 1.9.1 feature) added to Features — was missing from both language versions.
+
 - **English README parity with Chinese.** Core Concept expanded with structured rule engine details (intent + action + outcome) and three-signal tag inference. Features gained the missing File Reverse Index, Token Insights, and Token Heat Indicators rows. Architecture mermaid added the Summary Engine node. Test count synced 342 → 345 across tech stack table and project structure tree.
+
+### Fixed
+
+- **Tooltip completeness on icon-only / badge UI** ([#14](https://github.com/tznthou/ccRewind/pull/14)). Two missing accessible labels: `FileHistoryDrawer` close button now uses `aria-label` + `title` from the existing `common.close` key; `SubagentPanel` agentType breadcrumb badge gains a new `chatView.subagent.typeBadgeTitle` key (zh-TW + en) so screen readers and hover tooltips both announce what the badge represents.
+
+- **Distinguish searchError from searchEmpty in screen reader announcements** ([#16](https://github.com/tznthou/ccRewind/pull/16)). The catch path in `SearchBar.executeSearch` was reusing `announceResult(type, 0, 0, q)`, which routes through the `count===0` branch to announce "No results found" — indistinguishable from a genuine empty result. SR users had no signal whether to rephrase the query (no match) or retry (transient IPC error). A new `a11y.announcement.searchError` key (zh-TW + en) is now dispatched directly from the catch path.
+
+- **ThemeSwitcher ARIA radio keyboard pattern** ([#17](https://github.com/tznthou/ccRewind/pull/17)). `ThemeSwitcher` used `role="radiogroup"` + `role="radio"` but had no keyboard support — arrow keys did nothing and only Tab+Enter/Space worked. Inconsistent with the sibling `FontScaleSwitcher` (added in v1.10.0) which fully implements the WAI-ARIA radio keyboard pattern. `ThemeSwitcher` now mirrors that pattern: ArrowRight/Down → next, ArrowLeft/Up → prev, Home → first, End → last; roving tabIndex (only the active radio is `tabIndex=0`); focus moves with selection.
 
 ## [1.10.0] - 2026-05-02
 

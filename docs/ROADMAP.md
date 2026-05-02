@@ -1,6 +1,6 @@
 # ccRewind — 功能演進路線圖
 
-> 最後更新：2026-04-21
+> 最後更新：2026-05-03
 > 狀態標示：✅ 已交付 / 📋 遠期規劃 / 💤 Backlog
 
 ---
@@ -20,6 +20,8 @@
 | 5 | v1.7.0 / v1.7.2 | ✅ | Active Time + Subagent 索引 + requestId Token 去重 |
 | 5.5 | v1.8.0 | ✅ | Subagent 前端 UI：chips 導覽 + breadcrumb |
 | 6 | v1.9.0 / v1.9.1 | ✅ | 儲存管理 + DB 壓縮 |
+| 7 | v1.10.0 | ✅ | i18n + 全面 a11y 升級：雙語 / 鍵盤導覽 / aria-live / sync UX |
+| 7.5 | v1.11.0 | ✅ | a11y polish 收尾 + license relicense + README 雙版重組 |
 | — | — | 📋 | 資料壓縮功能（保留可還原） |
 | — | — | 📋 | In-App 自動更新（待 Apple Developer ID code signing） |
 | — | — | 💤 | LLM 智慧摘要（待合規路徑明朗）、其餘見 Backlog |
@@ -239,6 +241,66 @@
 - Parser 根據 `KNOWN_MESSAGE_TYPES` 白名單決定是否保留 `raw_json`——已知類型丟棄（`content_json` 已足夠），未知類型保留（debug / 未來 re-parse fallback）
 - Migration v17 以 v17 白名單快照清理舊 `message_archive`，任何未知類型的 `raw_json` 仍會留下
 - 移除啟動時自動 `VACUUM`（大型 DB 可能卡 10–30 秒），壓縮改為使用者主動觸發
+
+---
+
+## Phase 7 ✅ i18n + 全面 a11y 升級（v1.10.0）
+
+**目標**：把使用者介面從「中文 only + 鍵盤盲區」推到「雙語（zh-TW + en）+ 完整 keyboard a11y + screen reader 友好 + 使用者主動控制 sync」。對應 D-1 ~ D-3 a11y / i18n 工作包。
+
+### 7-A. Internationalization（D-2c, PR #9）
+
+- 整個 UI surface——sidebar headers、titlebar tooltips、dialogs、error messages、ARIA labels、dashboard copy——由 type-safe `MessageKey` catalog 驅動，取代過去 hard-coded zh-TW 字串
+- LanguageSwitcher 在 title bar 切換 locale，持久化於 localStorage，`<html lang>` 同步更新；預設 zh-TW，localStorage 不可用時 fallback 回 zh-TW
+- `satisfies Record<MessageKey, string>` 嚴格模式：missing / stale keys 直接 fail strict `tsconfig.web.json` typecheck
+
+### 7-B. Sidebar Sync UX(D-1.5, PR #10)
+
+- 過去只在啟動時 index，啟動後寫入 `~/.claude/projects/` 的新 session 要等下次重啟才會看見
+- Focus-driven auto-reindex：BrowserWindow 取得焦點時 reindex（in-flight Promise dedup 避免快速 focus-blur 把 indexer 操爛）
+- 「Sync now」按鈕：使用者可主動觸發；「Last indexed Xs ago」label：使用者可看到資料新鮮度
+- 內部 `IndexerProgress`（job 執行中事件）與 `IndexerStatus`（IPC contract，加 `lastIndexedAt`）切割，indexer 內部事件不混入 UI-layer 概念
+
+### 7-C. Arrow Key Navigation(D-3a, PR #11)
+
+- Project list、session list、message search results、session search results 全支援 ArrowUp / ArrowDown
+- 從 search bar 按 ArrowDown 把焦點交給第一個結果
+- ProjectList / SessionList：每按一下 dispatch selection；SearchResults / SessionSearchResults：只移動 active highlight，Enter 才 navigate（避免每次按鍵都觸發跨情境跳轉）
+- 用 `aria-activedescendant`（不採 roving tabIndex）：virtualized list 在 scroll 時 active row unmount 不會丟焦點
+
+### 7-D. Font Scale Switcher(D-3b, PR #12)
+
+- 三檔 normal（1.0×）/ large（1.1×）/ xlarge（1.25×）透過 `--font-scale` CSS variable 縮放整個 UI 的 font-size tokens
+- 持久化於 localStorage；synchronous `font-scale-init.js` 在 React mount 前讀取，防止 FOUC
+- 只放大不縮小：0.9× tier 被拒（0.9 × 11px = 9.9px，最小 token 已低於 a11y 受眾的舒適閱讀界線）
+- 完整 ARIA radio keyboard pattern（Arrow + Home / End + roving tabIndex + focus moves with selection）
+
+---
+
+## Phase 7.5 ✅ a11y polish + License relicense（v1.11.0）
+
+**目標**：v1.10.0 a11y 主套之後的 polish 收尾——補 SR 動態通知、補 missing aria labels、修 keyboard pattern 一致性，並把 license 從 AGPL-3.0 改為更適合純桌面 app 的 GPL-3.0-or-later。
+
+### 7.5-A. a11y polish 收尾
+
+- **FTS5 empty state hints（D-2a, PR #13）**：搜尋無結果時顯示四個 FTS5 語法 chips（精確短語、前綴、`OR`、`NOT`），降低空結果挫敗感，引導使用者修正 query
+- **Tooltip completeness（D-2b, PR #14）**：FileHistoryDrawer close button + SubagentPanel agentType breadcrumb badge 補 aria-label + title
+- **Live region announcements（D-3c, PR #15）**：全域 polite live region 通知 SR 動態結果——搜尋完成、空結果、手動 sync 完成；`LiveRegion` 用 `<span key={seq}>` 強制 remount 讓 SR 重唸相同訊息；`AppContext` 加 `ANNOUNCE` action + monotonic `searchSeqRef` guard（防 stale async search resolution 覆蓋 visible UI 並 announce 錯計數）
+- **searchError vs searchEmpty 區分（D-3c P1, PR #16）**：catch path 不再經過 announceResult 走 `count===0` 路徑（會與真 0 結果撞訊息），改 dispatch 新 `a11y.announcement.searchError` key
+- **ThemeSwitcher ARIA radio keyboard pattern（D-3b follow-up, PR #17）**：與 v1.10.0 的 FontScaleSwitcher 保持一致，補 Arrow / Home / End + roving tabIndex
+
+### 7.5-B. License relicense AGPL-3.0 → GPL-3.0-or-later
+
+- AGPL 的 network clause 對純本地桌面 app 沒實質效力，反而誤導使用者以為是 SaaS。GPL 是桌面 copyleft 的標準選擇
+- LICENSE 替換為 GPL v3 全文（35KB，從 GNU 官方）；`package.json` 加 `"license": "GPL-3.0-or-later"` SPDX field；README badge + license section 兩版同步
+
+### 7.5-C. README 雙版重新檢視
+
+- 27 列 features 表格 → 5 個 `<details>` 摺疊群組（瀏覽搜尋 / Token 預設展開，統計考古 / 資料儲存 / 介面互動預設摺疊）
+- 補 v1.9.1 DB Compaction（之前兩版 Features 都漏）
+- 英文版補強：File Reverse Index / Token Insights / Token Heat Indicators 三列 + Architecture mermaid Summary Engine 節點 + Core Concept structured rule engine + 三軌 tag inference 細節
+- Project Structure 樹包 `<details>`（contributor 才需要看，預設隱藏）
+- 雙版 Vitest test count 同步：342 → 345
 
 ---
 
