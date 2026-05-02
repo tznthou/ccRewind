@@ -66,3 +66,25 @@ describe('appReducer / NAVIGATE_TO_SESSION', () => {
     expect(next.searchQuery).toBe('hello')
   })
 })
+
+describe('appReducer / ANNOUNCE', () => {
+  it('starts with empty message and seq=0', () => {
+    expect(initialState.liveAnnouncement).toEqual({ message: '', seq: 0 })
+  })
+
+  it('increments seq each ANNOUNCE so same message re-fires', () => {
+    const a = appReducer(initialState, { type: 'ANNOUNCE', message: 'found 3 results' })
+    expect(a.liveAnnouncement).toEqual({ message: 'found 3 results', seq: 1 })
+
+    const b = appReducer(a, { type: 'ANNOUNCE', message: 'found 3 results' })
+    expect(b.liveAnnouncement).toEqual({ message: 'found 3 results', seq: 2 })
+  })
+
+  it('preserves liveAnnouncement across SELECT_PROJECT (transient channel)', () => {
+    const announced = appReducer(initialState, { type: 'ANNOUNCE', message: 'sync complete' })
+    const next = appReducer(announced, { type: 'SELECT_PROJECT', projectId: 'proj-X' })
+    expect(next.liveAnnouncement).toEqual({ message: 'sync complete', seq: 1 })
+    expect(next.selectedProjectId).toBe('proj-X')
+    expect(next.searchResults).toEqual([])
+  })
+})

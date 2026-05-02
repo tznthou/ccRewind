@@ -153,6 +153,10 @@ const zhTW = {
   'app.languageSwitcher.label': '語言',
   'app.languageSwitcher.zh': '中',
   'app.languageSwitcher.en': 'EN',
+  'a11y.announcement.searchComplete.messages': '找到 {count} 筆訊息結果，分布於 {groups} 個 session',
+  'a11y.announcement.searchComplete.sessions': '找到 {count} 個 session',
+  'a11y.announcement.searchEmpty': '找不到「{query}」的結果',
+  'a11y.announcement.syncComplete': '同步完成',
 } as const
 
 type MessageCatalog = Record<keyof typeof zhTW, string>
@@ -312,6 +316,10 @@ const en = {
   'app.languageSwitcher.label': 'Language',
   'app.languageSwitcher.zh': '中',
   'app.languageSwitcher.en': 'EN',
+  'a11y.announcement.searchComplete.messages': 'Found {count} message results across {groups} sessions',
+  'a11y.announcement.searchComplete.sessions': 'Found {count} sessions',
+  'a11y.announcement.searchEmpty': 'No results found for "{query}"',
+  'a11y.announcement.syncComplete': 'Sync complete',
 } satisfies MessageCatalog
 
 export type Locale = 'zh-TW' | 'en'

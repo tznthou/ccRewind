@@ -10,6 +10,7 @@ import StoragePage from './components/Storage/StoragePage'
 import FileHistoryDrawer from './components/Archaeology/FileHistoryDrawer'
 import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher'
 import FontScaleSwitcher from './components/FontScaleSwitcher/FontScaleSwitcher'
+import LiveRegion from './components/LiveRegion/LiveRegion'
 import styles from './App.module.css'
 
 function AppContent() {
@@ -80,6 +81,7 @@ function AppContent() {
           onClose={() => dispatch({ type: 'CLOSE_FILE_HISTORY' })}
         />
       )}
+      <LiveRegion />
     </div>
   )
 }
