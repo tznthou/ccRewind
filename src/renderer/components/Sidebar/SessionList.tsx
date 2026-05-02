@@ -3,6 +3,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
+import { useI18n } from '../../i18n/useI18n'
 import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
@@ -19,6 +20,7 @@ export default function SessionList() {
   const { selectedProjectId, selectedSessionId } = useAppState()
   const dispatch = useAppDispatch()
   const { theme } = useTheme()
+  const { t } = useI18n()
   const { sessions, loading, error } = useSessions(selectedProjectId)
   const parentRef = useRef<HTMLDivElement>(null)
   const itemHeight = SESSION_ITEM_HEIGHT[theme]
@@ -43,19 +45,19 @@ export default function SessionList() {
   })
 
   if (!selectedProjectId) {
-    return <div className={styles.statusText}>選擇一個專案</div>
+    return <div className={styles.statusText}>{t('sidebar.sessionList.empty.noProject')}</div>
   }
 
   if (loading) {
-    return <div className={styles.statusText}>載入 Sessions...</div>
+    return <div className={styles.statusText}>{t('sidebar.sessionList.loading')}</div>
   }
 
   if (error) {
-    return <div className={styles.errorText}>錯誤：{error}</div>
+    return <div className={styles.errorText}>{t('common.error', { message: error })}</div>
   }
 
   if (sessions.length === 0) {
-    return <div className={styles.statusText}>此專案沒有 Session</div>
+    return <div className={styles.statusText}>{t('sidebar.sessionList.empty.noSessions')}</div>
   }
 
   return (
@@ -74,7 +76,7 @@ export default function SessionList() {
           Tokens
         </button>
       </div>
-    <div ref={parentRef} className={styles.sessionListContainer} role="listbox" aria-label="Session 列表">
+    <div ref={parentRef} className={styles.sessionListContainer} role="listbox" aria-label={t('sidebar.sessionList.aria.label')}>
       <div
         style={{
           height: virtualizer.getTotalSize(),
@@ -117,7 +119,7 @@ export default function SessionList() {
                   )}
                 </span>
                 <span>
-                  {session.archived ? '已封存 · ' : ''}{session.messageCount} 則
+                  {session.archived ? `${t('sidebar.sessionList.archived')} · ` : ''}{t('sidebar.sessionList.messageCount', { count: session.messageCount })}
                   {session.totalInputTokens != null && session.totalInputTokens > 0 && (
                     <span className={styles.tokenBadge}> · {formatTokens((session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0))}</span>
                   )}

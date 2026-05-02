@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { DailyUsage } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
 import { CHART_TOOLTIP_STYLE } from '../TokenBudget/chartConstants'
 import styles from './Dashboard.module.css'
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export default function UsageTrendChart({ data }: Props) {
+  const { t } = useI18n()
   const chartData = useMemo(() =>
     data.map(d => ({
       ...d,
@@ -19,7 +21,7 @@ export default function UsageTrendChart({ data }: Props) {
   [data])
 
   if (data.length === 0) {
-    return <div className={styles.empty}>No data for selected range</div>
+    return <div className={styles.empty}>{t('dashboard.usage.empty')}</div>
   }
 
   return (
@@ -47,9 +49,11 @@ export default function UsageTrendChart({ data }: Props) {
           contentStyle={CHART_TOOLTIP_STYLE}
           formatter={(value, name) => {
             const num = Number(value)
-            return name === 'totalTokens' ? [formatTokens(num), 'Tokens'] : [num, 'Sessions']
+            return name === 'totalTokens'
+              ? [formatTokens(num), t('dashboard.usage.tokens')]
+              : [num, t('dashboard.usage.sessions')]
           }}
-          labelFormatter={(label) => `Date: ${label}`}
+          labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
         />
         <Area
           yAxisId="sessions"

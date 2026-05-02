@@ -1,10 +1,12 @@
 import { useTheme, type ThemeId } from '../../context/ThemeContext'
+import { useI18n } from '../../i18n/useI18n'
+import type { MessageKey } from '../../i18n/messages'
 import styles from './ThemeSwitcher.module.css'
 
-const themes: { id: ThemeId; label: string; icon: React.ReactNode }[] = [
+const themes: { id: ThemeId; labelKey: MessageKey; icon: React.ReactNode }[] = [
   {
     id: 'archive',
-    label: '檔案室',
+    labelKey: 'theme.archive',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <rect x="2" y="1" width="10" height="12" />
@@ -15,7 +17,7 @@ const themes: { id: ThemeId; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'timeline',
-    label: '時間線',
+    labelKey: 'theme.timeline',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <line x1="4" y1="1" x2="4" y2="13" />
@@ -28,7 +30,7 @@ const themes: { id: ThemeId; label: string; icon: React.ReactNode }[] = [
   },
   {
     id: 'terminal',
-    label: '終端機',
+    labelKey: 'theme.terminal',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <polyline points="2,4 5,7 2,10" />
@@ -40,22 +42,26 @@ const themes: { id: ThemeId; label: string; icon: React.ReactNode }[] = [
 
 export default function ThemeSwitcher() {
   const { theme, setTheme } = useTheme()
+  const { t } = useI18n()
 
   return (
-    <div className={styles.container} role="radiogroup" aria-label="佈景主題">
-      {themes.map(({ id, label, icon }) => (
-        <button
-          key={id}
-          className={`${styles.button} ${theme === id ? styles.active : ''}`}
-          onClick={() => setTheme(id)}
-          role="radio"
-          aria-checked={theme === id}
-          aria-label={label}
-          title={label}
-        >
-          {icon}
-        </button>
-      ))}
+    <div className={styles.container} role="radiogroup" aria-label={t('theme.aria.label')}>
+      {themes.map(({ id, labelKey, icon }) => {
+        const label = t(labelKey)
+        return (
+          <button
+            key={id}
+            className={`${styles.button} ${theme === id ? styles.active : ''}`}
+            onClick={() => setTheme(id)}
+            role="radio"
+            aria-checked={theme === id}
+            aria-label={label}
+            title={label}
+          >
+            {icon}
+          </button>
+        )
+      })}
     </div>
   )
 }

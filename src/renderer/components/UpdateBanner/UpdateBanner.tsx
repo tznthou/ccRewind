@@ -1,8 +1,10 @@
 import { useState, useEffect, memo } from 'react'
 import type { UpdateState } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import styles from './UpdateBanner.module.css'
 
 export default memo(function UpdateBanner() {
+  const { t } = useI18n()
   const [state, setState] = useState<UpdateState | null>(null)
 
   useEffect(() => {
@@ -29,14 +31,15 @@ export default memo(function UpdateBanner() {
   return (
     <div className={styles.banner} role="status">
       <div className={styles.info}>
-        <span className={styles.versionText}>v{state.latestVersion}</span> 可供更新
+        <span className={styles.versionText}>v{state.latestVersion}</span>{' '}
+        {t('updateBanner.suffix')}
       </div>
       <div className={styles.actions}>
         <button className={styles.downloadBtn} onClick={handleDownload}>
-          下載
+          {t('updateBanner.download')}
         </button>
         <button className={styles.dismissBtn} onClick={handleDismiss}>
-          略過
+          {t('updateBanner.dismiss')}
         </button>
       </div>
     </div>

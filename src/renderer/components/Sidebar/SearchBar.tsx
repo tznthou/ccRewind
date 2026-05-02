@@ -1,15 +1,17 @@
 import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
+import type { MessageKey } from '../../i18n/messages'
 import type { SearchScope, SearchOptions, SearchSortBy } from '../../../shared/types'
 import styles from './SearchBar.module.css'
 
 type DateRange = 'all' | '7d' | '30d' | '90d'
 
-const DATE_RANGE_LABELS: Record<DateRange, string> = {
-  all: '不限',
-  '7d': '7 天',
-  '30d': '30 天',
-  '90d': '90 天',
+const DATE_RANGE_KEYS: Record<DateRange, MessageKey> = {
+  all: 'sidebar.searchBar.dateRange.all',
+  '7d': 'sidebar.searchBar.dateRange.7d',
+  '30d': 'sidebar.searchBar.dateRange.30d',
+  '90d': 'sidebar.searchBar.dateRange.90d',
 }
 
 const DATE_RANGE_DAYS: Record<Exclude<DateRange, 'all'>, number> = {
@@ -32,6 +34,7 @@ function buildSearchOptions(dateRange: DateRange, sortBy: SearchSortBy): SearchO
 export default function SearchBar() {
   const { selectedProjectId, searchQuery } = useAppState()
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
   const [input, setInput] = useState(searchQuery)
   const [searching, setSearching] = useState(false)
   const [scope, setScope] = useState<'all' | 'project'>('all')
@@ -98,14 +101,20 @@ export default function SearchBar() {
         <input
           className={styles.input}
           type="text"
-          placeholder={searching ? '搜尋中...' : searchType === 'sessions' ? '搜尋標籤、檔案、標題、意圖...' : '搜尋對話內容...'}
+          placeholder={
+            searching
+              ? t('sidebar.searchBar.placeholder.searching')
+              : searchType === 'sessions'
+                ? t('sidebar.searchBar.placeholder.sessions')
+                : t('sidebar.searchBar.placeholder.messages')
+          }
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           disabled={searching}
         />
         {searchQuery && (
-          <button className={styles.clearBtn} onClick={handleClear} aria-label="清除搜尋">
+          <button className={styles.clearBtn} onClick={handleClear} aria-label={t('sidebar.searchBar.aria.clear')}>
             &times;
           </button>
         )}
@@ -118,7 +127,7 @@ export default function SearchBar() {
             checked={scope === 'all'}
             onChange={() => setScope('all')}
           />
-          全部專案
+          {t('sidebar.searchBar.scope.all')}
         </label>
         <label className={styles.scopeLabel}>
           <input
@@ -128,9 +137,10 @@ export default function SearchBar() {
             onChange={() => setScope('project')}
             disabled={!selectedProjectId}
           />
-          目前專案
+          {t('sidebar.searchBar.scope.current')}
         </label>
-        <span className={styles.separator}>|</span>
+      </div>
+      <div className={styles.scopeRow}>
         <label className={styles.scopeLabel}>
           <input
             type="radio"
@@ -138,7 +148,7 @@ export default function SearchBar() {
             checked={searchType === 'messages'}
             onChange={() => setSearchType('messages')}
           />
-          對話
+          {t('sidebar.searchBar.type.messages')}
         </label>
         <label className={styles.scopeLabel}>
           <input
@@ -147,17 +157,17 @@ export default function SearchBar() {
             checked={searchType === 'sessions'}
             onChange={() => setSearchType('sessions')}
           />
-          標籤/檔案
+          {t('sidebar.searchBar.type.sessions')}
         </label>
       </div>
       <div className={styles.filterRow}>
-        {(Object.keys(DATE_RANGE_LABELS) as DateRange[]).map(range => (
+        {(Object.keys(DATE_RANGE_KEYS) as DateRange[]).map(range => (
           <button
             key={range}
             className={dateRange === range ? styles.filterBtnActive : styles.filterBtn}
             onClick={() => setDateRange(range)}
           >
-            {DATE_RANGE_LABELS[range]}
+            {t(DATE_RANGE_KEYS[range])}
           </button>
         ))}
         <span className={styles.separator}>|</span>
@@ -165,13 +175,13 @@ export default function SearchBar() {
           className={sortBy === 'rank' ? styles.filterBtnActive : styles.filterBtn}
           onClick={() => setSortBy('rank')}
         >
-          相關性
+          {t('sidebar.searchBar.sort.rank')}
         </button>
         <button
           className={sortBy === 'date' ? styles.filterBtnActive : styles.filterBtn}
           onClick={() => setSortBy('date')}
         >
-          最新
+          {t('sidebar.searchBar.sort.date')}
         </button>
       </div>
     </div>

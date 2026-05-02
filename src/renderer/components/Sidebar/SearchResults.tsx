@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
 import { formatTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
@@ -46,6 +47,7 @@ function MessagePreview({ role, text }: { role: string | null; text: string | nu
 export default function SearchResults() {
   const { searchResults, searchQuery, searchHasMore, searchProjectId, searchOptions } = useAppState()
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
   const [loading, setLoading] = useState(false)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
   const contextCacheRef = useRef(new Map<number, { before: Message[]; after: Message[] }>())
@@ -95,14 +97,14 @@ export default function SearchResults() {
   if (searchResults.length === 0) {
     return (
       <div className={styles.empty}>
-        找不到「{searchQuery}」的結果
+        {t('sidebar.searchResults.empty', { query: searchQuery })}
       </div>
     )
   }
 
   return (
     <div className={styles.container}>
-      <div className={styles.count}>{searchResults.length} 筆結果（{groups.length} 個 session）</div>
+      <div className={styles.count}>{t('sidebar.searchResults.count', { count: searchResults.length, groups: groups.length })}</div>
       {groups.map((g) => {
         const collapsed = collapsedGroups.has(g.sessionId)
         return (
@@ -122,8 +124,8 @@ export default function SearchResults() {
                       <button
                         className={styles.contextToggle}
                         onClick={() => toggleContext(m.messageId)}
-                        aria-label="顯示上下文"
-                        title="顯示前後對話"
+                        aria-label={t('sidebar.searchResults.aria.toggleContext')}
+                        title={t('sidebar.searchResults.title.toggleContext')}
                       >
                         {expandedContext === m.messageId ? '▾' : '▸'}
                       </button>
@@ -157,7 +159,7 @@ export default function SearchResults() {
       })}
       {searchHasMore && (
         <button className={styles.loadMore} onClick={handleLoadMore} disabled={loading}>
-          {loading ? '載入中...' : '載入更多'}
+          {loading ? t('common.loading') : t('common.loadMore')}
         </button>
       )}
     </div>

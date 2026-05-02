@@ -1,19 +1,23 @@
 import { useIndexerStatus } from '../../hooks/useIndexerStatus'
+import { useI18n } from '../../i18n/useI18n'
+import type { MessageKey } from '../../i18n/messages'
 import styles from './Sidebar.module.css'
 
-const PHASE_LABELS: Record<string, string> = {
-  scanning: '掃描中',
-  parsing: '解析中',
-  indexing: '索引中',
-  done: '索引完成',
+const PHASE_KEYS: Record<string, MessageKey> = {
+  scanning: 'sidebar.indexer.scanning',
+  parsing: 'sidebar.indexer.parsing',
+  indexing: 'sidebar.indexer.indexing',
+  done: 'sidebar.indexer.done',
 }
 
 export default function IndexerStatus() {
   const status = useIndexerStatus()
+  const { t } = useI18n()
 
   if (!status || status.phase === 'done') return null
 
-  const label = PHASE_LABELS[status.phase] ?? status.phase
+  const labelKey = PHASE_KEYS[status.phase]
+  const label = labelKey ? t(labelKey) : status.phase
   const percent = status.total > 0
     ? Math.round((status.current / status.total) * 100)
     : 0

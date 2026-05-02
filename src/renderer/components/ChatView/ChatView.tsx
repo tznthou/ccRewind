@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
+import { useI18n } from '../../i18n/useI18n'
 import type { SessionFile } from '../../../shared/types'
 import { basename } from '../../utils/pathDisplay'
 import MessageBubble from './MessageBubble'
@@ -19,6 +20,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   const { targetMessageId, searchQuery } = useAppState()
   const heatMap = useTokenHeat(messages)
   const dispatch = useAppDispatch()
+  const { t } = useI18n()
   const containerRef = useRef<HTMLDivElement>(null)
 
   // 換 session 時若無搜尋目標就 scroll to top；用 ref 追蹤前一個 sessionId 避免 targetMessageId 變化時誤觸（會蓋掉 search scroll）
@@ -93,11 +95,11 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     <div ref={containerRef} className={styles.chatView}>
       <SubagentPanel sessionId={sessionId} />
       {loading ? (
-        <div className={styles.status}>載入對話中...</div>
+        <div className={styles.status}>{t('chatView.loading')}</div>
       ) : error ? (
-        <div className={styles.error}>錯誤：{error}</div>
+        <div className={styles.error}>{t('common.error', { message: error })}</div>
       ) : messages.length === 0 ? (
-        <div className={styles.status}>此 Session 沒有訊息</div>
+        <div className={styles.status}>{t('chatView.empty')}</div>
       ) : (
         <>
           <div className={styles.toolbar}>
@@ -108,7 +110,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
                   className={styles.filesToggle}
                   onClick={() => setShowFiles(v => !v)}
                 >
-                  {sessionFiles.length} files {showFiles ? '\u25B4' : '\u25BE'}
+                  {t('chatView.toolbar.filesCount', { count: sessionFiles.length })} {showFiles ? '\u25B4' : '\u25BE'}
                 </button>
               )}
               <button
@@ -116,7 +118,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
                 onClick={handleExport}
                 disabled={exporting || messages.length === 0}
               >
-                {exporting ? 'Exporting...' : 'Export Markdown'}
+                {exporting ? t('chatView.toolbar.exporting') : t('chatView.toolbar.export')}
               </button>
             </div>
           </div>

@@ -1,15 +1,21 @@
 import type { ExclusionPreview } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import { formatBytes } from '../../utils/formatBytes'
 
 interface Props {
   preview: ExclusionPreview
 }
 
-/** 共用預覽摘要文：ConfirmDialog 與 DateRangeExclusionForm 顯示相同影響描述 */
 export default function ExclusionPreviewSummary({ preview }: Props) {
+  const { t } = useI18n()
   return (
     <>
-      將刪除 <strong>{preview.sessionCount}</strong> 個 session · <strong>{preview.messageCount.toLocaleString()}</strong> 條訊息 · 約 <strong>{formatBytes(preview.estimatedBytes)}</strong>
+      {t('storage.preview.willDelete.start')}
+      <strong>{preview.sessionCount}</strong>
+      {t('storage.preview.willDelete.midSession')}
+      <strong>{preview.messageCount.toLocaleString()}</strong>
+      {t('storage.preview.willDelete.midMessage')}
+      <strong>{formatBytes(preview.estimatedBytes)}</strong>
     </>
   )
 }

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ExclusionPreview } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import ExclusionPreviewSummary from './ExclusionPreviewSummary'
 import styles from './Storage.module.css'
 
@@ -15,6 +16,7 @@ interface Props {
 const HIGH_IMPACT_RATIO = 0.5
 
 export default function ConfirmExclusionDialog({ title, preview, totalSessions, isApplying, onConfirm, onCancel }: Props) {
+  const { t } = useI18n()
   const [acknowledged, setAcknowledged] = useState(false)
   const impactRatio = totalSessions > 0 ? preview.sessionCount / totalSessions : 0
   const highImpact = impactRatio > HIGH_IMPACT_RATIO
@@ -26,13 +28,13 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
         <div className={styles.dialogSummary}>
           <ExclusionPreviewSummary preview={preview} />
           {totalSessions > 0 && (
-            <span>（佔全部 {(impactRatio * 100).toFixed(1)}%）</span>
+            <span>{t('storage.confirm.impactRatio', { percent: (impactRatio * 100).toFixed(1) })}</span>
           )}
         </div>
 
         {highImpact && (
           <div className={styles.warningBanner}>
-            ⚠️ 此操作將刪除超過一半的資料。請再次確認。
+            {t('storage.confirm.warningHighImpact')}
           </div>
         )}
 
@@ -43,17 +45,17 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
             disabled={isApplying}
             onChange={e => setAcknowledged(e.target.checked)}
           />
-          我了解此操作不可復原
+          {t('storage.confirm.acknowledge')}
         </label>
 
         <div className={styles.dialogActions}>
-          <button className={styles.button} onClick={onCancel} disabled={isApplying}>取消</button>
+          <button className={styles.button} onClick={onCancel} disabled={isApplying}>{t('common.cancel')}</button>
           <button
             className={`${styles.button} ${styles.dangerButton}`}
             disabled={!acknowledged || isApplying}
             onClick={onConfirm}
           >
-            {isApplying ? '刪除中...' : '確認刪除'}
+            {isApplying ? t('storage.confirm.deleting') : t('storage.confirm.deleteAction')}
           </button>
         </div>
       </div>

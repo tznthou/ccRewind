@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import type { FileHistoryEntry } from '../../../shared/types'
 import { useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
+import { getDateLocale } from '../../i18n/messages'
 import { lastSegment } from '../../utils/pathDisplay'
 import styles from './Archaeology.module.css'
 
@@ -13,6 +15,7 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
   const [entries, setEntries] = useState<FileHistoryEntry[]>([])
   const [loading, setLoading] = useState(true)
   const dispatch = useAppDispatch()
+  const { t, locale } = useI18n()
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- filePath 變更時的 reset pattern，改寫成 derived state 風險高，留待後續 refactor
@@ -38,7 +41,7 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
       <div className={styles.drawer}>
         <div className={styles.drawerHeader}>
           <div>
-            <div className={styles.drawerTitle}>File History</div>
+            <div className={styles.drawerTitle}>{t('fileHistory.title')}</div>
             <div className={styles.drawerPath}>{filePath}</div>
           </div>
           <button className={styles.closeButton} onClick={onClose}>
@@ -49,9 +52,9 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
         </div>
         <div className={styles.drawerBody}>
           {loading ? (
-            <div className={styles.empty}>Loading...</div>
+            <div className={styles.empty}>{t('common.loading')}</div>
           ) : entries.length === 0 ? (
-            <div className={styles.empty}>No history found</div>
+            <div className={styles.empty}>{t('fileHistory.empty')}</div>
           ) : (
             <div className={styles.timeline}>
               {entries.map((entry, i) => (
@@ -62,10 +65,10 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
                   onClick={() => handleNavigate(entry.projectId, entry.sessionId)}
                 >
                   <div className={styles.entryDate}>
-                    {entry.startedAt ? new Date(entry.startedAt).toLocaleDateString('zh-TW', {
+                    {entry.startedAt ? new Date(entry.startedAt).toLocaleDateString(getDateLocale(locale), {
                       year: 'numeric', month: '2-digit', day: '2-digit',
                       hour: '2-digit', minute: '2-digit',
-                    }) : 'Unknown date'}
+                    }) : t('common.unknownDate')}
                   </div>
                   <div className={styles.entryTitle}>
                     {entry.sessionTitle || entry.sessionId.slice(0, 8)}
