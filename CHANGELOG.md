@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **BREAKING — License relicensed from AGPL-3.0 to GPL-3.0-or-later.** GPL fits a read-only desktop app better; AGPL's network clause has no practical effect on a non-SaaS application and risked misleading users about the deployment model. `LICENSE` replaced with GPL v3 text; `package.json` now declares the SPDX identifier; license badge and section in both READMEs updated.
+- **README features restructured.** 27 individual feature rows grouped into 5 collapsible `<details>` blocks (Browsing & Search and Token & Context open by default; Statistics & Archaeology, Data & Storage, UI & Interaction collapsed). Project Structure tree wrapped in `<details>` to reduce visual weight. DB Compaction (the 1.9.1 feature) added to Features — was missing from both language versions.
+- **English README parity with Chinese.** Core Concept expanded with structured rule engine details (intent + action + outcome) and three-signal tag inference. Features gained the missing File Reverse Index, Token Insights, and Token Heat Indicators rows. Architecture mermaid added the Summary Engine node. Test count synced 342 → 345 across tech stack table and project structure tree.
+
 ## [1.10.0] - 2026-05-02
 
 ### Added
