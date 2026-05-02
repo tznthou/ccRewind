@@ -44,7 +44,7 @@ export default function FileHistoryDrawer({ filePath, onClose }: Props) {
             <div className={styles.drawerTitle}>{t('fileHistory.title')}</div>
             <div className={styles.drawerPath}>{filePath}</div>
           </div>
-          <button className={styles.closeButton} onClick={onClose}>
+          <button className={styles.closeButton} onClick={onClose} aria-label={t('common.close')} title={t('common.close')}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
             </svg>
