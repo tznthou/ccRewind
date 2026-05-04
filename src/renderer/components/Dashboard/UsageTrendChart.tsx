@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { DailyUsage } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
@@ -12,6 +12,7 @@ interface Props {
 
 export default function UsageTrendChart({ data }: Props) {
   const { t } = useI18n()
+  const descId = useId()
   const chartData = useMemo(() =>
     data.map(d => ({
       ...d,
@@ -20,12 +21,19 @@ export default function UsageTrendChart({ data }: Props) {
     })),
   [data])
 
+  const summary = useMemo(() => {
+    const sessions = data.reduce((sum, d) => sum + d.sessionCount, 0)
+    const tokens = data.reduce((sum, d) => sum + d.totalTokens, 0)
+    return { sessions, tokens }
+  }, [data])
+
   if (data.length === 0) {
     return <div className={styles.empty}>{t('dashboard.usage.empty')}</div>
   }
 
   return (
-    <div role="img" aria-label={t('dashboard.aria.usageChart')}>
+    <div>
+      <div role="img" aria-label={t('dashboard.aria.usageChart')} aria-describedby={descId}>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -76,6 +84,14 @@ export default function UsageTrendChart({ data }: Props) {
           />
         </AreaChart>
       </ResponsiveContainer>
+      </div>
+      <p id={descId} className={styles.visuallyHidden}>
+        {t('dashboard.aria.usageSummary', {
+          days: data.length,
+          sessions: summary.sessions.toLocaleString(),
+          tokens: formatTokens(summary.tokens),
+        })}
+      </p>
     </div>
   )
 }

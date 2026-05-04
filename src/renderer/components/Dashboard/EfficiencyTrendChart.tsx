@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { DailyEfficiency } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
@@ -12,6 +12,7 @@ interface Props {
 
 export default function EfficiencyTrendChart({ data }: Props) {
   const { t } = useI18n()
+  const descId = useId()
   const chartData = useMemo(() =>
     data.map(d => ({
       ...d,
@@ -19,12 +20,19 @@ export default function EfficiencyTrendChart({ data }: Props) {
     })),
   [data])
 
+  const avgTokensPerTurn = useMemo(() => {
+    if (data.length === 0) return 0
+    const sum = data.reduce((acc, d) => acc + d.avgTokensPerTurn, 0)
+    return Math.round(sum / data.length)
+  }, [data])
+
   if (data.length === 0) {
     return <div className={styles.empty}>{t('dashboard.efficiency.empty')}</div>
   }
 
   return (
-    <div role="img" aria-label={t('dashboard.aria.efficiencyChart')}>
+    <div>
+      <div role="img" aria-label={t('dashboard.aria.efficiencyChart')} aria-describedby={descId}>
       <ResponsiveContainer width="100%" height={240}>
         <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
@@ -58,6 +66,13 @@ export default function EfficiencyTrendChart({ data }: Props) {
           />
         </AreaChart>
       </ResponsiveContainer>
+      </div>
+      <p id={descId} className={styles.visuallyHidden}>
+        {t('dashboard.aria.efficiencySummary', {
+          days: data.length,
+          tokens: formatTokens(avgTokensPerTurn),
+        })}
+      </p>
     </div>
   )
 }
