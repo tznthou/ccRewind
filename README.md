@@ -7,7 +7,7 @@
 
 [English](README_EN.md)
 
-Claude Code 對話回放與考古工具。輕量、只讀、離線優先的桌面應用程式，讓你回顧跟 Claude Code 的每一次協作對話。
+搜尋、瀏覽、回放跟 Claude Code 的對話歷史。輕量、唯讀、離線優先——你的 `~/.claude/` 一個位元組都不會動。
 
 <p align="center">
   <img src="docs/icon-github.png" alt="ccRewind" width="128" />
@@ -46,6 +46,16 @@ Session 摘要由結構化規則引擎產生（意圖提取 + 動作概要 + out
 所有操作都是唯讀的。ccRewind 絕不修改 `~/.claude/` 下的任何檔案，你的對話紀錄、記憶檔案、設定檔，一個位元組都不會動。
 
 Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有訊息、標籤、摘要都留在 SQLite 裡，不會隨 JSONL 檔案消失。
+
+---
+
+## 為什麼用 ccRewind
+
+不追功能廣度，專注把幾件事做深。
+
+<p align="center">
+  <img src="docs/why-ccrewind-zh.webp" alt="為什麼用 ccRewind — 檔案演進史、Subagent 獨立面板、多圖表深度儀表板、零寫入承諾" width="720" />
+</p>
 
 ---
 
@@ -311,6 +321,8 @@ ccRewind 刻意不做這些事：
 | 5 | ✅ 完成 | Active Time 計算 + Subagent 索引 + requestId Token 去重 |
 | 5.5 | ✅ 完成 | Subagent 前端 UI：chips 導覽 + breadcrumb 返回 |
 | 6 | ✅ 完成 | 儲存管理：exclusion_rules + 總覽頁 + 專案佔用 + 日期範圍排除 + IPC apply-token handshake + indexer skip（v1.9.0） |
+| 7 | ✅ 完成 | i18n + 全面 a11y 升級：繁中／英雙語、鍵盤導覽、aria-live announcements、字級縮放、sync UX（v1.10.0） |
+| 7.5 | ✅ 完成 | a11y polish 收尾 + License relicense（AGPL-3.0 → GPL-3.0-or-later）+ README 雙版重組（v1.11.0） |
 | — | 📋 遠期 | 資料壓縮功能（保留可還原，補 exclusion 硬刪的絕對性） |
 | — | 📋 遠期 | In-App 自動更新（待 Apple Developer ID code signing） |
 

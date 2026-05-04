@@ -7,7 +7,7 @@
 
 [中文](README.md)
 
-A conversation replay and archaeology tool for Claude Code. Lightweight, read-only, offline-first desktop app for browsing your Claude Code conversation history.
+Search, inspect, and reconstruct Claude Code sessions. Lightweight, read-only, offline-first — your `~/.claude/` stays untouched.
 
 <p align="center">
   <img src="docs/icon-github.png" alt="ccRewind" width="128" />
@@ -46,6 +46,16 @@ Session summaries are produced by a structured rule engine — intent extraction
 Everything is read-only. ccRewind never modifies any file under `~/.claude/`. Your conversations, memory files, and settings remain untouched. Not a single byte.
 
 When Claude Code deletes a session, ccRewind automatically archives that conversation. All messages, tags, and summaries stay in SQLite and won't disappear with the JSONL file.
+
+---
+
+## Why ccRewind
+
+Built for depth, not breadth.
+
+<p align="center">
+  <img src="docs/why-ccrewind-en.webp" alt="Why ccRewind — File Evolution History, Dedicated Subagent Panel, Multi-Chart Deep Dashboard, Zero-Write Guarantee" width="720" />
+</p>
 
 ---
 
@@ -310,6 +320,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 5 | ✅ Done | Active time calculation + subagent indexing + requestId token dedup |
 | 5.5 | ✅ Done | Subagent frontend UI: chip navigation + breadcrumb back |
 | 6 | ✅ Done | Storage management: exclusion_rules + overview page + project breakdown + date-range rules + IPC apply-token handshake + indexer skip (v1.9.0) |
+| 7 | ✅ Done | i18n + comprehensive a11y upgrade: bilingual UI (zh-TW + en), keyboard navigation, aria-live announcements, font scale, sync UX (v1.10.0) |
+| 7.5 | ✅ Done | a11y polish + license relicense (AGPL-3.0 → GPL-3.0-or-later) + README bilingual restructure (v1.11.0) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 
