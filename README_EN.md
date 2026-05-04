@@ -178,7 +178,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 345 tests, run through Electron |
+| Vitest 3 | Test framework | 355 tests, run through Electron |
 
 ---
 
@@ -271,7 +271,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (345)
+├── tests/                     # Vitest tests (355)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -322,6 +322,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 6 | ✅ Done | Storage management: exclusion_rules + overview page + project breakdown + date-range rules + IPC apply-token handshake + indexer skip (v1.9.0) |
 | 7 | ✅ Done | i18n + comprehensive a11y upgrade: bilingual UI (zh-TW + en), keyboard navigation, aria-live announcements, font scale, sync UX (v1.10.0) |
 | 7.5 | ✅ Done | a11y polish + license relicense (AGPL-3.0 → GPL-3.0-or-later) + README bilingual restructure (v1.11.0) |
+| 7.6 | ✅ Done | Dashboard readability pass: full i18n across 7 cards + a11y data exposure (chart values now reach screen readers) + visible outcome legend + outcome inference v2 (NULL 53% → 15.3%) (v1.12.0) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 

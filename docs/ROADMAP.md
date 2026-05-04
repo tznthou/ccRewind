@@ -22,6 +22,7 @@
 | 6 | v1.9.0 / v1.9.1 | ✅ | 儲存管理 + DB 壓縮 |
 | 7 | v1.10.0 | ✅ | i18n + 全面 a11y 升級：雙語 / 鍵盤導覽 / aria-live / sync UX |
 | 7.5 | v1.11.0 | ✅ | a11y polish 收尾 + license relicense + README 雙版重組 |
+| 7.6 | v1.12.0 | ✅ | Dashboard readability：i18n + a11y data exposure + visible legend + outcome inference v2 |
 | — | — | 📋 | 資料壓縮功能（保留可還原） |
 | — | — | 📋 | In-App 自動更新（待 Apple Developer ID code signing） |
 | — | — | 💤 | 其餘見 Backlog |
@@ -301,6 +302,32 @@
 - 英文版補強：File Reverse Index / Token Insights / Token Heat Indicators 三列 + Architecture mermaid Summary Engine 節點 + Core Concept structured rule engine + 三軌 tag inference 細節
 - Project Structure 樹包 `<details>`（contributor 才需要看，預設隱藏）
 - 雙版 Vitest test count 同步：342 → 345
+
+---
+
+## Phase 7.6 ✅ Dashboard readability + outcome inference v2（v1.12.0）
+
+**目標**：v1.10.0 i18n 主套之後，Dashboard 是最後一個 hardcode-zh-TW 的介面；同時 summarizer 的 outcome 判定有 53% session 落入 `unknown`，使 Project Health 的「in-progress」分類在 stacked bar 上完全看不見。此版本一次處理兩個遺留——Dashboard 補上完整 i18n + a11y 觀察維度，並重寫 outcome inference 演算法讓 in-progress session 真正可見。
+
+### 7.6-A. Dashboard readability pass（PR #19）
+
+- **完整 i18n**：7 個 cards 的標題、subtitle、empty states、chart aria-labels、range buttons、trend toggle、project filter 全改 `t()`；新增 ~50 個 `dashboard.*` keys，zh-TW + en lockstep（`MessageCatalog satisfies` 編譯期強制）
+- **6 個 cards 加 subtitle**：title 之下一行 muted 描述，第一次看 dashboard 的人不必猜每張卡在量什麼
+- **ProjectHealth inline legend**：5 個 outcome 顏色 + 標籤直接顯示在 stacked bar 上方，不用 hover 才知道色塊代表什麼
+- **WasteDetection → UnresolvedSessions rename**：原名暗示「使用者浪費時間」，新名只描述資料事實「沒走到明確結果的 sessions」。前端 only — IPC channel `stats:waste` + `WasteSession` type 在 boundary 保留以避 risky cross-process migration
+- **outcomeColors 集中化**：`ProjectHealth` 跟 `UnresolvedSessions` 各自定 `OUTCOME_COLORS`（值還不完全一樣，後者缺 committed / tested）。集中到 `outcomeColors.ts` 後 stacked bar / badge / legend 不可能再漂色；補 10 個 invariant tests
+- **a11y 補強**：card `<div>` → `<section>` + `aria-labelledby`、cardTitle → `<h2>`、recharts `role="img"` + 隨附 visually-hidden description（`<ul>` 列每筆 distribution / `<p>` 列 trend summary，透過 `aria-describedby` 串起來，SR 不再只聽到「Tool usage distribution pie chart」這種空殼）、UnresolvedSessions item Enter/Space 可活化
+- **project filter aria-label 改用專屬 key**：原本 reuse option text「全部專案」，SR 唸「全部專案 combo box 全部專案」聽不出控制項用途；新 `dashboard.filter.label`「依專案篩選」/「Filter by project」描述用途
+
+### 7.6-B. Outcome inference v2（PR #18）
+
+- **問題**：v1 演算法用 `messages.slice(-5)` 只看最後 5 則訊息，且 commit / test regex 太窄，導致 53% session 卡在 `unknown`；Project Health 的 stacked bar 看起來只有 committed / tested 兩塊，「in-progress」分類完全消失
+- **修正**：
+  - `slice(-5)` → `filter(hasToolUse).slice(-5)`：跳過 thinking / explanation tail，看真正的 tool 操作 footprint（單獨貢獻 ~37pp NULL 下降）
+  - 擴 `GIT_COMMIT_RE` / `TEST_COMMAND_RE`：補更多 git 與 test runner 變體
+  - 新增 `ACTIVE_WORK_RE`：抓「活躍編輯但沒收尾」的 session 標 in-progress
+- **效果**：本機 248 sessions 實測，NULL 53.0% → **15.3%**，in-progress 0% → 37.3%；Project Health 的「in-progress」段終於在 stacked bar 上看得到
+- **upgrade path**：bump `SUMMARY_VERSION` 1 → 2，indexer 偵測到舊 version 自動 backfill，無 schema change，無需手動操作
 
 ---
 

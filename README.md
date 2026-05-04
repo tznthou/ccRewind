@@ -179,7 +179,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖、甜甜圈圖（Context Budget + Dashboard） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 345 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 355 個測試，透過 Electron 執行 |
 
 ---
 
@@ -272,7 +272,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext（語言／主題／字級皆 localStorage 持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（345 個）
+├── tests/                     # Vitest 測試（355 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -323,6 +323,7 @@ ccRewind 刻意不做這些事：
 | 6 | ✅ 完成 | 儲存管理：exclusion_rules + 總覽頁 + 專案佔用 + 日期範圍排除 + IPC apply-token handshake + indexer skip（v1.9.0） |
 | 7 | ✅ 完成 | i18n + 全面 a11y 升級：繁中／英雙語、鍵盤導覽、aria-live announcements、字級縮放、sync UX（v1.10.0） |
 | 7.5 | ✅ 完成 | a11y polish 收尾 + License relicense（AGPL-3.0 → GPL-3.0-or-later）+ README 雙版重組（v1.11.0） |
+| 7.6 | ✅ 完成 | Dashboard readability：7 cards 完整 i18n + a11y data exposure（SR 聽得到 chart 數值）+ ProjectHealth visible legend + outcome inference v2（NULL 53%→15.3%）（v1.12.0） |
 | — | 📋 遠期 | 資料壓縮功能（保留可還原，補 exclusion 硬刪的絕對性） |
 | — | 📋 遠期 | In-App 自動更新（待 Apple Developer ID code signing） |
 
