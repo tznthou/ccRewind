@@ -20,52 +20,50 @@ export default function EfficiencyTrendChart({ data }: Props) {
     })),
   [data])
 
-  const avgTokensPerTurn = useMemo(() => {
-    if (data.length === 0) return 0
-    const sum = data.reduce((acc, d) => acc + d.avgTokensPerTurn, 0)
-    return Math.round(sum / data.length)
-  }, [data])
-
   if (data.length === 0) {
     return <div className={styles.empty}>{t('dashboard.efficiency.empty')}</div>
   }
 
+  const avgTokensPerTurn = Math.round(
+    data.reduce((acc, d) => acc + d.avgTokensPerTurn, 0) / data.length
+  )
+
   return (
     <div>
       <div role="img" aria-label={t('dashboard.aria.efficiencyChart')} aria-describedby={descId}>
-      <ResponsiveContainer width="100%" height={240}>
-        <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-          <XAxis
-            dataKey="label"
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-            interval="preserveStartEnd"
-          />
-          <YAxis
-            tickFormatter={formatTokens}
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-            width={52}
-          />
-          <Tooltip
-            contentStyle={CHART_TOOLTIP_STYLE}
-            formatter={(value, name) => {
-              const num = Number(value)
-              return name === 'avgTokensPerTurn'
-                ? [formatTokens(num), t('dashboard.efficiency.tokensPerTurn')]
-                : [num, t('dashboard.usage.sessions')]
-            }}
-            labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
-          />
-          <Area
-            type="monotone"
-            dataKey="avgTokensPerTurn"
-            stroke="#10b981"
-            fill="#10b981"
-            fillOpacity={0.15}
-            name="avgTokensPerTurn"
-          />
-        </AreaChart>
-      </ResponsiveContainer>
+        <ResponsiveContainer width="100%" height={240}>
+          <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              interval="preserveStartEnd"
+            />
+            <YAxis
+              tickFormatter={formatTokens}
+              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              width={52}
+            />
+            <Tooltip
+              contentStyle={CHART_TOOLTIP_STYLE}
+              formatter={(value, name) => {
+                const num = Number(value)
+                return name === 'avgTokensPerTurn'
+                  ? [formatTokens(num), t('dashboard.efficiency.tokensPerTurn')]
+                  : [num, t('dashboard.usage.sessions')]
+              }}
+              labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
+            />
+            <Area
+              type="monotone"
+              dataKey="avgTokensPerTurn"
+              stroke="#10b981"
+              fill="#10b981"
+              fillOpacity={0.15}
+              name="avgTokensPerTurn"
+            />
+          </AreaChart>
+        </ResponsiveContainer>
       </div>
       <p id={descId} className={styles.visuallyHidden}>
         {t('dashboard.aria.efficiencySummary', {

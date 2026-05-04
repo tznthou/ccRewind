@@ -143,7 +143,7 @@ export default function DashboardPage() {
             className={styles.filterSelect}
             value={projectFilter ?? ''}
             onChange={e => setProjectFilter(e.target.value || null)}
-            aria-label={t('dashboard.filter.allProjects')}
+            aria-label={t('dashboard.filter.label')}
           >
             <option value="">{t('dashboard.filter.allProjects')}</option>
             {projects.map(p => (

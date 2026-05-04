@@ -4,25 +4,17 @@ import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
 import { lastSegment } from '../../utils/pathDisplay'
 import {
+  DISTRIBUTION_KEYS,
   DISTRIBUTION_KEY_TO_OUTCOME,
   OUTCOME_COLORS,
   OUTCOME_I18N_KEY,
   OUTCOME_KEYS,
-  type DistributionKey,
 } from './outcomeColors'
 import styles from './Dashboard.module.css'
 
 interface Props {
   data: ProjectHealthType[]
 }
-
-const DISTRIBUTION_KEYS: readonly DistributionKey[] = [
-  'committed',
-  'tested',
-  'inProgress',
-  'quickQa',
-  'unknown',
-] as const
 
 function TrendArrow({ recent, previous }: { recent: number; previous: number }) {
   const { t } = useI18n()
@@ -72,7 +64,7 @@ export default function ProjectHealthComponent({ data }: Props) {
       <div className={styles.healthList}>
         {items.map(p => {
           const dist = p.outcomeDistribution
-          const total = dist.committed + dist.tested + dist.inProgress + dist.quickQa + dist.unknown
+          const total = DISTRIBUTION_KEYS.reduce((sum, key) => sum + dist[key], 0)
 
           return (
             <div key={p.projectId} className={styles.healthItem}>

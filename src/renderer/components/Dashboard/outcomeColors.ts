@@ -36,6 +36,16 @@ export const DISTRIBUTION_KEY_TO_OUTCOME = {
 
 export type DistributionKey = keyof typeof DISTRIBUTION_KEY_TO_OUTCOME
 
+// Order must mirror OUTCOME_KEYS so the legend (rendered from OUTCOME_KEYS) and
+// the stacked bar segments (rendered from DISTRIBUTION_KEYS) line up visually.
+export const DISTRIBUTION_KEYS: readonly DistributionKey[] = [
+  'committed',
+  'tested',
+  'inProgress',
+  'quickQa',
+  'unknown',
+] as const
+
 export function resolveOutcomeColor(status: string | null | undefined): string {
   if (status && status in OUTCOME_COLORS) {
     return OUTCOME_COLORS[status as OutcomeKey]
