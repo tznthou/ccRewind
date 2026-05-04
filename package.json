@@ -1,6 +1,6 @@
 {
   "name": "ccrewind",
-  "version": "1.11.0",
+  "version": "1.12.0",
   "description": "Claude Code 對話回放與考古工具",
   "license": "GPL-3.0-or-later",
   "main": "./out/main/index.js",

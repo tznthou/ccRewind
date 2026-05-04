@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.0] - 2026-05-04
+
+### Added
+
+- **Dashboard internationalization across all 7 cards** ([#19](https://github.com/tznthou/ccRewind/pull/19)). The Dashboard page — previously the last hardcoded-zh-TW surface — now drives every visible string through the `MessageKey` catalog: card titles, range buttons (7d / 30d / 90d / all), trend toggle, project filter, empty states, chart aria-labels, and ~50 new `dashboard.*` keys. zh-TW and en stay lockstep via the `satisfies MessageCatalog` typecheck. Combined with the v1.10.0 sidebar/dialog/title-bar i18n, the entire UI surface is now bilingual.
+
+- **Visually-hidden chart data summaries for screen readers** ([#19](https://github.com/tznthou/ccRewind/pull/19)). Recharts components (Pie, AreaChart, heatmap) wrapped in `role="img"` previously hid their visible legend and data values from assistive tech — SR users only heard generic labels like "Tool usage distribution pie chart" with no actual values. Each chart now exposes a visually-hidden description via `aria-describedby`: `DistributionPieChart` lists every `{name}: {value} {unit}` item, the trend charts summarize totals across the date range, and `WorkPatternHeatmap` enumerates active hours. Adds three `dashboard.aria.*` summary keys (zh-TW + en lockstep) and a `.visuallyHidden` CSS helper.
+
+- **Inline visible legend for Project Health** ([#19](https://github.com/tznthou/ccRewind/pull/19)). The stacked bar previously rendered five outcome colors with no key — readers had to hover each segment to learn what `#22c55e` meant. The card now shows a horizontal legend (committed / tested / in-progress / quick-qa / unknown) above the list, sourced from the same `outcomeColors.ts` module that drives the bar segments and the `UnresolvedSessions` badges so colors can never silently drift apart.
+
+- **Descriptive subtitles on six Dashboard cards** ([#19](https://github.com/tznthou/ccRewind/pull/19)). Each card title is now followed by a one-line muted subtitle explaining what the card measures (e.g., "Token consumption and session volume over time" under Usage Trend). Helps first-time users understand which question each card answers without needing a tour.
+
+### Changed
+
+- **Outcome inference upgraded — "in-progress" status now visible** ([#18](https://github.com/tznthou/ccRewind/pull/18)). The summarizer's outcome classifier was leaving 53% of sessions tagged `unknown` because it only inspected the last 5 raw messages and used narrow regexes for commit/test detection. v2 widens the regex set (more git-commit and test-runner patterns), adds an `ACTIVE_WORK_RE` for sessions actively editing without committing, and — most importantly — slices the last 5 messages **that contain tool use** instead of the trailing 5 messages of any kind (which were often thinking/explanation tail). Real-world impact on the local index: NULL drops from 53.0% → **15.3%**, `in-progress` becomes a visible category at 37.3% (was 0%), and Project Health's stacked bars now actually show the work-in-progress segment they were designed for. Bumps `SUMMARY_VERSION` 1 → 2 so existing sessions auto-backfill on next index scan; no schema change required.
+
+- **"Waste Detection" renamed to "Unresolved Sessions"** ([#19](https://github.com/tznthou/ccRewind/pull/19)). The original name implied user judgment ("you wasted time on this"); the new name describes the data ("sessions that didn't reach a clear outcome"). Rename is frontend-only — the IPC channel `stats:waste` and the `WasteSession` type at the boundary are intentionally retained to avoid a risky cross-process migration. The two-name asymmetry is documented and lives only at the IPC seam.
+
+### Fixed
+
+- **Project filter aria-label now describes the control, not its default option** ([#19](https://github.com/tznthou/ccRewind/pull/19)). The `<select>` previously used `aria-label={t('dashboard.filter.allProjects')}` (rendering as "All projects" / 「全部專案」), which is the option text — so screen readers announced "All projects, combo box, All projects" with no indication of what the control does. New `dashboard.filter.label` key ("Filter by project" / 「依專案篩選」) describes the purpose; the option text key is unchanged.
+
+- **Outcome colors centralized to prevent silent drift** ([#19](https://github.com/tznthou/ccRewind/pull/19)). `ProjectHealth` and `UnresolvedSessions` previously each defined their own `OUTCOME_COLORS` map — and the values were already slightly inconsistent (`UnresolvedSessions` was missing `committed` and `tested`). Both now import from a single `src/renderer/components/Dashboard/outcomeColors.ts` source, alongside the canonical `OUTCOME_KEYS` order, the `DISTRIBUTION_KEY ↔ OutcomeKey` bidirectional mapping, and the `resolveOutcomeColor` fallback helper. Adds 10 invariant unit tests guarding the contracts.
+
 ## [1.11.0] - 2026-05-03
 
 ### Added
