@@ -4,7 +4,7 @@ import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedS
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents } from './scanner'
 import { parseSession } from './parser'
-import { summarizeSession } from './summarizer'
+import { summarizeSession, SUMMARY_VERSION } from './summarizer'
 
 export type ProgressCallback = (status: IndexerProgress) => void
 
@@ -149,8 +149,9 @@ export async function runIndexer(
     for (const session of project.sessions) {
       scannedSessionIds.add(session.sessionId)
       const existing = existingMtimes.get(session.sessionId)
-      // 重新索引條件：新 session、mtime 變更、或 archived session 重新出現
-      if (!existing || existing.mtime !== session.fileMtime || existing.archived) {
+      // 重新索引條件：新 session、mtime 變更、archived session 重新出現、或 summary engine 升版
+      const summaryStale = existing && (existing.summaryVersion === null || existing.summaryVersion < SUMMARY_VERSION)
+      if (!existing || existing.mtime !== session.fileMtime || existing.archived || summaryStale) {
         if (exclusionRules.length > 0 && !existing) {
           const firstTs = await readFirstTimestamp(session.filePath)
           const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))

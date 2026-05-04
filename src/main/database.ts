@@ -755,11 +755,11 @@ export class Database {
   }
 
   /** 一次取得所有 session 的 file_mtime + archived 狀態（增量索引批次比對用） */
-  getAllSessionMtimes(): Map<string, { mtime: string; archived: boolean }> {
-    const rows = this.db.prepare('SELECT id, file_mtime, archived FROM sessions').all() as Array<{ id: string; file_mtime: string; archived: number }>
-    const map = new Map<string, { mtime: string; archived: boolean }>()
+  getAllSessionMtimes(): Map<string, { mtime: string; archived: boolean; summaryVersion: number | null }> {
+    const rows = this.db.prepare('SELECT id, file_mtime, archived, summary_version FROM sessions').all() as Array<{ id: string; file_mtime: string; archived: number; summary_version: number | null }>
+    const map = new Map<string, { mtime: string; archived: boolean; summaryVersion: number | null }>()
     for (const r of rows) {
-      map.set(r.id, { mtime: r.file_mtime, archived: r.archived === 1 })
+      map.set(r.id, { mtime: r.file_mtime, archived: r.archived === 1, summaryVersion: r.summary_version })
     }
     return map
   }
