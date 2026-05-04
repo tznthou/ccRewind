@@ -2,7 +2,7 @@ import type { ParsedLine, SessionSummary, OutcomeSignals, OutcomeStatus, FileOpe
 import type { SessionFileInput } from './database'
 
 /** 摘要引擎版本（每次規則改動時遞增，讓 backfill 可追蹤） */
-export const SUMMARY_VERSION = 1
+export const SUMMARY_VERSION = 2
 
 const MAX_INTENT_LEN = 120
 const MAX_SUMMARY_LEN = 300
@@ -108,8 +108,12 @@ function buildActivityText(toolCounts: Map<string, number>, fileCount: number): 
 
 // ── Outcome Inference ──
 
-const GIT_COMMIT_RE = /\bgit\s+commit\b/
-const TEST_COMMAND_RE = /\b(npm\s+test|npx\s+vitest|pnpm\s+(test|vitest)|pytest|jest|cargo\s+test|go\s+test)\b/
+// commit-like: git commit/push/merge + GitHub CLI PR create/merge
+const GIT_COMMIT_RE = /\b(?:git\s+(?:commit|push|merge)|gh\s+pr\s+(?:create|merge))\b/
+// test runners across major ecosystems
+const TEST_COMMAND_RE = /\b(npm\s+test|npx\s+vitest|pnpm\s+(test|vitest)|yarn\s+test|bun\s+test|deno\s+test|mvn\s+test|dotnet\s+test|gradle\s+test|pytest|jest|cargo\s+test|go\s+test)\b/
+// active-work signals: 最後輪在跑型別/lint/狀態檢查 → 視為 in-progress
+const ACTIVE_WORK_RE = /\b(git\s+status|git\s+diff|tsc|typecheck|eslint|lint|prettier)\b/
 
 const OUTCOME_LABELS: Record<string, string> = {
   'committed': '→ committed',
@@ -150,11 +154,33 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
     } catch { /* malformed contentJson */ }
   }
 
-  // 最後 3 輪的 tool 模式
-  const lastFew = messages.slice(-3)
-  const lastToolNames = lastFew.flatMap(m => m.toolNames)
+  // 最後 5 個有 tool_use 的 turn — 不是 message-slice，因為 session 結尾常是
+  // 大量 thinking/explanation，會把實際 work 推出視窗造成判定漏。
+  const lastToolTurns = messages.filter(m => m.hasToolUse).slice(-5)
+  const lastToolNames = lastToolTurns.flatMap(m => m.toolNames)
   if (lastToolNames.some(t => t === 'Edit' || t === 'Write')) {
     signals.endedWithEdits = true
+  }
+
+  // 最後 5 個 tool turn 中的 Bash 若含 active-work 指令（typecheck/lint/git status 等），也視為 in-progress
+  if (!signals.endedWithEdits) {
+    for (const msg of lastToolTurns) {
+      if (!msg.hasToolUse || !msg.contentJson) continue
+      try {
+        const content = JSON.parse(msg.contentJson) as unknown[]
+        for (const block of content) {
+          if (typeof block !== 'object' || block === null) continue
+          const b = block as Record<string, unknown>
+          if (b.type !== 'tool_use' || b.name !== 'Bash') continue
+          const command = ((b.input as Record<string, unknown> | undefined)?.command as string) ?? ''
+          if (ACTIVE_WORK_RE.test(command)) {
+            signals.endedWithEdits = true
+            break
+          }
+        }
+        if (signals.endedWithEdits) break
+      } catch { /* malformed contentJson */ }
+    }
   }
 
   // 推斷（保守：只在高信心時標記）

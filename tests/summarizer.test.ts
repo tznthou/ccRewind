@@ -162,6 +162,311 @@ describe('summarizeSession', () => {
     expect(summary.outcomeSignals.endedWithEdits).toBe(true)
   })
 
+  // ── Outcome Inference: extended git variants → committed ──
+
+  it('infers committed from git push', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '推上去' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git push origin main' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(true)
+  })
+
+  it('infers committed from gh pr create', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '開 PR' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'gh pr create --title "feat: foo" --body "bar"' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(true)
+  })
+
+  it('infers committed from gh pr merge', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: 'merge 掉' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'gh pr merge 42 --squash' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(true)
+  })
+
+  it('infers committed from git merge (local)', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '本地 merge' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git merge feat/foo --no-ff' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+  })
+
+  it('infers committed from git commit --amend', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '改 commit message' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git commit --amend --no-edit' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+  })
+
+  it('infers committed from git push --force-with-lease', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '強推' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git push --force-with-lease origin feat/bar' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('committed')
+  })
+
+  it('does NOT confuse "git status" with commit', () => {
+    // 純 status 檢查不算 committed
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '看狀態' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git status' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).not.toBe('committed')
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(false)
+  })
+
+  // ── Outcome Inference: extended test commands → tested ──
+
+  it('infers tested from yarn test', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'yarn test --watch=false' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+  })
+
+  it('infers tested from bun test', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'bun test' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+  })
+
+  it('infers tested from deno test', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'deno test --allow-read' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+  })
+
+  it('infers tested from mvn test', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑 maven 測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'mvn test' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+  })
+
+  it('infers tested from dotnet test', () => {
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '跑 dotnet 測試' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'dotnet test' } },
+        ]),
+      }),
+    ])
+    expect(summary.outcomeStatus).toBe('tested')
+  })
+
+  // ── Outcome Inference: in-progress 放寬條件 ──
+
+  it('infers in-progress from Edit even with many thinking turns afterwards', () => {
+    // 真實 prod 場景：Edit 後接大量 thinking/explanation，把 Edit 推出 message-slice
+    // 視窗，但 inference 應該看「最後幾個 tool action」而非「最後幾個 message」。
+    const messages = [
+      line({ role: 'user', contentText: '幫我改' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/foo.ts' } },
+        ]),
+      }),
+      // Edit 後 10 輪純 thinking — message-slice(-5) 抓不到 Edit，但 tool-slice(-5) 抓得到
+      ...Array.from({ length: 10 }, () => line({ role: 'assistant', contentText: '解釋' })),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+    expect(summary.outcomeSignals.endedWithEdits).toBe(true)
+  })
+
+  it('infers in-progress from Edit within last 5 turns (not last 3)', () => {
+    const messages = [
+      line({ role: 'user', contentText: '幫我改' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Edit'],
+        contentJson: toolUseContent([
+          { name: 'Edit', input: { file_path: '/src/foo.ts' } },
+        ]),
+      }),
+      // 後面 4 輪純 thinking（無 tool_use）
+      line({ role: 'assistant', contentText: '解釋一下這段邏輯' }),
+      line({ role: 'user', contentText: '好' }),
+      line({ role: 'assistant', contentText: '繼續說明' }),
+      line({ role: 'user', contentText: '了解' }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+    expect(summary.outcomeSignals.endedWithEdits).toBe(true)
+  })
+
+  it('infers in-progress from Bash typecheck without commit/test/edit', () => {
+    const messages = [
+      line({ role: 'user', contentText: '檢查 type' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'pnpm tsc --noEmit' } },
+        ]),
+      }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+    expect(summary.outcomeSignals.endedWithEdits).toBe(true)
+  })
+
+  it('infers in-progress from Bash lint without commit/test/edit', () => {
+    const messages = [
+      line({ role: 'user', contentText: '跑 lint' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'pnpm eslint . --fix' } },
+        ]),
+      }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+  })
+
+  it('infers in-progress from Bash git status (active diagnostic)', () => {
+    const messages = [
+      line({ role: 'user', contentText: '看狀態' }),
+      ...Array.from({ length: 6 }, () => line({ role: 'assistant', contentText: 'ok' })),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([
+          { name: 'Bash', input: { command: 'git status --short' } },
+        ]),
+      }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeStatus).toBe('in-progress')
+  })
+
+  it('does NOT mark long pure-conversation session as in-progress', () => {
+    // 長對話但無任何 tool_use 也無 commit/test → null（保守）
+    const messages = [
+      line({ role: 'user', contentText: '解釋一下 React server components 是什麼' }),
+      ...Array.from({ length: 10 }, () => line({ role: 'assistant', contentText: '解釋說明...' })),
+    ]
+    const { summary } = summarizeSession(messages)
+    // 不應誤判為 in-progress
+    expect(summary.outcomeStatus).not.toBe('in-progress')
+  })
+
   // ── Composite summaryText ──
 
   it('combines intent, activity, outcome into summaryText', () => {
