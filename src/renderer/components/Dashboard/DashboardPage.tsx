@@ -1,20 +1,22 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId, type ReactNode } from 'react'
 import type { DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth } from '../../../shared/types'
 import { useAppDispatch } from '../../context/AppContext'
+import { useI18n } from '../../i18n/useI18n'
+import type { MessageKey } from '../../i18n/messages'
 import UsageTrendChart from './UsageTrendChart'
 import EfficiencyTrendChart from './EfficiencyTrendChart'
-import WasteDetection from './WasteDetection'
+import UnresolvedSessions from './UnresolvedSessions'
 import ProjectHealthComponent from './ProjectHealth'
 import ToolDistribution from './ToolDistribution'
 import TagDistribution from './TagDistribution'
 import WorkPatternHeatmap from './WorkPatternHeatmap'
 import styles from './Dashboard.module.css'
 
-const RANGE_OPTIONS = [
-  { label: '7D', days: 7 },
-  { label: '30D', days: 30 },
-  { label: '90D', days: 90 },
-  { label: 'All', days: 0 },
+const RANGE_OPTIONS: ReadonlyArray<{ days: number; labelKey: MessageKey }> = [
+  { days: 7, labelKey: 'dashboard.range.7d' },
+  { days: 30, labelKey: 'dashboard.range.30d' },
+  { days: 90, labelKey: 'dashboard.range.90d' },
+  { days: 0, labelKey: 'dashboard.range.all' },
 ] as const
 
 interface ProjectOption {
@@ -22,14 +24,42 @@ interface ProjectOption {
   name: string
 }
 
+interface CardProps {
+  titleKey: MessageKey
+  subtitleKey: MessageKey
+  wide?: boolean
+  headerExtra?: ReactNode
+  children: ReactNode
+}
+
+function Card({ titleKey, subtitleKey, wide, headerExtra, children }: CardProps) {
+  const { t } = useI18n()
+  const titleId = useId()
+  return (
+    <section
+      className={`${styles.card} ${wide ? styles.cardWide : ''}`.trim()}
+      aria-labelledby={titleId}
+    >
+      <div className={styles.cardHeader}>
+        <div className={styles.cardTitleGroup}>
+          <h2 id={titleId} className={styles.cardTitle}>{t(titleKey)}</h2>
+          <p className={styles.cardSubtitle}>{t(subtitleKey)}</p>
+        </div>
+        {headerExtra}
+      </div>
+      {children}
+    </section>
+  )
+}
+
 export default function DashboardPage() {
+  const { t } = useI18n()
   const [range, setRange] = useState(30)
   const [projectFilter, setProjectFilter] = useState<string | null>(null)
   const [projects, setProjects] = useState<ProjectOption[]>([])
   const [trendView, setTrendView] = useState<'usage' | 'efficiency'>('usage')
   const dispatch = useAppDispatch()
 
-  // Data states
   const [usage, setUsage] = useState<DailyUsage[]>([])
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const [projectStats, setProjectStats] = useState<ProjectStats[]>([])
@@ -37,11 +67,10 @@ export default function DashboardPage() {
   const [tags, setTags] = useState<DistributionItem[]>([])
   const [patterns, setPatterns] = useState<WorkPatterns | null>(null)
   const [efficiency, setEfficiency] = useState<DailyEfficiency[]>([])
-  const [waste, setWaste] = useState<WasteSession[]>([])
+  const [unresolved, setUnresolved] = useState<WasteSession[]>([])
   const [projectHealth, setProjectHealth] = useState<ProjectHealth[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Load project list + health once (independent — one failing must not block the other)
   useEffect(() => {
     window.api.getProjectStats()
       .then(ps => {
@@ -59,7 +88,6 @@ export default function DashboardPage() {
     setLoading(true)
     ;(async () => {
       try {
-        // Order: usage, tools, tags, patterns, efficiency, waste
         const results = await Promise.allSettled([
           window.api.getUsageStats(projectFilter, range),
           window.api.getToolDistribution(projectFilter),
@@ -74,7 +102,7 @@ export default function DashboardPage() {
           if (results[2].status === 'fulfilled') setTags(results[2].value)
           if (results[3].status === 'fulfilled') setPatterns(results[3].value)
           if (results[4].status === 'fulfilled') setEfficiency(results[4].value)
-          if (results[5].status === 'fulfilled') setWaste(results[5].value)
+          if (results[5].status === 'fulfilled') setUnresolved(results[5].value)
         }
       } catch {
         /* IPC error — graceful degrade */
@@ -85,17 +113,39 @@ export default function DashboardPage() {
     return () => { cancelled = true }
   }, [projectFilter, range])
 
+  const trendTitleKey: MessageKey = trendView === 'usage'
+    ? 'dashboard.card.usageTrend'
+    : 'dashboard.card.efficiencyTrend'
+
+  const trendToggle = (
+    <div className={styles.rangeGroup}>
+      <button
+        type="button"
+        aria-pressed={trendView === 'usage'}
+        className={`${styles.rangeButton} ${trendView === 'usage' ? styles.rangeActive : ''}`}
+        onClick={() => setTrendView('usage')}
+      >{t('dashboard.trend.usage')}</button>
+      <button
+        type="button"
+        aria-pressed={trendView === 'efficiency'}
+        className={`${styles.rangeButton} ${trendView === 'efficiency' ? styles.rangeActive : ''}`}
+        onClick={() => setTrendView('efficiency')}
+      >{t('dashboard.trend.efficiency')}</button>
+    </div>
+  )
+
   return (
     <div className={styles.dashboard}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Dashboard</h1>
+        <h1 className={styles.title}>{t('dashboard.title')}</h1>
         <div className={styles.controls}>
           <select
             className={styles.filterSelect}
             value={projectFilter ?? ''}
             onChange={e => setProjectFilter(e.target.value || null)}
+            aria-label={t('dashboard.filter.label')}
           >
-            <option value="">All Projects</option>
+            <option value="">{t('dashboard.filter.allProjects')}</option>
             {projects.map(p => (
               <option key={p.id} value={p.id}>{p.name}</option>
             ))}
@@ -105,10 +155,12 @@ export default function DashboardPage() {
             {RANGE_OPTIONS.map(opt => (
               <button
                 key={opt.days}
+                type="button"
+                aria-pressed={range === opt.days}
                 className={`${styles.rangeButton} ${range === opt.days ? styles.rangeActive : ''}`}
                 onClick={() => setRange(opt.days)}
               >
-                {opt.label}
+                {t(opt.labelKey)}
               </button>
             ))}
           </div>
@@ -116,63 +168,48 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className={styles.loading}>Loading...</div>
+        <div className={styles.loading}>{t('common.loading')}</div>
       ) : (
         <div className={styles.grid}>
-          <div className={`${styles.card} ${styles.cardWide}`}>
-            <div className={styles.cardHeader}>
-              <div className={styles.cardTitle} style={{ marginBottom: 0 }}>
-                {trendView === 'usage' ? 'Usage Trend' : 'Efficiency Trend'}
-              </div>
-              <div className={styles.rangeGroup}>
-                <button
-                  className={`${styles.rangeButton} ${trendView === 'usage' ? styles.rangeActive : ''}`}
-                  onClick={() => setTrendView('usage')}
-                >Usage</button>
-                <button
-                  className={`${styles.rangeButton} ${trendView === 'efficiency' ? styles.rangeActive : ''}`}
-                  onClick={() => setTrendView('efficiency')}
-                >Efficiency</button>
-              </div>
-            </div>
+          <Card
+            titleKey={trendTitleKey}
+            subtitleKey="dashboard.subtitle.trend"
+            wide
+            headerExtra={trendToggle}
+          >
             {trendView === 'usage'
               ? <UsageTrendChart data={usage} />
               : <EfficiencyTrendChart data={efficiency} />
             }
-          </div>
+          </Card>
 
           {!projectFilter && (
-            <div className={styles.card}>
-              <div className={styles.cardTitle}>Project Health</div>
+            <Card titleKey="dashboard.card.projectHealth" subtitleKey="dashboard.subtitle.projectHealth">
               <ProjectHealthComponent data={projectHealth} />
-            </div>
+            </Card>
           )}
 
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>Work Patterns</div>
+          <Card titleKey="dashboard.card.workPatterns" subtitleKey="dashboard.subtitle.workPatterns">
             <WorkPatternHeatmap data={patterns} />
-          </div>
+          </Card>
 
-          <div className={`${styles.card} ${styles.cardWide}`}>
-            <div className={styles.cardTitle}>Waste Detection</div>
-            <WasteDetection
-              data={waste}
+          <Card titleKey="dashboard.card.unresolved" subtitleKey="dashboard.subtitle.unresolved" wide>
+            <UnresolvedSessions
+              data={unresolved}
               onSessionClick={(projectId, sessionId) => {
                 dispatch({ type: 'SET_VIEW_MODE', mode: 'sessions' })
                 dispatch({ type: 'NAVIGATE_TO_SESSION', projectId, sessionId })
               }}
             />
-          </div>
+          </Card>
 
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>Tool Usage</div>
+          <Card titleKey="dashboard.card.toolUsage" subtitleKey="dashboard.subtitle.toolUsage">
             <ToolDistribution data={tools} />
-          </div>
+          </Card>
 
-          <div className={styles.card}>
-            <div className={styles.cardTitle}>Tags</div>
+          <Card titleKey="dashboard.card.tags" subtitleKey="dashboard.subtitle.tags">
             <TagDistribution data={tags} />
-          </div>
+          </Card>
         </div>
       )}
     </div>

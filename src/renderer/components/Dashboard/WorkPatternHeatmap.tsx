@@ -1,5 +1,6 @@
-import { useMemo } from 'react'
+import { useId, useMemo } from 'react'
 import type { WorkPatterns } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -13,18 +14,22 @@ function formatDuration(seconds: number): string {
 }
 
 export default function WorkPatternHeatmap({ data }: Props) {
+  const { t } = useI18n()
+  const descId = useId()
   const maxCount = useMemo(() => {
     if (!data) return 0
     return Math.max(...data.hourly.map(h => h.count), 1)
   }, [data])
 
   if (!data) {
-    return <div className={styles.empty}>No data</div>
+    return <div className={styles.empty}>{t('dashboard.workPatterns.empty')}</div>
   }
+
+  const activeHours = data.hourly.filter(h => h.count > 0)
 
   return (
     <div>
-      <div className={styles.heatmapRow}>
+      <div className={styles.heatmapRow} role="img" aria-label={t('dashboard.aria.workPatternHeatmap')} aria-describedby={descId}>
         {data.hourly.map(h => {
           const intensity = h.count / maxCount
           return (
@@ -36,11 +41,18 @@ export default function WorkPatternHeatmap({ data }: Props) {
                   ? `rgba(59, 130, 246, ${0.15 + intensity * 0.7})`
                   : 'var(--color-bg-hover)',
               }}
-              title={`${h.hour}:00 — ${h.count} sessions`}
+              title={t('dashboard.workPatterns.cellTitle', { hour: h.hour, count: h.count })}
             />
           )
         })}
       </div>
+      <ul id={descId} className={styles.visuallyHidden}>
+        {activeHours.map(h => (
+          <li key={h.hour}>
+            {t('dashboard.workPatterns.cellTitle', { hour: h.hour, count: h.count })}
+          </li>
+        ))}
+      </ul>
       <div className={styles.heatmapLabels}>
         <span>0:00</span>
         <span>6:00</span>
@@ -50,7 +62,7 @@ export default function WorkPatternHeatmap({ data }: Props) {
       </div>
       {data.avgDurationSeconds != null && (
         <div className={styles.durationStat}>
-          Avg session: <span className={styles.durationValue}>{formatDuration(data.avgDurationSeconds)}</span>
+          {t('dashboard.workPatterns.avgSession', { duration: formatDuration(data.avgDurationSeconds) })}
         </div>
       )}
     </div>
