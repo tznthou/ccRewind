@@ -25,55 +25,57 @@ export default function UsageTrendChart({ data }: Props) {
   }
 
   return (
-    <ResponsiveContainer width="100%" height={240}>
-      <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
-        <XAxis
-          dataKey="label"
-          tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-          interval="preserveStartEnd"
-        />
-        <YAxis
-          yAxisId="sessions"
-          tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-          width={36}
-        />
-        <YAxis
-          yAxisId="tokens"
-          orientation="right"
-          tickFormatter={formatTokens}
-          tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
-          width={52}
-        />
-        <Tooltip
-          contentStyle={CHART_TOOLTIP_STYLE}
-          formatter={(value, name) => {
-            const num = Number(value)
-            return name === 'totalTokens'
-              ? [formatTokens(num), t('dashboard.usage.tokens')]
-              : [num, t('dashboard.usage.sessions')]
-          }}
-          labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
-        />
-        <Area
-          yAxisId="sessions"
-          type="monotone"
-          dataKey="sessionCount"
-          stroke="#3b82f6"
-          fill="#3b82f6"
-          fillOpacity={0.15}
-          name="sessionCount"
-        />
-        <Area
-          yAxisId="tokens"
-          type="monotone"
-          dataKey="totalTokens"
-          stroke="#f59e0b"
-          fill="#f59e0b"
-          fillOpacity={0.1}
-          name="totalTokens"
-        />
-      </AreaChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label={t('dashboard.aria.usageChart')}>
+      <ResponsiveContainer width="100%" height={240}>
+        <AreaChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
+          <XAxis
+            dataKey="label"
+            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            interval="preserveStartEnd"
+          />
+          <YAxis
+            yAxisId="sessions"
+            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            width={36}
+          />
+          <YAxis
+            yAxisId="tokens"
+            orientation="right"
+            tickFormatter={formatTokens}
+            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            width={52}
+          />
+          <Tooltip
+            contentStyle={CHART_TOOLTIP_STYLE}
+            formatter={(value, name) => {
+              const num = Number(value)
+              return name === 'totalTokens'
+                ? [formatTokens(num), t('dashboard.usage.tokens')]
+                : [num, t('dashboard.usage.sessions')]
+            }}
+            labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
+          />
+          <Area
+            yAxisId="sessions"
+            type="monotone"
+            dataKey="sessionCount"
+            stroke="#3b82f6"
+            fill="#3b82f6"
+            fillOpacity={0.15}
+            name="sessionCount"
+          />
+          <Area
+            yAxisId="tokens"
+            type="monotone"
+            dataKey="totalTokens"
+            stroke="#f59e0b"
+            fill="#f59e0b"
+            fillOpacity={0.1}
+            name="totalTokens"
+          />
+        </AreaChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
