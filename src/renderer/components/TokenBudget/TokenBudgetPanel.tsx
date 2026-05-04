@@ -27,7 +27,12 @@ function TokenBudgetInner({ sessionId }: Props) {
         setLoading(true)
         window.api.getSessionTokenStats(sessionId)
           .then(setStats)
-          .catch((e: unknown) => setError(e instanceof Error ? e.message : t('tokenBudget.error.loadFailed')))
+          .catch((e: unknown) => {
+            if (import.meta.env.DEV) {
+              console.error('[TokenBudgetPanel] getSessionTokenStats failed:', e)
+            }
+            setError(t('tokenBudget.error.loadFailed'))
+          })
           .finally(() => setLoading(false))
       }
       return next
