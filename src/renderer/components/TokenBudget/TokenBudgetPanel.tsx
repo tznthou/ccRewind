@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
+import { useI18n } from '../../i18n/useI18n'
 import TokenSummaryCard from './TokenSummaryCard'
 import ContextGrowthChart from './ContextGrowthChart'
 import TokenBreakdown from './TokenBreakdown'
@@ -13,6 +14,7 @@ interface Props {
 }
 
 function TokenBudgetInner({ sessionId }: Props) {
+  const { t } = useI18n()
   const [expanded, setExpanded] = useState(false)
   const [stats, setStats] = useState<SessionTokenStats | null>(null)
   const [loading, setLoading] = useState(false)
@@ -25,12 +27,12 @@ function TokenBudgetInner({ sessionId }: Props) {
         setLoading(true)
         window.api.getSessionTokenStats(sessionId)
           .then(setStats)
-          .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Failed to load token stats'))
+          .catch((e: unknown) => setError(e instanceof Error ? e.message : t('tokenBudget.error.loadFailed')))
           .finally(() => setLoading(false))
       }
       return next
     })
-  }, [sessionId, stats, error])
+  }, [sessionId, stats, error, t])
 
   const insights = useMemo(
     () => stats ? generateInsights(stats) : [],
@@ -43,17 +45,17 @@ function TokenBudgetInner({ sessionId }: Props) {
         className={styles.toggleButton}
         onClick={handleToggle}
       >
-        {expanded ? 'Hide' : 'Show'} Token Budget
+        {expanded ? t('tokenBudget.toggle.hide') : t('tokenBudget.toggle.show')}
       </button>
 
       {expanded && (
         <div className={styles.panelContent}>
-          {loading && <div className={styles.loading}>Loading token stats...</div>}
+          {loading && <div className={styles.loading}>{t('tokenBudget.loading')}</div>}
           {!loading && error && (
             <div className={styles.error}>{error}</div>
           )}
           {!loading && !error && stats && stats.turns.length === 0 && (
-            <div className={styles.empty}>No token data available for this session</div>
+            <div className={styles.empty}>{t('tokenBudget.empty')}</div>
           )}
           {!loading && !error && stats && stats.turns.length > 0 && (
             <>

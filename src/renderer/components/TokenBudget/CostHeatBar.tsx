@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
+import { useI18n } from '../../i18n/useI18n'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -10,8 +11,9 @@ interface Props {
 const MAX_CELLS = 200
 
 export default function CostHeatBar({ turns }: Props) {
+  const { t } = useI18n()
   const { cells, maxOutput } = useMemo(() => {
-    const max = turns.reduce((m, t) => Math.max(m, t.outputTokens), 0)
+    const max = turns.reduce((m, turn) => Math.max(m, turn.outputTokens), 0)
     const denom = max || 1
 
     // Bin turns when exceeding MAX_CELLS to limit DOM nodes
@@ -24,12 +26,12 @@ export default function CostHeatBar({ turns }: Props) {
     }
 
     return {
-      cells: binned.map(t => ({
-        sequence: t.sequence,
-        output: t.outputTokens,
-        intensity: t.outputTokens / denom,
-        hasToolUse: t.hasToolUse,
-        model: t.model,
+      cells: binned.map(turn => ({
+        sequence: turn.sequence,
+        output: turn.outputTokens,
+        intensity: turn.outputTokens / denom,
+        hasToolUse: turn.hasToolUse,
+        model: turn.model,
       })),
       maxOutput: max,
     }
@@ -40,20 +42,28 @@ export default function CostHeatBar({ turns }: Props) {
   return (
     <div className={styles.chartContainer}>
       <div className={styles.chartHeader}>
-        <span className={styles.chartTitle}>Output Intensity</span>
-        <span className={styles.chartSubtitle}>max: {formatTokens(maxOutput)}</span>
+        <span className={styles.chartTitle}>{t('tokenBudget.intensity.title')}</span>
+        <span className={styles.chartSubtitle}>{t('tokenBudget.intensity.max', { value: formatTokens(maxOutput) })}</span>
       </div>
       <div className={styles.heatBar}>
-        {cells.map(cell => (
-          <div
-            key={cell.sequence}
-            className={styles.heatCell}
-            style={{
-              backgroundColor: `rgba(245, 158, 11, ${0.1 + cell.intensity * 0.9})`,
-            }}
-            title={`Turn ${cell.sequence}: ${formatTokens(cell.output)} output${cell.hasToolUse ? ' (tool use)' : ''}${cell.model ? ` · ${cell.model}` : ''}`}
-          />
-        ))}
+        {cells.map(cell => {
+          const base = t('tokenBudget.intensity.cellTitle', {
+            sequence: cell.sequence,
+            tokens: formatTokens(cell.output),
+          })
+          const toolSuffix = cell.hasToolUse ? t('tokenBudget.intensity.toolUseSuffix') : ''
+          const modelSuffix = cell.model ? t('tokenBudget.intensity.modelSuffix', { model: cell.model }) : ''
+          return (
+            <div
+              key={cell.sequence}
+              className={styles.heatCell}
+              style={{
+                backgroundColor: `rgba(245, 158, 11, ${0.1 + cell.intensity * 0.9})`,
+              }}
+              title={`${base}${toolSuffix}${modelSuffix}`}
+            />
+          )
+        })}
       </div>
     </div>
   )

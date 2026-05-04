@@ -5,6 +5,7 @@ import {
 } from 'recharts'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
+import { useI18n } from '../../i18n/useI18n'
 import { TOKEN_COLORS, CHART_TOOLTIP_STYLE } from './chartConstants'
 import styles from './TokenBudget.module.css'
 
@@ -18,15 +19,16 @@ const CONTEXT_LIMITS = [
 ] as const
 
 export default function ContextGrowthChart({ turns }: Props) {
+  const { t } = useI18n()
   const [limitIdx, setLimitIdx] = useState(0)
   const limit = CONTEXT_LIMITS[limitIdx]
 
-  const data = useMemo(() => turns.map(t => ({
-    turn: t.sequence,
-    newInput: t.inputTokens - t.cacheReadTokens - t.cacheCreationTokens,
-    cacheCreation: t.cacheCreationTokens,
-    cacheRead: t.cacheReadTokens,
-    toolNames: t.toolNames,
+  const data = useMemo(() => turns.map(turn => ({
+    turn: turn.sequence,
+    newInput: turn.inputTokens - turn.cacheReadTokens - turn.cacheCreationTokens,
+    cacheCreation: turn.cacheCreationTokens,
+    cacheRead: turn.cacheReadTokens,
+    toolNames: turn.toolNames,
   })), [turns])
 
   const disableAnimation = turns.length > 100
@@ -34,7 +36,7 @@ export default function ContextGrowthChart({ turns }: Props) {
   return (
     <div className={styles.chartContainer}>
       <div className={styles.chartHeader}>
-        <span className={styles.chartTitle}>Context Growth</span>
+        <span className={styles.chartTitle}>{t('tokenBudget.contextGrowth.title')}</span>
         <div className={styles.limitToggle}>
           {CONTEXT_LIMITS.map((l, i) => (
             <button
@@ -64,7 +66,7 @@ export default function ContextGrowthChart({ turns }: Props) {
           />
           <Tooltip
             formatter={(value) => formatTokens(Number(value))}
-            labelFormatter={(label) => `Turn ${label}`}
+            labelFormatter={(label) => t('tokenBudget.contextGrowth.tooltipLabel', { turn: String(label) })}
             contentStyle={CHART_TOOLTIP_STYLE}
           />
           <ReferenceLine
@@ -79,7 +81,7 @@ export default function ContextGrowthChart({ turns }: Props) {
             stackId="ctx"
             stroke={TOKEN_COLORS.newInput}
             fill={TOKEN_COLORS.newInput}
-            name="New Input"
+            name={t('tokenBudget.series.newInput')}
             isAnimationActive={!disableAnimation}
           />
           <Area
@@ -88,7 +90,7 @@ export default function ContextGrowthChart({ turns }: Props) {
             stackId="ctx"
             stroke={TOKEN_COLORS.cacheCreation}
             fill={TOKEN_COLORS.cacheCreation}
-            name="Cache Creation"
+            name={t('tokenBudget.series.cacheCreation')}
             isAnimationActive={!disableAnimation}
           />
           <Area
@@ -98,7 +100,7 @@ export default function ContextGrowthChart({ turns }: Props) {
             stroke={TOKEN_COLORS.cacheRead}
             fill={TOKEN_COLORS.cacheRead}
             fillOpacity={0.6}
-            name="Cache Read"
+            name={t('tokenBudget.series.cacheRead')}
             isAnimationActive={!disableAnimation}
           />
         </AreaChart>

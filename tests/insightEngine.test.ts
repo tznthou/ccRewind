@@ -57,8 +57,7 @@ describe('insightEngine', () => {
       const spike = insights.find(i => i.id.startsWith('spike-'))
       expect(spike).toBeDefined()
       expect(spike!.severity).toBe('warning')
-      expect(spike!.title).toContain('Turn 2')
-      expect(spike!.title).toContain('+25.0K')
+      expect(spike!.data).toMatchObject({ type: 'context_spike', turn: 2, deltaTokens: 25_000 })
     })
 
     it('detects spike when ratio > 1.5x and delta > 5K', () => {
@@ -82,7 +81,7 @@ describe('insightEngine', () => {
       ]
       const insights = generateInsights(makeStats(turns))
       const spike = insights.find(i => i.id.startsWith('spike-'))
-      expect(spike!.detail).toContain('Bash')
+      expect(spike!.data).toMatchObject({ type: 'context_spike', cause: { kind: 'bash' } })
     })
 
     it('attributes spike to Read tool', () => {
@@ -95,7 +94,7 @@ describe('insightEngine', () => {
       ]
       const insights = generateInsights(makeStats(turns))
       const spike = insights.find(i => i.id.startsWith('spike-'))
-      expect(spike!.detail).toContain('large file read')
+      expect(spike!.data).toMatchObject({ type: 'context_spike', cause: { kind: 'read' } })
     })
 
     it('no spike for gradual growth', () => {
@@ -118,7 +117,7 @@ describe('insightEngine', () => {
       const limit = insights.find(i => i.id.startsWith('ctx-limit'))
       expect(limit).toBeDefined()
       expect(limit!.severity).toBe('warning')
-      expect(limit!.title).toContain('200K')
+      expect(limit!.data).toMatchObject({ type: 'context_limit', limit: '200k' })
     })
 
     it('critical at 90% of 200K', () => {
@@ -139,7 +138,7 @@ describe('insightEngine', () => {
       const limit = insights.find(i => i.id.startsWith('ctx-limit'))
       expect(limit).toBeDefined()
       expect(limit!.severity).toBe('warning')
-      expect(limit!.title).toContain('1M')
+      expect(limit!.data).toMatchObject({ type: 'context_limit', limit: '1m' })
     })
 
     it('critical at 90% of 1M', () => {
@@ -180,7 +179,7 @@ describe('insightEngine', () => {
       const limit = insights.find(i => i.id.startsWith('ctx-limit'))
       expect(limit).toBeDefined()
       expect(limit!.severity).toBe('warning')
-      expect(limit!.title).toContain('1M')
+      expect(limit!.data).toMatchObject({ type: 'context_limit', limit: '1m' })
     })
 
     it('no warning for small context', () => {
@@ -203,7 +202,7 @@ describe('insightEngine', () => {
       const cache = insights.find(i => i.id === 'cache-good')
       expect(cache).toBeDefined()
       expect(cache!.severity).toBe('good')
-      expect(cache!.title).toContain('80%')
+      expect(cache!.data).toMatchObject({ type: 'cache_efficiency_good', rate: 0.8 })
     })
 
     it('warning when hit rate < 30%', () => {
@@ -239,8 +238,11 @@ describe('insightEngine', () => {
       const insights = generateInsights(makeStats(turns))
       const hot = insights.find(i => i.id.startsWith('hotspot-'))
       expect(hot).toBeDefined()
-      expect(hot!.title).toContain('Turn 3')
-      expect(hot!.detail).toContain('Edit')
+      expect(hot!.data).toMatchObject({
+        type: 'output_hotspot',
+        turn: 3,
+        tools: expect.arrayContaining(['Edit', 'Write']),
+      })
     })
 
     it('no hot spot when output is uniform', () => {

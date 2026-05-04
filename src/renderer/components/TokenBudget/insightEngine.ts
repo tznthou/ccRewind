@@ -2,21 +2,27 @@ import type { SessionTokenStats } from '../../../shared/types'
 
 export type InsightSeverity = 'critical' | 'warning' | 'info' | 'good'
 
+export type SpikeCause =
+  | { kind: 'user_input' }
+  | { kind: 'bash' }
+  | { kind: 'read' }
+  | { kind: 'tool'; tools: string[] }
+
+export type InsightData =
+  | { type: 'context_spike'; turn: number; deltaTokens: number; cause: SpikeCause }
+  | { type: 'context_limit'; limit: '200k' | '1m'; percent: number; tokens: number }
+  | { type: 'cache_efficiency_good'; rate: number }
+  | { type: 'cache_efficiency_poor'; rate: number }
+  | { type: 'output_hotspot'; turn: number; tokens: number; tools: string[] }
+  | { type: 'growth_accel'; ratio: number }
+  | { type: 'growth_decel'; ratio: number }
+
 export interface Insight {
   id: string
   severity: InsightSeverity
   icon: string
-  title: string
-  detail?: string
+  data: InsightData
   turnRef?: number
-}
-
-// ── Helpers ──
-
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`
-  return String(n)
 }
 
 // ── Rule 1: Context Spike Detection ──
@@ -31,14 +37,14 @@ function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
 
     if (delta > 20_000 || (ratio > 1.5 && delta > 5_000)) {
       const turn = turns[i]
-      let cause = 'large user input or pasted content'
+      let cause: SpikeCause = { kind: 'user_input' }
       if (turn.hasToolUse) {
         if (turn.toolNames.some(t => t.toLowerCase().includes('bash'))) {
-          cause = 'Bash returned large output'
+          cause = { kind: 'bash' }
         } else if (turn.toolNames.some(t => t.toLowerCase().includes('read'))) {
-          cause = 'large file read'
+          cause = { kind: 'read' }
         } else {
-          cause = `tool output (${turn.toolNames.slice(0, 3).join(', ')})`
+          cause = { kind: 'tool', tools: turn.toolNames.slice(0, 3) }
         }
       }
 
@@ -46,8 +52,12 @@ function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
         id: `spike-${turn.sequence}`,
         severity: 'warning',
         icon: '⚡',
-        title: `Turn ${turn.sequence} context surged +${formatTokens(delta)}`,
-        detail: cause,
+        data: {
+          type: 'context_spike',
+          turn: turn.sequence,
+          deltaTokens: delta,
+          cause,
+        },
         turnRef: turn.sequence,
       })
     }
@@ -68,8 +78,7 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
       id: 'ctx-limit-1m',
       severity: 'critical',
       icon: '🔴',
-      title: `Context at ${Math.round(ctx / 10_000)}% of 1M limit (${formatTokens(ctx)})`,
-      detail: 'Approaching maximum context window',
+      data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
     }]
   }
   if (ctx >= 800_000) {
@@ -77,8 +86,7 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
       id: 'ctx-limit-1m',
       severity: 'warning',
       icon: '🟡',
-      title: `Context at ${Math.round(ctx / 10_000)}% of 1M limit (${formatTokens(ctx)})`,
-      detail: 'Consider using /compact to free up context',
+      data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
     }]
   }
 
@@ -88,8 +96,7 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
       id: 'ctx-limit-200k',
       severity: 'critical',
       icon: '🔴',
-      title: `Context at ${Math.round(ctx / 2_000)}% of 200K limit (${formatTokens(ctx)})`,
-      detail: 'Consider starting a new session or using /compact',
+      data: { type: 'context_limit', limit: '200k', percent: Math.round(ctx / 2_000), tokens: ctx },
     }]
   }
   if (ctx >= 160_000) {
@@ -97,8 +104,7 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
       id: 'ctx-limit-200k',
       severity: 'warning',
       icon: '🟡',
-      title: `Context at ${Math.round(ctx / 2_000)}% of 200K limit (${formatTokens(ctx)})`,
-      detail: 'Consider starting a new session or using /compact',
+      data: { type: 'context_limit', limit: '200k', percent: Math.round(ctx / 2_000), tokens: ctx },
     }]
   }
 
@@ -110,14 +116,13 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
 function assessCacheEfficiency(stats: SessionTokenStats): Insight[] {
   if (stats.totalInputTokens === 0) return []
   const rate = stats.cacheHitRate
-  const pct = Math.round(rate * 100)
 
   if (rate > 0.7) {
     return [{
       id: 'cache-good',
       severity: 'good',
       icon: '✅',
-      title: `Cache hit rate ${pct}% — prompt caching working well`,
+      data: { type: 'cache_efficiency_good', rate },
     }]
   }
 
@@ -126,8 +131,7 @@ function assessCacheEfficiency(stats: SessionTokenStats): Insight[] {
       id: 'cache-poor',
       severity: 'warning',
       icon: '⚠️',
-      title: `Cache hit rate only ${pct}%`,
-      detail: 'Most tokens are new input — likely a short session or frequent topic switches',
+      data: { type: 'cache_efficiency_poor', rate },
     }]
   }
 
@@ -155,10 +159,12 @@ function detectOutputHotSpots(turns: SessionTokenStats['turns']): Insight[] {
       id: `hotspot-${max.sequence}`,
       severity: 'info',
       icon: '🔥',
-      title: `Turn ${max.sequence} generated most output (${formatTokens(max.outputTokens)})`,
-      detail: max.toolNames.length > 0
-        ? `Tools: ${max.toolNames.slice(0, 4).join(', ')}`
-        : undefined,
+      data: {
+        type: 'output_hotspot',
+        turn: max.sequence,
+        tokens: max.outputTokens,
+        tools: max.toolNames.slice(0, 4),
+      },
       turnRef: max.sequence,
     }]
   }
@@ -194,8 +200,7 @@ function analyzeGrowthRate(turns: SessionTokenStats['turns']): Insight[] {
       id: 'growth-accel',
       severity: 'warning',
       icon: '📈',
-      title: `Context growth accelerated ${ratio.toFixed(1)}x in second half`,
-      detail: 'Efficiency declining as conversation grows',
+      data: { type: 'growth_accel', ratio },
     }]
   }
 
@@ -204,8 +209,7 @@ function analyzeGrowthRate(turns: SessionTokenStats['turns']): Insight[] {
       id: 'growth-decel',
       severity: 'good',
       icon: '📉',
-      title: `Context growth slowed in second half (${ratio.toFixed(1)}x)`,
-      detail: 'Cache efficiency improving over time',
+      data: { type: 'growth_decel', ratio },
     }]
   }
 
