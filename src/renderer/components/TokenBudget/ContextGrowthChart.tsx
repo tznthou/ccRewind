@@ -6,6 +6,7 @@ import {
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
 import { useI18n } from '../../i18n/useI18n'
+import { detectContextPlan } from './insightEngine'
 import { TOKEN_COLORS, CHART_TOOLTIP_STYLE } from './chartConstants'
 import styles from './TokenBudget.module.css'
 
@@ -20,7 +21,7 @@ const CONTEXT_LIMITS = [
 
 export default function ContextGrowthChart({ turns }: Props) {
   const { t } = useI18n()
-  const [limitIdx, setLimitIdx] = useState(0)
+  const [limitIdx, setLimitIdx] = useState(() => detectContextPlan(turns) === '1m' ? 1 : 0)
   const limit = CONTEXT_LIMITS[limitIdx]
 
   const data = useMemo(() => turns.map(turn => ({

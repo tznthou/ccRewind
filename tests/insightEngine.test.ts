@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { generateInsights } from '../src/renderer/components/TokenBudget/insightEngine'
+import { detectContextPlan, generateInsights } from '../src/renderer/components/TokenBudget/insightEngine'
 import type { SessionTokenStats } from '../src/shared/types'
 
 // ── Helpers ──
@@ -189,6 +189,50 @@ describe('insightEngine', () => {
       const insights = generateInsights(makeStats(turns))
       const limit = insights.find(i => i.id.startsWith('ctx-limit'))
       expect(limit).toBeUndefined()
+    })
+
+    // Regression: ctx > 200K is physical proof of 1M plan; must not be misjudged
+    // as 113% of 200K. (Real session screenshot: 226.8K showed "200K critical".)
+    it('1M plan: ctx 226K (22%) → no limit insight', () => {
+      const turns = [
+        makeTurn({ sequence: 1, inputTokens: 226_800, contextTotal: 226_800 }),
+      ]
+      const insights = generateInsights(makeStats(turns))
+      const limit = insights.find(i => i.id.startsWith('ctx-limit'))
+      expect(limit).toBeUndefined()
+    })
+
+    it('1M plan: prior turn proves 1M, current 195K → no limit insight (not 200K critical)', () => {
+      const turns = [
+        makeTurn({ sequence: 1, inputTokens: 250_000, contextTotal: 250_000 }),
+        makeTurn({ sequence: 2, inputTokens: 195_000, contextTotal: 195_000 }),
+      ]
+      const insights = generateInsights(makeStats(turns))
+      const limit = insights.find(i => i.id.startsWith('ctx-limit'))
+      expect(limit).toBeUndefined()
+    })
+  })
+
+  describe('detectContextPlan', () => {
+    it('returns 200k when no turn exceeds 200K', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000 }),
+        makeTurn({ sequence: 2, contextTotal: 200_000 }),
+      ]
+      expect(detectContextPlan(turns)).toBe('200k')
+    })
+
+    it('returns 1m when any turn exceeds 200K', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000 }),
+        makeTurn({ sequence: 2, contextTotal: 250_000 }),
+        makeTurn({ sequence: 3, contextTotal: 180_000 }),
+      ]
+      expect(detectContextPlan(turns)).toBe('1m')
+    })
+
+    it('returns 200k for empty turns', () => {
+      expect(detectContextPlan([])).toBe('200k')
     })
   })
 

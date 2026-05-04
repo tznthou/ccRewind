@@ -67,30 +67,41 @@ function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
 
 // ── Rule 2: Context Limit Warning ──
 
+// Detect plan window from observed context size: any turn exceeding 200K is
+// physical proof the session ran on a 1M-context model (200K models reject
+// > 200K requests). Otherwise assume the standard 200K plan.
+export function detectContextPlan(turns: SessionTokenStats['turns']): '200k' | '1m' {
+  for (const t of turns) {
+    if (t.contextTotal > 200_000) return '1m'
+  }
+  return '200k'
+}
+
 function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
   if (turns.length === 0) return []
-  const last = turns[turns.length - 1]
-  const ctx = last.contextTotal
+  const ctx = turns[turns.length - 1].contextTotal
+  const plan = detectContextPlan(turns)
 
-  // 1M limit: warning at 80%, critical at 90%
-  if (ctx >= 900_000) {
-    return [{
-      id: 'ctx-limit-1m',
-      severity: 'critical',
-      icon: '🔴',
-      data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
-    }]
-  }
-  if (ctx >= 800_000) {
-    return [{
-      id: 'ctx-limit-1m',
-      severity: 'warning',
-      icon: '🟡',
-      data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
-    }]
+  if (plan === '1m') {
+    if (ctx >= 900_000) {
+      return [{
+        id: 'ctx-limit-1m',
+        severity: 'critical',
+        icon: '🔴',
+        data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
+      }]
+    }
+    if (ctx >= 800_000) {
+      return [{
+        id: 'ctx-limit-1m',
+        severity: 'warning',
+        icon: '🟡',
+        data: { type: 'context_limit', limit: '1m', percent: Math.round(ctx / 10_000), tokens: ctx },
+      }]
+    }
+    return []
   }
 
-  // 200K limit: warning at 80%, critical at 90%
   if (ctx >= 180_000) {
     return [{
       id: 'ctx-limit-200k',
