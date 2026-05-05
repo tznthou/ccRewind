@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2026-05-05
+
+### Added
+
+- **Token Budget panel internationalization** (`492bf2b`). The Token Budget surface — six chart components (`TokenSummaryCard`, `ContextGrowthChart`, `TokenBreakdown`, `CostHeatBar`, `InsightsPanel`, `TokenBudgetPanel`) plus the `insightEngine` rule set — was the last hardcoded-bilingual hold-out: every Insight title and body was a static zh-TW string sliced by a runtime locale switch. The engine now returns `Insight` with a discriminated-union `data: InsightData` (7 insight types, plus a `SpikeCause` sub-union) and stays i18n-agnostic; the UI carries a small `insightMessages.ts` mapping layer that converts `InsightData → MessageKey`. 43 new `tokenBudget.*` keys, zh-TW and en in lockstep via the `satisfies MessageCatalog` typecheck. A new `insightMessages.test.ts` adds 14 sample × 2 locale smoke tests plus 14 explicit mapping-correctness assertions, so adding a new insight type without wiring its message key now fails the test suite instead of silently rendering an empty string.
+
+### Fixed
+
+- **Token Budget plan detection — 226K context no longer misreported as "113% of 200K"** (`768d95e`). `assessContextLimit` was a cascade of `if`-statements with no plan detection: any `contextTotal` between 200K and 800K fell into the 200K branch and rendered "Context at 113% of 200K limit (226.8K)" — physically impossible, since a 200K-context model rejects > 200K requests in the first place. Reaching 226K is itself proof the session ran on a 1M-context model. A new `detectContextPlan(turns)` returns `'1m'` if any observed `contextTotal` exceeds 200K and `'200k'` otherwise; `assessContextLimit` picks the matching threshold band; `ContextGrowthChart`'s reference-line toggle defaults to the detected plan so the chart and the Insights panel stay consistent. Pre-condition (assumes one plan-class per session — holds in current architecture because subagent turns live in separate JSONL files and cross-plan `/model` switches mid-session are unusual) is documented inline. Adds 5 regression tests including the original screenshot case.
+
+- **Token Budget panel no longer leaks raw exception text to the UI** (`7f014fa`). `TokenBudgetPanel`'s catch path forwarded the raw `e.message` from the IPC failure straight into the visible `setError` state, which could surface internal wording (file paths, native module errors, SQLite reasons) to end users on a panel whose visible promise is just "couldn't load token stats". Now fails closed: a generic i18n `tokenBudget.error.loadFailed` message is shown to users, while the underlying error is logged via `console.error` only in DEV builds. OWASP A09 + A10.
+
 ## [1.12.0] - 2026-05-04
 
 ### Added

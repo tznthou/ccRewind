@@ -324,6 +324,7 @@ ccRewind 刻意不做這些事：
 | 7 | ✅ 完成 | i18n + 全面 a11y 升級：繁中／英雙語、鍵盤導覽、aria-live announcements、字級縮放、sync UX（v1.10.0） |
 | 7.5 | ✅ 完成 | a11y polish 收尾 + License relicense（AGPL-3.0 → GPL-3.0-or-later）+ README 雙版重組（v1.11.0） |
 | 7.6 | ✅ 完成 | Dashboard readability：7 cards 完整 i18n + a11y data exposure（SR 聽得到 chart 數值）+ ProjectHealth visible legend + outcome inference v2（NULL 53%→15.3%）（v1.12.0） |
+| 7.7 | ✅ 完成 | Token Budget 子系統 i18n 補完（engine 改 discriminated-union InsightData、43 keys lockstep）+ 1M plan 偵測修正（226K 不再被誤報「113% of 200K」）+ panel 錯誤訊息 fail-close（v1.12.1） |
 | — | 📋 遠期 | 資料壓縮功能（保留可還原，補 exclusion 硬刪的絕對性） |
 | — | 📋 遠期 | In-App 自動更新（待 Apple Developer ID code signing） |
 

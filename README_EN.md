@@ -323,6 +323,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 7 | ✅ Done | i18n + comprehensive a11y upgrade: bilingual UI (zh-TW + en), keyboard navigation, aria-live announcements, font scale, sync UX (v1.10.0) |
 | 7.5 | ✅ Done | a11y polish + license relicense (AGPL-3.0 → GPL-3.0-or-later) + README bilingual restructure (v1.11.0) |
 | 7.6 | ✅ Done | Dashboard readability pass: full i18n across 7 cards + a11y data exposure (chart values now reach screen readers) + visible outcome legend + outcome inference v2 (NULL 53% → 15.3%) (v1.12.0) |
+| 7.7 | ✅ Done | Token Budget subsystem i18n completion (engine refactored to discriminated-union `InsightData`, 43 keys lockstep) + 1M plan detection fix (226K no longer misreported as "113% of 200K") + panel error message fails closed (v1.12.1) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 
