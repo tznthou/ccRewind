@@ -41,7 +41,7 @@
 
 ccRewind 讀取 `~/.claude/projects/` 下的 JSONL 對話紀錄，建立 SQLite + FTS5 索引，提供瀏覽、搜尋、匯出功能。
 
-Session 摘要由結構化規則引擎產生（意圖提取 + 動作概要 + outcome 推斷），零 API 成本。標籤透過文字、路徑、工具模式三軌交叉推斷。未來規劃 BYOK（自備 API Key）模式，可以選擇用 LLM 產生更高品質的摘要。
+Session 摘要由結構化規則引擎產生（意圖提取 + 動作概要 + outcome 推斷），零 API 成本。標籤透過文字、路徑、工具模式三軌交叉推斷。ccRewind 屬 ccFamily 三件套，整體哲學是 rule-based + zero API cost，**不規劃引入 LLM 路線**；更深入的「跨 session ADR 推理」由規劃中的姊妹 plugin **ccReason** 承接（讀 ccRecall schema，獨立 npm 包）。
 
 所有操作都是唯讀的。ccRewind 絕不修改 `~/.claude/` 下的任何檔案，你的對話紀錄、記憶檔案、設定檔，一個位元組都不會動。
 
@@ -179,7 +179,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖、甜甜圈圖（Context Budget + Dashboard） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 355 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 420 個測試，透過 Electron 執行 |
 
 ---
 
@@ -272,7 +272,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext（語言／主題／字級皆 localStorage 持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（355 個）
+├── tests/                     # Vitest 測試（420 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -300,7 +300,7 @@ ccRewind 刻意不做這些事：
 - **不做雲端同步**：所有資料來自本地 `~/.claude/`，不上傳任何東西
 - **不修改任何檔案**：純唯讀應用，連 `~/.claude/` 的 mtime 都不會動
 - **不做即時監控**：不是 tail -f，是考古學
-- **LLM 永遠是可選的**：沒有 API Key 也能用所有核心功能，LLM 摘要是錦上添花
+- **不引入 LLM 路線**：ccFamily 三件套堅持 rule-based + zero API cost；需要 ADR 推理層的場景由規劃中的 ccReason plugin 承接
 
 如果你需要的是「讓 Claude 記住之前說過什麼」，去看 claude-mem 之類的記憶系統。ccRewind 解決的是不同的問題：讓人類回顧與 AI 的協作歷史。
 

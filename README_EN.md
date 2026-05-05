@@ -41,7 +41,7 @@ Switch between three visual themes with one click. Built-in token usage dashboar
 
 ccRewind reads JSONL conversation logs from `~/.claude/projects/`, builds a SQLite + FTS5 index, and provides browsing, searching, and exporting capabilities.
 
-Session summaries are produced by a structured rule engine — intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), and outcome inference (committed / tested / in-progress) — all at zero API cost. Tags are cross-inferred from three signals: message text, file paths, and tool usage patterns. A future BYOK (Bring Your Own Key) mode will offer higher-quality LLM summaries as an opt-in.
+Session summaries are produced by a structured rule engine — intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), and outcome inference (committed / tested / in-progress) — all at zero API cost. Tags are cross-inferred from three signals: message text, file paths, and tool usage patterns. ccRewind is part of the ccFamily trio whose overall philosophy is rule-based + zero API cost — **no LLM track is planned**. Deeper cross-session ADR inference is handled by the planned sibling plugin **ccReason** (reads the ccRecall schema, ships as a separate npm package).
 
 Everything is read-only. ccRewind never modifies any file under `~/.claude/`. Your conversations, memory files, and settings remain untouched. Not a single byte.
 
@@ -178,7 +178,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 355 tests, run through Electron |
+| Vitest 3 | Test framework | 420 tests, run through Electron |
 
 ---
 
@@ -271,7 +271,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (355)
+├── tests/                     # Vitest tests (420)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -299,7 +299,7 @@ ccRewind deliberately does not:
 - **No cloud sync**: All data comes from local `~/.claude/`, nothing gets uploaded
 - **No file modification**: Pure read-only app; we don't even touch the mtime of `~/.claude/`
 - **No live monitoring**: This isn't `tail -f`, it's archaeology
-- **LLM is always optional**: All core features work without an API key. LLM summaries are a nice-to-have, not a requirement
+- **No LLM track**: The ccFamily trio sticks to rule-based + zero API cost; deeper ADR-inference scenarios are handled by the planned ccReason plugin
 
 If what you need is "make Claude remember what was said before," look at memory systems like claude-mem. ccRewind solves a different problem: letting humans review their collaboration history with AI.
 
