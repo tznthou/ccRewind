@@ -70,6 +70,12 @@ function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
 // Detect plan window from observed context size: any turn exceeding 200K is
 // physical proof the session ran on a 1M-context model (200K models reject
 // > 200K requests). Otherwise assume the standard 200K plan.
+//
+// Pre-condition: assumes a session stays on one plan class throughout.
+// Holds in practice because (a) sub-agent turns live in separate JSONL files
+// and never enter this array, and (b) cross-plan /model switches mid-session
+// are rare. If a session does switch from a 1M to a 200K model after exceeding
+// 200K, a near-limit later turn (e.g. 195K) is suppressed instead of warned.
 export function detectContextPlan(turns: SessionTokenStats['turns']): '200k' | '1m' {
   for (const t of turns) {
     if (t.contextTotal > 200_000) return '1m'
