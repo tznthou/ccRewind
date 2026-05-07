@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.2] - 2026-05-07
+
+### Fixed
+
+- **JSONL parser normalizes lone UTF-16 surrogates at every exit point** (`dd357c8`, `cb81b84`). Claude Code <2.1.132's tool-error truncation could cut into emoji codepoints, leaving unpaired UTF-16 surrogates (lone high or low surrogate code units) in the JSONL strings. Newer Claude Code versions sanitize in-memory on `--resume`, but the on-disk files remain affected. ccRewind is a read-only consumer of those files: better-sqlite3 silently substitutes U+FFFD on INSERT (no crash) and `JSON.stringify` emits ASCII escapes like `\uD83D`, but downstream `JSON.parse(contentJson)` restores the lone surrogate — React rendering and the exporter then rely on V8's fallback behavior, leaving the contract implicit. A new `ensureWellFormed(s)` helper wraps `String.prototype.toWellFormed()` (ES2024, native in Node 20+) and is applied at the four parser exit points: `parseContent`'s string path, its array text-block path, `parseLine`'s top-level `obj.content` branch (queue-operation etc.), and inside the `JSON.stringify(message.content, replacer)` call so every string leaf — including nested `tool_result.content` — gets normalized before persistence; downstream `JSON.parse` then yields well-formed strings. Downstream summarizer / FTS5 / UI / exports never need to know about this legacy dirty data. Adds 9 regression tests (429/429 green). OWASP A03 (input validation).
+
 ## [1.12.1] - 2026-05-05
 
 ### Added

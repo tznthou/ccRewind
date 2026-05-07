@@ -6,6 +6,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.12.2] - 2026-05-07
+
+### Fixed
+
+- **JSONL parser 在出口統一 normalize 未配對 UTF-16 surrogate**（`dd357c8`、`cb81b84`）。Claude Code <2.1.132 的 tool error truncation 會切到 emoji codepoint 中間，在 JSONL 字串裡留下 lone surrogate（未配對的 high/low UTF-16 code unit）。新版 Claude Code 在 `--resume` 載入 session 時做 in-memory sanitize，但磁碟上的舊 session 檔仍含此資料。ccRewind 是這些檔案的純唯讀消費者：實測 better-sqlite3 在 INSERT 時會把 lone surrogate 替換成 U+FFFD（不會 crash）、`JSON.stringify` 也會輸出 ASCII escape `\uD83D` 形式，但下游 `JSON.parse(contentJson)` 會把 lone surrogate 還原，React 渲染與 exporter 寫檔時又得依賴 V8 的 fallback 行為——名實不符。新增 `ensureWellFormed(s)` helper 包裝 `String.prototype.toWellFormed()`（ES2024，Node 20+ native），並在 parser 出口的四個入口統一套用：`parseContent` 的 string 路徑、array text-block 路徑、`parseLine` 的 top-level `obj.content` 路徑（queue-operation 等）、以及 `JSON.stringify(message.content, replacer)` 的 string leaf——後者讓 `tool_result.content` 等巢狀 string 在序列化時就 normalize，下游 `JSON.parse` 還原時得到的是 well-formed string。下游 summarizer / FTS5 / UI / 匯出皆不再需要知道這個歷史髒資料問題。新增 9 個 regression tests（總計 429/429）。OWASP A03（input validation）。
+
 ## [1.12.1] - 2026-05-05
 
 ### Added
