@@ -169,7 +169,9 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolUse = result.hasToolUse
     hasToolResult = result.hasToolResult
     toolNames = result.toolNames
-    contentJson = message.content != null ? JSON.stringify(message.content) : null
+    contentJson = message.content != null
+      ? JSON.stringify(message.content, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
+      : null
 
     // Token usage（僅 assistant 訊息有值）
     const tokenData = parseUsage(message)
@@ -180,7 +182,7 @@ export function parseLine(line: string): ParsedLine | null {
     model = typeof message.model === 'string' ? message.model : null
   } else if (typeof obj.content === 'string') {
     // queue-operation 等 type 的 prompt 存在頂層 content 欄位
-    const cleaned = stripSystemXml(obj.content as string)
+    const cleaned = ensureWellFormed(stripSystemXml(obj.content as string))
     contentText = cleaned || null
   }
 

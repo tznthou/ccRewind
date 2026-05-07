@@ -277,6 +277,33 @@ describe('parseLine', () => {
     expect(result!.contentText).toBeNull()
   })
 
+  it('queue-operation top-level content normalizes lone surrogate', () => {
+    const line = JSON.stringify({
+      type: 'queue-operation',
+      sessionId: 's1',
+      content: 'pre\uD83Dpost',
+    })
+    const result = parseLine(line)
+    expect(result!.contentText).toBe('pre�post')
+  })
+
+  it('contentJson is well-formed after JSON.parse round-trip', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      sessionId: 's1',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 't1', content: 'pre\uD83Dpost' },
+        ],
+      },
+    })
+    const result = parseLine(line)
+    expect(result!.contentJson).not.toBeNull()
+    const restored = JSON.parse(result!.contentJson!)
+    expect(restored[0].content).toBe('pre�post')
+  })
+
   it('queue-operation with content → extracts prompt text', () => {
     const line = JSON.stringify({
       type: 'queue-operation',
