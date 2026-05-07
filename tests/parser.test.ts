@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import path from 'node:path'
-import { parseContent, parseLine, parseSession, stripSystemXml } from '../src/main/parser'
+import { ensureWellFormed, parseContent, parseLine, parseSession, stripSystemXml } from '../src/main/parser'
 
 const FIXTURES = path.join(__dirname, 'fixtures')
 
@@ -180,6 +180,40 @@ describe('parseContent', () => {
     ]
     const result = parseContent(content)
     expect(result.contentText).toBe('gogo\n/gogo')
+  })
+
+  it('replaces lone high surrogate in string content with U+FFFD', () => {
+    const result = parseContent('pre\uD83Dpost')
+    expect(result.contentText).toBe('pre�post')
+  })
+
+  it('replaces lone low surrogate in array text block with U+FFFD', () => {
+    const content = [{ type: 'text', text: 'pre\uDC36post' }]
+    const result = parseContent(content)
+    expect(result.contentText).toBe('pre�post')
+  })
+
+  it('preserves valid surrogate pair (emoji) untouched', () => {
+    const result = parseContent('hello 🐶 world')
+    expect(result.contentText).toBe('hello 🐶 world')
+  })
+})
+
+describe('ensureWellFormed', () => {
+  it('passes through plain ASCII unchanged', () => {
+    expect(ensureWellFormed('hello world')).toBe('hello world')
+  })
+
+  it('passes through valid surrogate pair (emoji) unchanged', () => {
+    expect(ensureWellFormed('🚀')).toBe('🚀')
+  })
+
+  it('replaces lone high surrogate with U+FFFD', () => {
+    expect(ensureWellFormed('a\uD83Db')).toBe('a�b')
+  })
+
+  it('replaces lone low surrogate with U+FFFD', () => {
+    expect(ensureWellFormed('a\uDC36b')).toBe('a�b')
   })
 })
 

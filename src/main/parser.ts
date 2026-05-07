@@ -37,6 +37,16 @@ export function stripSystemXml(text: string): string {
   return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, _tag: string, content: string) => content).trim()
 }
 
+/**
+ * 把 lone surrogate 替換成 U+FFFD。
+ * Claude Code 2.1.132 以前的 tool error truncation 會切到 emoji 中間，
+ * 在 JSONL 留下未配對 UTF-16 surrogate；磁碟上的舊 session 仍含此資料。
+ * 在 parser 出口 normalize 一次，下游 summarizer / FTS / UI / 匯出皆不必再處理。
+ */
+export function ensureWellFormed(s: string): string {
+  return s.toWellFormed()
+}
+
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
 export function parseContent(content: unknown): ContentResult {
   if (content == null) {
@@ -44,7 +54,7 @@ export function parseContent(content: unknown): ContentResult {
   }
 
   if (typeof content === 'string') {
-    const cleaned = stripSystemXml(content)
+    const cleaned = ensureWellFormed(stripSystemXml(content))
     return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [] }
   }
 
@@ -64,7 +74,7 @@ export function parseContent(content: unknown): ContentResult {
     switch (b.type) {
       case 'text':
         if (typeof b.text === 'string') {
-          const cleaned = stripSystemXml(b.text)
+          const cleaned = ensureWellFormed(stripSystemXml(b.text))
           if (cleaned) textParts.push(cleaned)
         }
         break
