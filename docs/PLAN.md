@@ -262,6 +262,96 @@ Task 5 和 Task 6 可平行開發。
 
 ---
 
+### Task 9: Tasks Panel（spike）
+
+**性質**：探索性 spike，不是正式實作 task。目的是驗證 schema、估規模、列出決策點，產出後再判斷是否進入完整實作。
+
+**目標**：在 ccRewind 的 session 詳情中呈現 Claude Code 當時的 TODO 列表（從 `~/.claude/tasks/{sessionId}/*.json` 掃描），讓使用者能回溯「當時想做什麼 / 做到哪 / 卡在哪」。
+
+**動機**：
+- Claude Code 2.1.139（2026-05-12）釋出 Agent View，引出 `~/.claude/tasks/` 目錄的存在
+- 該目錄以 sessionId 命名子目錄，內含 TaskCreate/TaskUpdate 寫入的 JSON（每個 task 一檔）
+- 老 task 不會被清掉（已驗證有 4 月初的 completed 記錄），與 ccRewind「歷史考古」定位天然契合
+- 目前 ccRewind 完全沒抓這層資料
+
+**已驗證的 schema**（2026-05-13 實測 `~/.claude/tasks/`）：
+
+```json
+{
+  "id": "7",
+  "subject": "Add SPDX headers to all TS files",
+  "description": "src/**/*.ts 和 tests/**/*.ts 首行加 SPDX header",
+  "activeForm": "Adding SPDX headers",
+  "status": "completed",
+  "blocks": [],
+  "blockedBy": []
+}
+```
+
+- status 三態：`pending` / `in_progress` / `completed`（樣本中均出現）
+- `blocks` / `blockedBy` 是 task id 陣列，可組依賴圖
+- 目錄含 `.lock` 空檔，掃描時要排除
+- join key：目錄名 = sessionId，與既有 `sessions` 表天然對應
+
+**影響範圍**（規模估算）：
+- Create: `src/main/task-scanner.ts`（類比 `subagent-scanner`）
+- Create: `src/main/task-parser.ts`（單檔 JSON.parse + schema validation）
+- Modify: `src/main/db.ts`（migration v18：新增 `session_tasks` 表）
+- Modify: `src/shared/types.ts`（新增 `ScannedTask` / `SessionTask` 型別，對齊既有 `ScannedSubagent` / `SubagentSession` 命名）
+- Modify: `src/main/indexer.ts:245` 附近（在 SUBAGENT SCANNING 區塊之後新增 TASK SCANNING）
+- Modify: `src/main/ipc-handlers.ts`（新增 `tasks:listBySession` handler）
+- Create: `src/renderer/components/ChatView/TasksPanel.tsx`（類比 `SubagentPanel.tsx`，列表 + status badge）
+- Test: `tests/task-scanner.test.ts`、`tests/task-parser.test.ts`
+
+**依賴**：Task 3（DB + Indexer）、Task 6（ChatView UI）
+
+**驗收條件**：
+- Given session 有對應 `tasks/{sessionId}/` 目錄 → When 開啟 session → Then TasksPanel 顯示所有 task 與 status
+- Given task status 為 `completed` / `in_progress` / `pending` → When 渲染 → Then 三態視覺區分
+- Given task 含 `blockedBy` → When 渲染 → Then 顯示依賴關係（chip 或連線）
+- Given session 無對應 tasks 目錄 → When 開啟 → Then TasksPanel 不渲染（不顯示空殼）
+- Given 重新索引、某 task json mtime 變更 → When 增量索引 → Then 對應 task 更新（沿用 subagent 的 mtime 比對策略）
+- Given 目錄含 `.lock` 檔 → When 掃描 → Then 忽略不報錯
+
+**測試設計**：
+- 正常：test_taskScanner_validSessionDir_returnsTasks
+- 正常：test_taskParser_completedTask_capturesStatus
+- 正常：test_taskParser_blockedBy_preservesDependencies
+- 邊界：test_taskScanner_emptyDir_returnsEmpty
+- 邊界：test_taskScanner_lockFileOnly_returnsEmpty
+- 邊界：test_taskParser_malformedJson_skipsLine
+- 邊界：test_taskParser_unknownStatus_preservesRaw
+
+**Spike 決策點**（2026-05-13 驗證結果）：
+
+1. **歷史粒度** — ✅ 決定：**v1 snapshot only**
+   - 證據：a52666bd 連跑兩輪流水線時，task id append（1-5 跑 T6，6-10 跑 T8），**同 task 被 update 是 rewrite 同 N.json**（mtime 變化），Claude Code 端本身就沒有歷史軌跡可挖
+   - DB 存「最新 status + 最後一次 mtime」即可，無須 append-only event log
+
+2. **依賴視覺化** — ✅ 決定：**v1 chip 列 id，不做 graph**
+   - 證據：實測 100+ task 樣本，`blocks` 和 `blockedBy` **全為空陣列**
+   - graph 投資不划算，需要時再升級
+
+3. **sub-agent 的 TaskCreate** — ✅ 決定：**scanner 只需按 parent sessionId join**
+   - 證據：sub-agent JSONL 出現的 tool 集合只有 `TaskOutput`（讀取）、**沒有 TaskCreate / TaskUpdate**
+   - 主 session JSONL 是唯一 task 寫入來源
+   - tasks/ 下 108 個目錄全部 36 字元 UUID，零個 agent id 命名
+
+4. **resume 同 sessionId 行為** — ✅ 決定：**append 模式，DB 加 (sessionId, taskId) 複合 unique key**
+   - 證據：a52666bd 同 sessionId 內第二輪流水線 task id 從 6 開始，**不覆寫 1-5**
+   - 同 task 被 update 是 rewrite 對應 N.json（id 穩定）
+   - 所有 task 目錄 mtime 跨度 ≤ 1 天，未觀察到跨 session 沿用同 sessionId 場景（Claude Code 預設每次 session 新 UUID）
+
+**衍生發現**：大量老 task 目錄是「空殼」（只剩 `.lock`，*.json 為 0），可能是 task 完成後被清。scanner 須容忍空目錄並跳過。
+
+**完成信號**（spike 階段，非正式實作）：
+- [ ] schema 已用 ≥3 個真實 session 樣本交叉驗證（含 completed / in_progress / pending、含 blockedBy 非空）
+- [ ] 上述 4 個決策點全部有結論（記入本檔或另開 ADR）
+- [ ] 規模估算誤差範圍評估完成（樂觀 / 悲觀 LOC 與工時）
+- [ ] 決策：進入完整 Task 10 實作 / 延後 / 拒絕，並寫明理由
+
+---
+
 ## 驗證計畫
 
 ### 冒煙測試清單
