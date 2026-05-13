@@ -1,7 +1,19 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+
+/** 安全解析 JSON 字串陣列：parse 失敗或非陣列回傳 []，過濾非字串元素 */
+function safeParseStringArray(json: string | null | undefined): string[] {
+  if (!json) return []
+  try {
+    const parsed = JSON.parse(json)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((x): x is string => typeof x === 'string')
+  } catch {
+    return []
+  }
+}
 
 /** 寫入 messages 時使用的參數型別 */
 export interface MessageInput {
@@ -415,6 +427,34 @@ const migrations: Migration[] = [
         `DELETE FROM message_archive
          WHERE message_id IN (SELECT id FROM messages WHERE type IN (${placeholders}))`,
       ).run(...KNOWN_AT_V17)
+    },
+  },
+  {
+    version: 18,
+    description: 'add session_tasks table for ~/.claude/tasks/ TODO history scanning',
+    up: (db) => {
+      // 不掛 FK：task 生命週期由 indexer 統一管理。
+      // 既有 subagent_sessions 用 CASCADE 是因 subagent 跟 session 強綁定；
+      // tasks/ 是 sibling source（獨立目錄），需要解耦避免 indexSession 的 delete/reinsert 誤掃 task。
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS session_tasks (
+          session_id TEXT NOT NULL,
+          task_id TEXT NOT NULL,
+          subject TEXT NOT NULL,
+          description TEXT,
+          active_form TEXT,
+          status TEXT NOT NULL,
+          blocks_json TEXT NOT NULL DEFAULT '[]',
+          blocked_by_json TEXT NOT NULL DEFAULT '[]',
+          file_path TEXT NOT NULL,
+          file_size INTEGER,
+          file_mtime TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+          PRIMARY KEY (session_id, task_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_tasks_session ON session_tasks(session_id);
+      `)
     },
   },
 ]
@@ -887,6 +927,106 @@ export class Database {
     const map = new Map<string, string>()
     for (const r of rows) {
       if (r.file_mtime) map.set(r.id, r.file_mtime)
+    }
+    return map
+  }
+
+  /** 檢查 session 是否存在於 DB（exclusion rules 排除後該 row 已刪除）*/
+  hasSession(sessionId: string): boolean {
+    const row = this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId)
+    return row !== undefined
+  }
+
+  // ── Session tasks（~/.claude/tasks/{sessionId}/{N}.json）──
+
+  /** UPSERT 一筆 session task，PK 為 (session_id, task_id) */
+  indexSessionTask(params: {
+    sessionId: string
+    taskId: string
+    subject: string
+    description: string | null
+    activeForm: string | null
+    status: string
+    blocks: string[]
+    blockedBy: string[]
+    filePath: string
+    fileSize: number | null
+    fileMtime: string | null
+  }): void {
+    this.db.prepare(`
+      INSERT INTO session_tasks (
+        session_id, task_id, subject, description, active_form, status,
+        blocks_json, blocked_by_json, file_path, file_size, file_mtime
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id, task_id) DO UPDATE SET
+        subject = excluded.subject,
+        description = excluded.description,
+        active_form = excluded.active_form,
+        status = excluded.status,
+        blocks_json = excluded.blocks_json,
+        blocked_by_json = excluded.blocked_by_json,
+        file_path = excluded.file_path,
+        file_size = excluded.file_size,
+        file_mtime = excluded.file_mtime,
+        updated_at = datetime('now')
+    `).run(
+      params.sessionId, params.taskId, params.subject, params.description,
+      params.activeForm, params.status,
+      JSON.stringify(params.blocks), JSON.stringify(params.blockedBy),
+      params.filePath, params.fileSize, params.fileMtime,
+    )
+  }
+
+  /** 取得指定 session 的 task 清單，依 task_id 數字順序排序（避免 "10" < "2" 字串比較） */
+  getSessionTasks(sessionId: string): SessionTask[] {
+    const rows = this.db.prepare(
+      `SELECT session_id, task_id, subject, description, active_form, status,
+              blocks_json, blocked_by_json, file_path, file_size, file_mtime,
+              created_at, updated_at
+       FROM session_tasks WHERE session_id = ?
+       ORDER BY CAST(task_id AS INTEGER), task_id`,
+    ).all(sessionId) as Array<{
+      session_id: string
+      task_id: string
+      subject: string
+      description: string | null
+      active_form: string | null
+      status: string
+      blocks_json: string
+      blocked_by_json: string
+      file_path: string
+      file_size: number | null
+      file_mtime: string | null
+      created_at: string
+      updated_at: string
+    }>
+
+    return rows.map(r => ({
+      sessionId: r.session_id,
+      taskId: r.task_id,
+      subject: r.subject,
+      description: r.description,
+      activeForm: r.active_form,
+      status: r.status,
+      blocks: safeParseStringArray(r.blocks_json),
+      blockedBy: safeParseStringArray(r.blocked_by_json),
+      filePath: r.file_path,
+      fileSize: r.file_size,
+      fileMtime: r.file_mtime,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at,
+    }))
+  }
+
+  /** 一次取得所有 task 的 file_mtime（增量比對用）。
+   *  key 格式：`${sessionId}/${taskId}`——main session id 不含 '/'，無 collision。 */
+  getAllTaskMtimes(): Map<string, string> {
+    const rows = this.db.prepare(
+      'SELECT session_id, task_id, file_mtime FROM session_tasks',
+    ).all() as Array<{ session_id: string; task_id: string; file_mtime: string | null }>
+    const map = new Map<string, string>()
+    for (const r of rows) {
+      if (r.file_mtime) map.set(`${r.session_id}/${r.task_id}`, r.file_mtime)
     }
     return map
   }

@@ -1,9 +1,10 @@
 import path from 'node:path'
 import { readFile, stat } from 'node:fs/promises'
-import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession } from '../shared/types'
+import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
 import type { Database, MessageInput } from './database'
-import { scanProjects, scanSubagents } from './scanner'
+import { scanProjects, scanSubagents, scanTasks, DEFAULT_TASKS_BASE_DIR } from './scanner'
 import { parseSession } from './parser'
+import { parseTaskFile } from './task-parser'
 import { summarizeSession, SUMMARY_VERSION } from './summarizer'
 
 export type ProgressCallback = (status: IndexerProgress) => void
@@ -311,12 +312,90 @@ export async function runIndexer(
     }
   }
 
-  // 5. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
+  // 5. TASK SCANNING — 掃 ~/.claude/tasks/{sessionId}/*.json
+  //    這層獨立於 session JSONL：task 可能單獨變動（TaskUpdate rewrite），
+  //    session JSONL 未變也要重新 parse。每個 task 檔 per-file mtime 比對。
+  //    只對 main session 跑（subagent 工具集沒有 TaskCreate/Update，不會寫 task）。
+  await runTaskScanning(db, projects)
+
+  // 6. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
   for (const project of projects) {
     db.updateProjectStats(project.projectId)
   }
 
   onProgress?.({ phase: 'done', progress: 100, total, current: total })
+}
+
+/**
+ * Task scanning phase：對所有 main session 掃描對應的 ~/.claude/tasks/{sessionId}/，
+ * 用 per-file mtime 增量比對，變動者重新 parse 並 upsert 進 session_tasks。
+ *
+ * 不掛 FK 到 sessions：tasks 是 ~/.claude/projects 的 sibling source，獨立生命週期
+ * 由本 phase 統一管理。stale cleanup（DB 有但磁碟沒了）在 v1 不處理。
+ */
+/** task JSON 檔大小上限（1MB）。超過視為異常（symlink 至 /dev/zero、誤寫等），跳過避免 OOM。 */
+const MAX_TASK_FILE_BYTES = 1 * 1024 * 1024
+
+async function runTaskScanning(
+  db: Database,
+  projects: Awaited<ReturnType<typeof scanProjects>>,
+): Promise<void> {
+  const existingTaskMtimes = db.getAllTaskMtimes()
+
+  for (const project of projects) {
+    for (const session of project.sessions) {
+      // 排除 subagent session（雖然 scanProjects 只回 main session，這層 filter
+      // 是 plan-locked 防呆，未來若 subagent 進入 sessions 集合也不會誤掃）
+      if (session.sessionId.includes('/')) continue
+
+      // 排除 DB 中已不存在的 session（被 exclusion rules 刪除）。不掛 FK 的代價：
+      // 必須在 ingestion 端自行保證 task 只屬於 known sessions。
+      if (!db.hasSession(session.sessionId)) continue
+
+      let scanned: ScannedTask[]
+      try {
+        scanned = await scanTasks(DEFAULT_TASKS_BASE_DIR, session.sessionId)
+      } catch {
+        continue
+      }
+      if (scanned.length === 0) continue
+
+      const toUpsert: Array<{ scanned: ScannedTask; content: ParsedTaskContent }> = []
+      for (const task of scanned) {
+        const key = `${task.sessionId}/${task.taskId}`
+        const existingMtime = existingTaskMtimes.get(key)
+        if (existingMtime && existingMtime === task.fileMtime) continue
+
+        // 異常大的 task 檔（symlink 攻擊、誤寫等）→ 跳過避免 OOM
+        if (task.fileSize > MAX_TASK_FILE_BYTES) continue
+
+        const content = await parseTaskFile(task.filePath)
+        if (!content) continue
+
+        toUpsert.push({ scanned: task, content })
+      }
+
+      if (toUpsert.length === 0) continue
+
+      db.runTransaction(() => {
+        for (const { scanned, content } of toUpsert) {
+          db.indexSessionTask({
+            sessionId: scanned.sessionId,
+            taskId: scanned.taskId,
+            subject: content.subject,
+            description: content.description,
+            activeForm: content.activeForm,
+            status: content.status,
+            blocks: content.blocks,
+            blockedBy: content.blockedBy,
+            filePath: scanned.filePath,
+            fileSize: scanned.fileSize,
+            fileMtime: scanned.fileMtime,
+          })
+        }
+      })
+    }
+  }
 }
 
 // ── Indexer runner（in-flight 合併 + lastIndexedAt 追蹤） ──

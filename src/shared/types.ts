@@ -423,6 +423,8 @@ export interface ElectronAPI {
   getRelatedSessions: (sessionId: string, limit?: number) => Promise<RelatedSession[]>
   /** 取得 session 的 subagent sessions */
   getSubagentSessions: (parentSessionId: string) => Promise<SubagentSession[]>
+  /** 取得 session 的 task 清單（依 task_id 數字順序回傳） */
+  getSessionTasks: (sessionId: string) => Promise<SessionTask[]>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
   /** 手動觸發 reindex（與 focus auto-trigger 共用 in-flight 合併） */
@@ -496,6 +498,20 @@ export interface ScannedSubagent {
   agentType: string | null
 }
 
+/** Task 狀態（對應 Claude Code TaskCreate/TaskUpdate 的 status 欄位） */
+export type TaskStatus = 'pending' | 'in_progress' | 'completed'
+
+/** 掃描到的 task 檔案資訊（~/.claude/tasks/{sessionId}/{N}.json） */
+export interface ScannedTask {
+  filePath: string
+  fileSize: number
+  fileMtime: string
+  /** 所屬的 session id（目錄名） */
+  sessionId: string
+  /** 從檔名萃取的 task id（不含 .json，例如 "1"、"10"） */
+  taskId: string
+}
+
 /** 掃描到的專案資訊 */
 export interface ScannedProject {
   projectId: string
@@ -515,6 +531,35 @@ export interface SubagentSession {
   startedAt: string | null
   endedAt: string | null
   createdAt: string
+}
+
+/** Session task（DB 表對應型別，對應 ~/.claude/tasks/{sessionId}/{N}.json 內容） */
+export interface SessionTask {
+  sessionId: string
+  taskId: string
+  subject: string
+  description: string | null
+  activeForm: string | null
+  status: TaskStatus | string
+  blocks: string[]
+  blockedBy: string[]
+  filePath: string
+  fileSize: number | null
+  fileMtime: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+/** task JSON 檔解析結果（不含檔案元資料）。
+ *  parser 對未知 status 保留原字串、UI fallback 顯示為 plain text。 */
+export interface ParsedTaskContent {
+  id: string
+  subject: string
+  description: string | null
+  activeForm: string | null
+  status: string
+  blocks: string[]
+  blockedBy: string[]
 }
 
 // ── Parser 中間型別 ──

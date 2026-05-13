@@ -1,9 +1,12 @@
 import { readdir, stat, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import type { ScannedProject, ScannedSession, ScannedSubagent } from '../shared/types'
+import type { ScannedProject, ScannedSession, ScannedSubagent, ScannedTask } from '../shared/types'
 
 const DEFAULT_BASE_DIR = path.join(os.homedir(), '.claude', 'projects')
+
+/** ~/.claude/tasks/ 是 Claude Code TaskCreate/TaskUpdate 寫入位置，與 projects/ 平行 */
+export const DEFAULT_TASKS_BASE_DIR = path.join(os.homedir(), '.claude', 'tasks')
 
 /** 將編碼後的資料夾名稱還原為可讀路徑（所有 - 替換為 /） */
 export function decodeProjectPath(encoded: string): string {
@@ -124,6 +127,56 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
       subagentId,
       parentSessionId,
       agentType,
+    })
+  }
+
+  return results
+}
+
+/**
+ * 掃描 ~/.claude/tasks/{sessionId}/*.json，回傳 task 檔案清單。
+ *
+ * - 目錄不存在 / 不可讀 → 回 []
+ * - 過濾條件：`.json` 結尾，排除 `.lock` 與其他非 json 檔
+ * - 空殼目錄（只有 .lock 或全空）→ 回 []
+ */
+export async function scanTasks(
+  tasksBaseDir: string,
+  sessionId: string,
+): Promise<ScannedTask[]> {
+  const sessionTasksDir = path.join(tasksBaseDir, sessionId)
+
+  let entries: string[]
+  try {
+    entries = await readdir(sessionTasksDir)
+  } catch {
+    return []
+  }
+
+  const results: ScannedTask[] = []
+
+  for (const entry of entries) {
+    // 排除 .lock 與非 .json 檔案
+    if (!entry.endsWith('.json')) continue
+
+    const filePath = path.join(sessionTasksDir, entry)
+    let fileStat
+    try {
+      fileStat = await stat(filePath)
+    } catch {
+      continue
+    }
+    if (!fileStat.isFile()) continue
+
+    const taskId = entry.replace(/\.json$/, '')
+    if (!taskId) continue
+
+    results.push({
+      filePath,
+      fileSize: fileStat.size,
+      fileMtime: fileStat.mtime.toISOString(),
+      sessionId,
+      taskId,
     })
   }
 

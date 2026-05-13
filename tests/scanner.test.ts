@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { decodeProjectPath, scanProjects } from '../src/main/scanner'
+import { decodeProjectPath, scanProjects, scanTasks } from '../src/main/scanner'
 
 let tmpDir: string
 
@@ -113,5 +113,59 @@ describe('scanProjects', () => {
     expect(session.fileSize).toBeGreaterThan(0)
     expect(session.fileMtime).toMatch(/^\d{4}-\d{2}-\d{2}T/)
     expect(session.filePath).toBe(path.join(projDir, 'sess.jsonl'))
+  })
+})
+
+describe('scanTasks', () => {
+  it('valid session task dir → returns task list', async () => {
+    const sessionId = 'abc-123'
+    const taskDir = path.join(tmpDir, sessionId)
+    await mkdir(taskDir, { recursive: true })
+    await writeFile(path.join(taskDir, '1.json'), '{}')
+    await writeFile(path.join(taskDir, '2.json'), '{}')
+    await writeFile(path.join(taskDir, '.lock'), '')
+
+    const result = await scanTasks(tmpDir, sessionId)
+    expect(result).toHaveLength(2)
+    expect(result.map(r => r.taskId).sort()).toEqual(['1', '2'])
+    expect(result[0].sessionId).toBe(sessionId)
+    expect(result[0].fileSize).toBeGreaterThanOrEqual(0)
+    expect(result[0].fileMtime).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+  })
+
+  it('missing dir → returns empty array', async () => {
+    const result = await scanTasks(tmpDir, 'does-not-exist')
+    expect(result).toEqual([])
+  })
+
+  it('empty dir → returns empty array', async () => {
+    const sessionId = 'empty-session'
+    await mkdir(path.join(tmpDir, sessionId), { recursive: true })
+    const result = await scanTasks(tmpDir, sessionId)
+    expect(result).toEqual([])
+  })
+
+  it('lock-only dir → returns empty array', async () => {
+    const sessionId = 'lock-only'
+    const taskDir = path.join(tmpDir, sessionId)
+    await mkdir(taskDir, { recursive: true })
+    await writeFile(path.join(taskDir, '.lock'), '')
+
+    const result = await scanTasks(tmpDir, sessionId)
+    expect(result).toEqual([])
+  })
+
+  it('ignores non-json files', async () => {
+    const sessionId = 'mixed'
+    const taskDir = path.join(tmpDir, sessionId)
+    await mkdir(taskDir, { recursive: true })
+    await writeFile(path.join(taskDir, '1.json'), '{}')
+    await writeFile(path.join(taskDir, 'readme.txt'), '')
+    await writeFile(path.join(taskDir, '.lock'), '')
+    await writeFile(path.join(taskDir, 'no-extension'), '')
+
+    const result = await scanTasks(tmpDir, sessionId)
+    expect(result).toHaveLength(1)
+    expect(result[0].taskId).toBe('1')
   })
 })

@@ -8,6 +8,7 @@ import MessageBubble from './MessageBubble'
 import TokenBudgetPanel from '../TokenBudget/TokenBudgetPanel'
 import RelatedSessionsPanel from '../Archaeology/RelatedSessionsPanel'
 import SubagentPanel from './SubagentPanel'
+import TasksPanel from './TasksPanel'
 import { useTokenHeat } from './TokenHeatGutter'
 import styles from './ChatView.module.css'
 
@@ -94,6 +95,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   return (
     <div ref={containerRef} className={styles.chatView}>
       <SubagentPanel sessionId={sessionId} />
+      <TasksPanel sessionId={sessionId} />
       {loading ? (
         <div className={styles.status}>{t('chatView.loading')}</div>
       ) : error ? (

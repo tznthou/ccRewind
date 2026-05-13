@@ -22,6 +22,7 @@ const api: ElectronAPI = {
   getProjectHealth: () => ipcRenderer.invoke('stats:project-health'),
   getRelatedSessions: (sessionId, limit) => ipcRenderer.invoke('session:related', sessionId, limit),
   getSubagentSessions: (parentSessionId) => ipcRenderer.invoke('session:subagents', parentSessionId),
+  getSessionTasks: (sessionId) => ipcRenderer.invoke('session:tasks', sessionId),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   getUpdateState: () => ipcRenderer.invoke('updates:get-state'),
   openReleasePage: () => ipcRenderer.invoke('updates:open-release'),

@@ -1,8 +1,22 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { ensureWellFormed, parseContent, parseLine, parseSession, stripSystemXml } from '../src/main/parser'
+import { parseTaskFile } from '../src/main/task-parser'
 
 const FIXTURES = path.join(__dirname, 'fixtures')
+
+async function withTempTaskFile<T>(content: string, fn: (filePath: string) => Promise<T>): Promise<T> {
+  const dir = await mkdtemp(path.join(tmpdir(), 'ccrewind-task-'))
+  const filePath = path.join(dir, 'task.json')
+  await writeFile(filePath, content)
+  try {
+    return await fn(filePath)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
 
 describe('stripSystemXml', () => {
   // --- strip（完全移除標籤+內容）---
@@ -514,5 +528,122 @@ describe('parseSession', () => {
     // cleanup
     const { unlink } = await import('node:fs/promises')
     await unlink(tmpFile)
+  })
+})
+
+describe('parseTaskFile', () => {
+  it('valid completed task → parsed', async () => {
+    const content = JSON.stringify({
+      id: '7',
+      subject: 'Add SPDX headers to all TS files',
+      description: 'src/**/*.ts and tests/**/*.ts add SPDX header',
+      activeForm: 'Adding SPDX headers',
+      status: 'completed',
+      blocks: [],
+      blockedBy: [],
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result).not.toBeNull()
+    expect(result!.id).toBe('7')
+    expect(result!.subject).toBe('Add SPDX headers to all TS files')
+    expect(result!.status).toBe('completed')
+    expect(result!.blocks).toEqual([])
+    expect(result!.blockedBy).toEqual([])
+  })
+
+  it('valid pending task with blockedBy → parsed', async () => {
+    const content = JSON.stringify({
+      id: '2',
+      subject: 'Run migration',
+      description: null,
+      activeForm: 'Running migration',
+      status: 'pending',
+      blocks: ['3'],
+      blockedBy: ['1'],
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result!.id).toBe('2')
+    expect(result!.status).toBe('pending')
+    expect(result!.description).toBeNull()
+    expect(result!.blocks).toEqual(['3'])
+    expect(result!.blockedBy).toEqual(['1'])
+  })
+
+  it('missing required field id → null', async () => {
+    const content = JSON.stringify({
+      subject: 'No id',
+      status: 'pending',
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result).toBeNull()
+  })
+
+  it('missing required field subject → null', async () => {
+    const content = JSON.stringify({
+      id: '1',
+      status: 'pending',
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result).toBeNull()
+  })
+
+  it('missing required field status → null', async () => {
+    const content = JSON.stringify({
+      id: '1',
+      subject: 'No status',
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result).toBeNull()
+  })
+
+  it('malformed JSON → null', async () => {
+    const result = await withTempTaskFile('{not valid json', parseTaskFile)
+    expect(result).toBeNull()
+  })
+
+  it('top-level array → null', async () => {
+    const result = await withTempTaskFile('[]', parseTaskFile)
+    expect(result).toBeNull()
+  })
+
+  it('unknown status enum → preserved as raw string', async () => {
+    // 未來 Claude Code 新增 status (e.g. 'cancelled') 時，parser 保留原值，UI 層 fallback 顯示
+    const content = JSON.stringify({
+      id: '1',
+      subject: 'Future status',
+      status: 'cancelled',
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result!.status).toBe('cancelled')
+  })
+
+  it('non-array blocks → coerced to empty array', async () => {
+    const content = JSON.stringify({
+      id: '1',
+      subject: 'Coerce',
+      status: 'pending',
+      blocks: 'not-an-array',
+      blockedBy: null,
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result!.blocks).toEqual([])
+    expect(result!.blockedBy).toEqual([])
+  })
+
+  it('non-string element in blocks → filtered out', async () => {
+    const content = JSON.stringify({
+      id: '1',
+      subject: 'Filter',
+      status: 'pending',
+      blocks: ['2', 3, null, '4'],
+      blockedBy: [],
+    })
+    const result = await withTempTaskFile(content, parseTaskFile)
+    expect(result!.blocks).toEqual(['2', '4'])
+  })
+
+  it('missing file → null', async () => {
+    const result = await parseTaskFile('/tmp/does-not-exist-ccrewind-task.json')
+    expect(result).toBeNull()
   })
 })

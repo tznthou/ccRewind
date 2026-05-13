@@ -193,6 +193,100 @@
   color: #8b5cf6;
 }
 
+.tasksPanel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  margin-bottom: var(--space-sm);
+  background: var(--color-bg-hover);
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--color-text-muted);
+}
+
+.tasksLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.taskList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.taskItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  flex-wrap: wrap;
+}
+
+.taskStatusBadge {
+  display: inline-block;
+  padding: 1px 6px;
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  min-width: 70px;
+  text-align: center;
+}
+
+.taskStatusPending {
+  color: var(--color-text-muted);
+  background: var(--color-bg-sidebar);
+}
+
+.taskStatusInProgress {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.taskStatusCompleted {
+  color: #10b981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.taskStatusUnknown {
+  color: var(--color-text-muted);
+  background: var(--color-bg-sidebar);
+  font-style: italic;
+}
+
+.taskId {
+  font-size: var(--font-size-xs);
+  font-family: var(--font-mono);
+  color: var(--color-text-muted);
+}
+
+.taskSubject {
+  flex: 1;
+  min-width: 0;
+}
+
+.taskBlockedBy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.taskBlockedByChip {
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  background: var(--color-bg-sidebar);
+  border-radius: 3px;
+}
+
 .subagentCount {
   font-size: 10px;
   color: var(--color-text-muted);
