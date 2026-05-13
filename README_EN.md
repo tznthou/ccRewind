@@ -96,6 +96,7 @@ Built for depth, not breadth.
 | **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions |
 | **Session Auto-Summary** | Structured rule engine: intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), outcome inference (committed/tested/in-progress), and 20+ multi-signal tags |
 | **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
+| **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. Append-mode (session_id, task_id) PK is decoupled from session reindex, so deleting and rebuilding a session never wipes its task history |
 
 </details>
 
@@ -178,7 +179,7 @@ graph TB
 | better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 420 tests, run through Electron |
+| Vitest 3 | Test framework | 445 tests, run through Electron |
 
 ---
 
@@ -257,7 +258,7 @@ ccRewind/
 │   │   ├── App.tsx            # Root component
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
-│   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + export
+│   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + Tasks Panel + export
 │   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
@@ -271,7 +272,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (420)
+├── tests/                     # Vitest tests (445)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -324,6 +325,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 7.5 | ✅ Done | a11y polish + license relicense (AGPL-3.0 → GPL-3.0-or-later) + README bilingual restructure (v1.11.0) |
 | 7.6 | ✅ Done | Dashboard readability pass: full i18n across 7 cards + a11y data exposure (chart values now reach screen readers) + visible outcome legend + outcome inference v2 (NULL 53% → 15.3%) (v1.12.0) |
 | 7.7 | ✅ Done | Token Budget subsystem i18n completion (engine refactored to discriminated-union `InsightData`, 43 keys lockstep) + 1M plan detection fix (226K no longer misreported as "113% of 200K") + panel error message fails closed (v1.12.1) |
+| 7.8 | ✅ Done | UTF-16 lone surrogate normalization: parser-exit `toWellFormed()` guard so the downstream pipeline no longer chokes on malformed unicode (v1.12.2) |
+| 8 | ✅ Done | Tasks Panel: scans `~/.claude/tasks/` and surfaces per-session TODO history snapshots inline in ChatView (migration v18 adds `session_tasks`; append-mode PK decoupled from session reindex) (v1.13.0) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 

@@ -6,6 +6,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.13.0] - 2026-05-14
+
+### Added
+
+- **Tasks Panel：把 session 內的 TODO 歷史端到 ChatView 上**（`8c9b44b`）。Claude Code 透過 `TaskCreate` / `TaskUpdate` 把每個 session 的待辦寫進 `~/.claude/tasks/{sessionId}/*.json`，這是「AI 在這段對話裡規劃了哪幾步、卡在哪」最直接的證據，但介面上原本看不到。新增 Tasks Panel 緊接 SubagentPanel 渲染：subject、三態 status 徽章（pending / in_progress / completed），blockedBy 依賴用 chip 呈現。
+  - 後端 pipeline：`migration v18` 新增 `session_tasks` 表，採 `(session_id, task_id)` composite PK **且刻意不掛 FK**——把任務歷史與 session reindex 的 delete/reinsert cycle 解耦，這樣排除規則刪掉某 session 後重建，不會順手把任務歷史一起洗掉
+  - `scanner.scanTasks` 讀 `~/.claude/tasks/{sessionId}/*.json`（跳過 `.lock`）；`task-parser.parseTaskFile` 驗 id/subject/status 並 coerce arrays；`indexer.runTaskScanning` 在 subagent phase 之後跑，採 per-file mtime diff 的 append-mode（snapshot-only，不追歷史變更）
+  - IPC `session:tasks` + `getSessionTasks` ElectronAPI，i18n zh-TW + en 同步
+  - Code review + security audit 補修兩件事：高優先（Codex）——`runTaskScanning` 現在跳過 DB 裡不存在的 session，避免排除規則刪掉的 session 累積 orphan task rows；中優先（security）——task JSON 加 1MB size cap，防 symlink 或超大檔吃光記憶體
+  - 新增 16 個 regression tests（parser + scanner），總計 445/445 通過
+
 ## [1.12.2] - 2026-05-07
 
 ### Fixed

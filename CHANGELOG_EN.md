@@ -7,6 +7,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2026-05-14
+
+### Added
+
+- **Tasks Panel: per-session TODO history surfaced in ChatView** (`8c9b44b`). Claude Code's `TaskCreate` / `TaskUpdate` writes per-session todos to `~/.claude/tasks/{sessionId}/*.json` — the most direct evidence of what the AI planned for this conversation and where it got stuck — yet there was no way to see them from the UI. A new Tasks Panel renders inline beneath `SubagentPanel` in ChatView: subject text, three-state status badge (pending / in_progress / completed), and `blockedBy` dependency chips.
+  - Backend pipeline: `migration v18` adds the `session_tasks` table with a `(session_id, task_id)` composite PK and **deliberately no FK** — decoupling task history from the session reindex's delete/reinsert cycle, so an exclusion-rule cleanup followed by a rebuild doesn't wipe the session's task rows along with it
+  - `scanner.scanTasks` reads `~/.claude/tasks/{sessionId}/*.json` (skipping `.lock`); `task-parser.parseTaskFile` validates id/subject/status and coerces arrays; `indexer.runTaskScanning` runs after the subagent phase using per-file mtime diff in append-mode (snapshot-only, no edit history)
+  - IPC `session:tasks` + `getSessionTasks` ElectronAPI, with zh-TW + en i18n in lockstep
+  - Code review + security audit pass caught two follow-ups: high (Codex) — `runTaskScanning` now skips sessions absent from the DB so exclusion-rule deletions don't accrue orphan task rows; medium (security) — 1MB file-size cap on task JSON to prevent OOM via symlink or oversized-file attacks
+  - 16 new regression tests (parser + scanner); total 445/445 green
+
 ## [1.12.2] - 2026-05-07
 
 ### Fixed
