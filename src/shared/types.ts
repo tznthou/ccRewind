@@ -587,6 +587,9 @@ export interface ParsedLine {
   model: string | null
   /** API request 識別符，同一 requestId 的多個 entries 共享相同 token usage */
   requestId: string | null
+  /** 原始 content 含 <command-name>/<command-message>/<command-args>/<local-command-stdout> 任一標籤；
+   *  下游（summarizer）拿它判斷此 message 是 slash command interaction 而非 user intent */
+  isCommandWrapped?: boolean
 }
 
 /** 整個 session 解析結果 */

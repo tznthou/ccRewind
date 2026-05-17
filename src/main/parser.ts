@@ -6,6 +6,7 @@ interface ContentResult {
   hasToolUse: boolean
   hasToolResult: boolean
   toolNames: string[]
+  isCommandWrapped: boolean
 }
 
 /** 完全移除的系統標籤（標籤+內容一起刪）*/
@@ -19,6 +20,12 @@ const STRIP_RE = new RegExp(
 const UNWRAP_RE = new RegExp(
   `<(${UNWRAP_TAGS.join('|')})>([\\s\\S]*?)</\\1>`, 'g',
 )
+const COMMAND_TAG_PROBE_RE = new RegExp(`<(${UNWRAP_TAGS.join('|')})>`)
+
+/** 原始 content 是否含 slash command 包裹標籤（含 local-command-stdout 等命令輸出）*/
+export function hasCommandWrapper(raw: string): boolean {
+  return COMMAND_TAG_PROBE_RE.test(raw)
+}
 
 /**
  * parser 認識的 JSONL type 白名單。
@@ -50,22 +57,24 @@ export function ensureWellFormed(s: string): string {
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
 export function parseContent(content: unknown): ContentResult {
   if (content == null) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [] }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false }
   }
 
   if (typeof content === 'string') {
+    const isCommandWrapped = hasCommandWrapper(content)
     const cleaned = ensureWellFormed(stripSystemXml(content))
-    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [] }
+    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped }
   }
 
   if (!Array.isArray(content)) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [] }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false }
   }
 
   const textParts: string[] = []
   let hasToolUse = false
   let hasToolResult = false
   const toolNames: string[] = []
+  let isCommandWrapped = false
 
   for (const block of content) {
     if (block == null || typeof block !== 'object') continue
@@ -74,6 +83,7 @@ export function parseContent(content: unknown): ContentResult {
     switch (b.type) {
       case 'text':
         if (typeof b.text === 'string') {
+          if (!isCommandWrapped && hasCommandWrapper(b.text)) isCommandWrapped = true
           const cleaned = ensureWellFormed(stripSystemXml(b.text))
           if (cleaned) textParts.push(cleaned)
         }
@@ -94,6 +104,7 @@ export function parseContent(content: unknown): ContentResult {
     hasToolUse,
     hasToolResult,
     toolNames,
+    isCommandWrapped,
   }
 }
 
@@ -158,6 +169,7 @@ export function parseLine(line: string): ParsedLine | null {
   let cacheReadTokens: number | null = null
   let cacheCreationTokens: number | null = null
   let model: string | null = null
+  let isCommandWrapped = false
 
   const message = obj.message as Record<string, unknown> | undefined
   if (message && typeof message === 'object') {
@@ -169,6 +181,7 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolUse = result.hasToolUse
     hasToolResult = result.hasToolResult
     toolNames = result.toolNames
+    isCommandWrapped = result.isCommandWrapped
     contentJson = message.content != null
       ? JSON.stringify(message.content, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
       : null
@@ -182,7 +195,9 @@ export function parseLine(line: string): ParsedLine | null {
     model = typeof message.model === 'string' ? message.model : null
   } else if (typeof obj.content === 'string') {
     // queue-operation 等 type 的 prompt 存在頂層 content 欄位
-    const cleaned = ensureWellFormed(stripSystemXml(obj.content as string))
+    const rawContent = obj.content as string
+    if (hasCommandWrapper(rawContent)) isCommandWrapped = true
+    const cleaned = ensureWellFormed(stripSystemXml(rawContent))
     contentText = cleaned || null
   }
 
@@ -205,6 +220,7 @@ export function parseLine(line: string): ParsedLine | null {
     cacheCreationTokens,
     model,
     requestId,
+    isCommandWrapped,
   }
 }
 

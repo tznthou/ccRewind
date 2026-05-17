@@ -51,18 +51,20 @@ function truncate(text: string, max: number): string {
   return text.slice(0, max - 1) + '…'
 }
 
-/** 從 user messages 提取意圖文字：跳過 greeting，找第一句實質內容 */
+/** 從 user messages 提取意圖文字：跳過 greeting / slash command 包裹訊息，找第一句實質內容 */
 function extractIntent(userMessages: ParsedLine[]): string {
   for (const msg of userMessages) {
     const text = msg.contentText?.trim()
     if (!text) continue
+    if (msg.isCommandWrapped) continue
     if (isHollowMessage(text)) continue
     // 取第一行或前 N 字作為意圖
     const firstLine = text.split('\n')[0].trim()
     return truncate(firstLine, MAX_INTENT_LEN)
   }
-  // fallback: 如果所有 user message 都是空洞的，取第一筆有內容的
+  // fallback: 如果所有 user message 都是空洞的，取第一筆非 command-wrapped 的內容
   for (const msg of userMessages) {
+    if (msg.isCommandWrapped) continue
     const text = msg.contentText?.trim()
     if (text && text.length > 0) {
       return truncate(text.split('\n')[0].trim(), MAX_INTENT_LEN)

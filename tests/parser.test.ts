@@ -196,6 +196,29 @@ describe('parseContent', () => {
     expect(result.contentText).toBe('gogo\n/gogo')
   })
 
+  it('flags isCommandWrapped when string content has command tag', () => {
+    const result = parseContent('<command-name>/model</command-name>\n<command-message>model</command-message>')
+    expect(result.isCommandWrapped).toBe(true)
+  })
+
+  it('flags isCommandWrapped when string content has local-command-stdout tag', () => {
+    const result = parseContent('<local-command-stdout>Set model to Opus 4.7</local-command-stdout>')
+    expect(result.isCommandWrapped).toBe(true)
+  })
+
+  it('flags isCommandWrapped when array text block has command tag', () => {
+    const content = [
+      { type: 'text', text: '<command-name>/gogo</command-name>' },
+    ]
+    const result = parseContent(content)
+    expect(result.isCommandWrapped).toBe(true)
+  })
+
+  it('does NOT flag isCommandWrapped for plain user text', () => {
+    expect(parseContent('Hello world').isCommandWrapped).toBe(false)
+    expect(parseContent([{ type: 'text', text: 'normal message' }]).isCommandWrapped).toBe(false)
+  })
+
   it('replaces lone high surrogate in string content with U+FFFD', () => {
     const result = parseContent('pre\uD83Dpost')
     expect(result.contentText).toBe('pre�post')

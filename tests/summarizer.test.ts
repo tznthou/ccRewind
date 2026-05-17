@@ -78,6 +78,34 @@ describe('summarizeSession', () => {
     expect(summary.intentText).toBe('hey')
   })
 
+  it('skips messages flagged isCommandWrapped (slash command interaction)', () => {
+    // 真實 a52666bd case: parser 偵測到 <command-name>/<local-command-stdout> 等標籤後標 isCommandWrapped=true,
+    // summarizer 跳過去找下一個真正 user intent ("確認進度")
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '/model\n            model', isCommandWrapped: true }),
+      line({ role: 'user', contentText: 'Set model to Opus 4.7 (1M context) (default) with high effort', isCommandWrapped: true }),
+      line({ role: 'user', contentText: '確認進度' }),
+    ])
+    expect(summary.intentText).toBe('確認進度')
+  })
+
+  it('skips command-wrapped messages even when only fallback candidates exist', () => {
+    // 整個 session 只有 command interactions: intent 應為空字串而非 unwrap 後的命令輸出
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '/clear\n            clear', isCommandWrapped: true }),
+      line({ role: 'user', contentText: 'Cleared conversation history', isCommandWrapped: true }),
+    ])
+    expect(summary.intentText).toBe('')
+  })
+
+  it('does NOT skip user-typed text without command wrapper flag', () => {
+    // user 自然輸入 "/help me" 不是 slash command, parser 不標 isCommandWrapped, 保留為 intent
+    const { summary } = summarizeSession([
+      line({ role: 'user', contentText: '/help me understand this auth issue please' }),
+    ])
+    expect(summary.intentText).toBe('/help me understand this auth issue please')
+  })
+
   // ── Activity Text ──
 
   it('generates activity text from tool usage', () => {
