@@ -66,6 +66,8 @@ const zhTW = {
   'chatView.toolbar.filesCount': '{count} files',
   'chatView.toolbar.exporting': '匯出中...',
   'chatView.toolbar.export': '匯出 Markdown',
+  'chatView.toolbar.copySessionId': '複製 Session ID',
+  'chatView.toolbar.copied': '已複製',
   'chatView.message.system': '系統',
   'chatView.message.queueOperation': '(queue operation)',
   'chatView.subagent.back': '回上一層',
@@ -256,6 +258,7 @@ const zhTW = {
   'a11y.announcement.searchEmpty': '找不到「{query}」的結果',
   'a11y.announcement.searchError': '搜尋「{query}」時發生錯誤，請重試',
   'a11y.announcement.syncComplete': '同步完成',
+  'a11y.announcement.sessionIdCopied': 'Session ID 已複製',
 } as const
 
 type MessageCatalog = Record<keyof typeof zhTW, string>
@@ -328,6 +331,8 @@ const en = {
   'chatView.toolbar.filesCount': '{count} files',
   'chatView.toolbar.exporting': 'Exporting...',
   'chatView.toolbar.export': 'Export Markdown',
+  'chatView.toolbar.copySessionId': 'Copy Session ID',
+  'chatView.toolbar.copied': 'Copied',
   'chatView.message.system': 'System',
   'chatView.message.queueOperation': '(queue operation)',
   'chatView.subagent.back': 'Back to parent',
@@ -518,6 +523,7 @@ const en = {
   'a11y.announcement.searchEmpty': 'No results found for "{query}"',
   'a11y.announcement.searchError': 'Search error for "{query}", please retry',
   'a11y.announcement.syncComplete': 'Sync complete',
+  'a11y.announcement.sessionIdCopied': 'Session ID copied',
 } satisfies MessageCatalog
 
 export type Locale = 'zh-TW' | 'en'

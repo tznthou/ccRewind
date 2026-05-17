@@ -92,6 +92,23 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     }
   }, [sessionId])
 
+  const [copiedFlash, setCopiedFlash] = useState(false)
+  useEffect(() => {
+    if (!copiedFlash) return
+    const id = setTimeout(() => setCopiedFlash(false), 1500)
+    return () => clearTimeout(id)
+  }, [copiedFlash])
+
+  const handleCopySessionId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(sessionId)
+      setCopiedFlash(true)
+      dispatch({ type: 'ANNOUNCE', message: t('a11y.announcement.sessionIdCopied') })
+    } catch {
+      // Electron clipboard 偶爾失敗 (deny permission / focus issue); 沉默不打擾 SR, console 有 error 即可
+    }
+  }, [sessionId, dispatch, t])
+
   return (
     <div ref={containerRef} className={styles.chatView}>
       <SubagentPanel sessionId={sessionId} />
@@ -107,6 +124,15 @@ export default function ChatView({ sessionId }: ChatViewProps) {
           <div className={styles.toolbar}>
             <TokenBudgetPanel sessionId={sessionId} />
             <div className={styles.toolbarActions}>
+              <button
+                type="button"
+                className={copiedFlash ? `${styles.sessionIdChip} ${styles.sessionIdChipCopied}` : styles.sessionIdChip}
+                onClick={handleCopySessionId}
+                data-tooltip={sessionId}
+                aria-label={t('chatView.toolbar.copySessionId')}
+              >
+                {copiedFlash ? t('chatView.toolbar.copied') : `${sessionId.slice(0, 8)}...`}
+              </button>
               {sessionFiles.length > 0 && (
                 <button
                   className={styles.filesToggle}
