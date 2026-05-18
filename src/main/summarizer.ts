@@ -2,7 +2,9 @@ import type { ParsedLine, SessionSummary, OutcomeSignals, OutcomeStatus, FileOpe
 import type { SessionFileInput } from './database'
 
 /** 摘要引擎版本（每次規則改動時遞增，讓 backfill 可追蹤） */
-export const SUMMARY_VERSION = 2
+// v3 (2026-05-18): parser 抽 is_error → messages.tool_error_count (Task 10 Phase C / migration v19)。
+// 升版觸發 indexer 視所有舊 session 為 stale，下次 Sync 重 parse 填 tool_error_count。
+export const SUMMARY_VERSION = 3
 
 const MAX_INTENT_LEN = 120
 const MAX_SUMMARY_LEN = 300
