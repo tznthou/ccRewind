@@ -33,6 +33,7 @@ export interface MessageInput {
   cacheReadTokens: number | null
   cacheCreationTokens: number | null
   model: string | null
+  toolErrorCount?: number
 }
 
 /** session_files 寫入用型別 */
@@ -457,6 +458,21 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 19,
+    description: 'add tool_error_count column to messages for degradation detection POC',
+    up: (db) => {
+      // is_error 在 JSONL 每個 tool_result block 全量輸出 boolean（true 8.6% / false 91.4%）。
+      // parser 用 b.is_error === true 嚴格判斷 + counter 寫入此 column。
+      // DEFAULT 0：升級時舊資料未 reindex 值為 0，等使用者觸發 Resync 才填真值。
+      // 不建立 index：分析查詢會跟 session_id GROUP BY，現有 idx_messages_session 已覆蓋。
+      // Rollback path（若決定撤回）：better-sqlite3 ≥ 11.8 用 SQLite ≥ 3.45 支援
+      //   ALTER TABLE messages DROP COLUMN tool_error_count;
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN tool_error_count INTEGER NOT NULL DEFAULT 0;
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -477,6 +493,7 @@ interface MessageRow {
   cache_read_tokens: number | null
   cache_creation_tokens: number | null
   model: string | null
+  tool_error_count: number | null
 }
 
 /** MessageRow → Message 轉換 */
@@ -498,6 +515,7 @@ function mapMessageRow(r: MessageRow): Message {
     cacheReadTokens: r.cache_read_tokens,
     cacheCreationTokens: r.cache_creation_tokens,
     model: r.model,
+    toolErrorCount: r.tool_error_count ?? 0,
   }
 }
 
@@ -1101,8 +1119,8 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -1118,6 +1136,7 @@ export class Database {
           m.timestamp, m.sequence,
           m.inputTokens, m.outputTokens, m.cacheReadTokens, m.cacheCreationTokens, m.model,
           m.uuid,
+          m.toolErrorCount ?? 0,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
@@ -1139,7 +1158,8 @@ export class Database {
       SELECT m.id, m.session_id, m.type, m.role, m.content_text,
              mc.content_json, m.has_tool_use, m.has_tool_result,
              m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model
+             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
+             m.tool_error_count
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
       WHERE m.session_id = ?
@@ -1155,7 +1175,8 @@ export class Database {
       SELECT m.id, m.session_id, m.type, m.role, m.content_text,
              mc.content_json, m.has_tool_use, m.has_tool_result,
              m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model
+             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
+             m.tool_error_count
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
     `

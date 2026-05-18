@@ -7,6 +7,7 @@ interface ContentResult {
   hasToolResult: boolean
   toolNames: string[]
   isCommandWrapped: boolean
+  toolErrorCount: number
 }
 
 /** 完全移除的系統標籤（標籤+內容一起刪）*/
@@ -57,17 +58,17 @@ export function ensureWellFormed(s: string): string {
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
 export function parseContent(content: unknown): ContentResult {
   if (content == null) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
   }
 
   if (typeof content === 'string') {
     const isCommandWrapped = hasCommandWrapper(content)
     const cleaned = ensureWellFormed(stripSystemXml(content))
-    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped }
+    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped, toolErrorCount: 0 }
   }
 
   if (!Array.isArray(content)) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
   }
 
   const textParts: string[] = []
@@ -75,6 +76,7 @@ export function parseContent(content: unknown): ContentResult {
   let hasToolResult = false
   const toolNames: string[] = []
   let isCommandWrapped = false
+  let toolErrorCount = 0
 
   for (const block of content) {
     if (block == null || typeof block !== 'object') continue
@@ -94,6 +96,8 @@ export function parseContent(content: unknown): ContentResult {
         break
       case 'tool_result':
         hasToolResult = true
+        // is_error 全量輸出 boolean（true 8.6%, false 91.4%, 無字串/數字變體）→ 嚴格 === true 過濾
+        if (b.is_error === true) toolErrorCount++
         break
       // thinking, server_tool_use 等 → 跳過
     }
@@ -105,6 +109,7 @@ export function parseContent(content: unknown): ContentResult {
     hasToolResult,
     toolNames,
     isCommandWrapped,
+    toolErrorCount,
   }
 }
 
@@ -170,6 +175,7 @@ export function parseLine(line: string): ParsedLine | null {
   let cacheCreationTokens: number | null = null
   let model: string | null = null
   let isCommandWrapped = false
+  let toolErrorCount = 0
 
   const message = obj.message as Record<string, unknown> | undefined
   if (message && typeof message === 'object') {
@@ -182,6 +188,7 @@ export function parseLine(line: string): ParsedLine | null {
     hasToolResult = result.hasToolResult
     toolNames = result.toolNames
     isCommandWrapped = result.isCommandWrapped
+    toolErrorCount = result.toolErrorCount
     contentJson = message.content != null
       ? JSON.stringify(message.content, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
       : null
@@ -221,6 +228,7 @@ export function parseLine(line: string): ParsedLine | null {
     model,
     requestId,
     isCommandWrapped,
+    toolErrorCount,
   }
 }
 

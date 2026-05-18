@@ -1609,6 +1609,42 @@ describe('migration v17: clear legacy message_archive for known types only', () 
   })
 })
 
+describe('migration v19: tool_error_count column on messages', () => {
+  it('messages table has tool_error_count column with NOT NULL DEFAULT 0', () => {
+    const cols = db.rawAll<{ name: string; notnull: number; dflt_value: string | null }>(
+      "PRAGMA table_info('messages')",
+    )
+    const target = cols.find(c => c.name === 'tool_error_count')
+    expect(target).toBeDefined()
+    expect(target!.notnull).toBe(1)
+    expect(target!.dflt_value).toBe('0')
+  })
+
+  it('round-trip: insert message with toolErrorCount → getMessages returns same value', () => {
+    db.indexSession({
+      sessionId: 'v19-rt', projectId: 'pv19', projectDisplayName: '/v19',
+      title: 't', messageCount: 1, filePath: '/tmp/v19rt.jsonl', fileSize: 1,
+      fileMtime: '2026-05-18T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0, toolErrorCount: 3 })],
+    })
+    const got = db.getMessages('v19-rt')
+    expect(got).toHaveLength(1)
+    expect(got[0].toolErrorCount).toBe(3)
+  })
+
+  it('backward compat: insert without toolErrorCount → retrieved value is 0', () => {
+    db.indexSession({
+      sessionId: 'v19-bc', projectId: 'pv19', projectDisplayName: '/v19',
+      title: 't', messageCount: 1, filePath: '/tmp/v19bc.jsonl', fileSize: 1,
+      fileMtime: '2026-05-18T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0 })],
+    })
+    const got = db.getMessages('v19-bc')
+    expect(got).toHaveLength(1)
+    expect(got[0].toolErrorCount).toBe(0)
+  })
+})
+
 describe('database maintenance (stats + compact)', () => {
   it('getDatabaseMaintenanceStats returns current DB metrics', () => {
     const stats = db.getDatabaseMaintenanceStats()

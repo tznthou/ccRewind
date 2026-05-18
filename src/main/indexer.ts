@@ -106,6 +106,7 @@ function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
     cacheReadTokens: msg.cacheReadTokens,
     cacheCreationTokens: msg.cacheCreationTokens,
     model: msg.model,
+    toolErrorCount: msg.toolErrorCount,
   }))
 }
 

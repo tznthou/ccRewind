@@ -155,6 +155,36 @@ describe('parseContent', () => {
     expect(result.contentText).toBeNull()
   })
 
+  it('array with tool_result is_error:true → toolErrorCount 1', () => {
+    const content = [
+      { type: 'tool_result', tool_use_id: 'toolu_001', content: 'Exit code 124', is_error: true },
+    ]
+    const result = parseContent(content)
+    expect(result.toolErrorCount).toBe(1)
+  })
+
+  it('array with tool_result is_error:false → toolErrorCount 0 (false 是 91.4% 常態值)', () => {
+    const content = [
+      { type: 'tool_result', tool_use_id: 'toolu_001', content: 'ok', is_error: false },
+    ]
+    const result = parseContent(content)
+    expect(result.toolErrorCount).toBe(0)
+  })
+
+  it('array with mixed is_error true/false/missing → toolErrorCount counts only === true', () => {
+    const content = [
+      { type: 'tool_result', tool_use_id: 'a', content: 'ok', is_error: false },
+      { type: 'tool_result', tool_use_id: 'b', content: 'fail', is_error: true },
+      { type: 'tool_result', tool_use_id: 'c', content: 'ok' },
+      { type: 'tool_result', tool_use_id: 'd', content: 'truthy-but-not-true', is_error: 1 },
+      { type: 'tool_result', tool_use_id: 'e', content: 'string-true', is_error: 'true' },
+      { type: 'tool_result', tool_use_id: 'f', content: 'fail', is_error: true },
+    ]
+    const result = parseContent(content)
+    // 嚴格 === true：跳過 missing / 0 / 1 / "true" 等 truthy/falsy 變體
+    expect(result.toolErrorCount).toBe(2)
+  })
+
   it('array with thinking → skipped, not in contentText', () => {
     const content = [
       { type: 'thinking', thinking: 'Let me think...' },

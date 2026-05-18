@@ -350,6 +350,82 @@ Task 5 和 Task 6 可平行開發。
 - [ ] 規模估算誤差範圍評估完成（樂觀 / 悲觀 LOC 與工時）
 - [ ] 決策：進入完整 Task 10 實作 / 延後 / 拒絕，並寫明理由
 
+### Task 10: Degradation Detection v2（spike，POC Day 1 已完成）
+
+**性質**：探索性 spike 接續 `project_degradation_detection_poc` memory（2026-04-22）。Day 1 POC（2026-05-18）已完成資料量化 + parser 盤點 + migration 草案，待過 `/plan-critic --deep` 閘門。
+
+**目標**：把 JSONL 內 `tool_use_result.is_error` 抽進 ccRewind DB，作為「模型降智 / 卡住 session」偵測的核心訊號。
+
+**動機**：
+- Memory 第 25 行記載 `is_error` 是「最硬的降智訊號」但 parser 沒抽
+- 2026-05-18 量化證實：ccRwind 專案 68.3% session 含 error，跨專案 34.2%（樣本 N=1104，夠分析）
+- 6.8% session 有 6+ errors，是「heavy-fail / 繞不出來」候選樣本
+
+**Day 1 POC 結果**（詳：`.draft/is_error-poc-2026-05-18.md`）：
+
+| 維度 | 數字 |
+|---|---|
+| ccRwind 含 error session | 28/41（68.3%） |
+| 跨專案含 error session | 378/1104（34.2%） |
+| heavy-fail（>5 errors） | 75/1104（6.8%） |
+| Top session error count | ef032cbd: 11 errors / 1165 entries |
+
+**影響範圍**（規模估算）：
+- Modify: `src/main/parser.ts:95-97`（tool_result case +1 行讀 `b.is_error`）
+- Modify: `src/main/parser.ts:4` ContentResult interface +1 欄位 `toolErrorCount: number`，5 處 return 預設值
+- Modify: `src/main/database.ts`（migration v19 加 `messages.tool_error_count` column + 2 INSERT 路徑 + 1 interface + 1 mapper）
+- Add: `tests/parser.test.ts`（is_error true / false / missing 三 case）
+- Add: `tests/database.test.ts`（v19 migration idempotent）
+
+**依賴**：Task 3（DB + Indexer）、Task 9（v18 baseline）
+
+**驗收條件**：
+- Given session 含 `is_error: true` 的 tool_result → When 索引 → Then `messages.tool_error_count` ≥ 1
+- Given session 全部 tool_result 都是 success → When 索引 → Then `tool_error_count` = 0
+- Given v19 migration 跑兩次 → Then idempotent，不丟資料
+- Given 既有 v18 DB 升級到 v19 → Then 新 column 預設 0，下次 reindex 才填真值（不阻塞啟動）
+
+**Spike 決策點**（待過 `/plan-critic` 確認）：
+
+1. **粒度**：per-message 計數 vs session 層級 aggregate？
+   - 草案：per-message（messages.tool_error_count），sessions 層級用 SUM 查詢
+   - Why：保留分析彈性，aggregate 用既有 idx_messages_session group by 不貴
+2. **重 index 策略**：強制 reindex vs 標記髒讓使用者觸發？
+   - 草案：不強制，沿用 Resync 按鈕；新 column 預設 0 直到 reindex
+   - Why：1104 sessions × 平均 500 entries ≈ 55 萬 messages，重跑要 30-60 秒，啟動阻塞體驗差
+3. **訊號分類**：要不要分類 error type（timeout / not_found / permission）？
+   - 草案：v1 不分，只存 count；分類進 v2 看 UI 是否需要
+   - Why：Memory 警告任務類型 control key 缺失，分類前先確認核心訊號有用
+4. **UI 暴露**：v1 是否顯示 error count？
+   - 草案：v1 只進 DB 不上 UI，等下個 POC（model × error_rate × file_reedit 三維表）驗證再決定渲染
+   - Why：使用者價值閘門未過（零用戶階段優先拉用戶不做進階分析）
+
+**階段規劃**：
+
+- **Phase A：Day 1 POC**（已完成 2026-05-18）
+  - [x] is_error 分布量化（ccRwind 68.3% / 跨專案 34.2% / heavy-fail 6.8%）
+  - [x] parser 盤點 + migration v19 草案
+  - [x] schema 變體驗證（only boolean `true`/`false`，零字串態 / 零數字態）
+
+- **Phase B：閘門**（已完成 2026-05-18）
+  - [x] `/plan-critic --deep` 過閘（2 WARN 0 FAIL）
+  - [x] 4 項 fixup 完成（schema 變體驗證 / Phase 拆分 / rollback note / 嚴格 === true）
+  - [x] 4 個 spike 決策點全部結論定案（per-message 計數 / 不強制 reindex / v1 不分類 / v1 不上 UI）
+  - [x] 決策：進入 Phase C（已執行）
+
+- **Phase C：實作**（已完成 2026-05-18）
+  - [x] parser.ts 抽 is_error → toolErrorCount（5 處 return 預設值補齊 + `=== true` 嚴格判斷）
+  - [x] database.ts migration v19 + 2 INSERT path + 2 SELECT path + MessageRow + MessageInput + mapMessageRow
+  - [x] indexer.ts toMessageInputs 帶 toolErrorCount
+  - [x] tests/parser.test.ts +3 case（true / false / mixed 含 truthy 變體）
+  - [x] tests/database.test.ts +3 case（column schema / round-trip / backward compat）
+  - [x] pnpm tsc 雙跑（node + web）全綠 + pnpm test 458/458 全綠（baseline 452 +6）
+
+- **Phase D：下個 POC**（過 Phase C + 一週實際資料才評估，不在本 Task 範圍）
+  - [ ] model × avg_error_rate × file_reedit 三維表
+  - [ ] 評估是否上 UI（v1 不上 UI 決策保留）
+  - [ ] 過使用者價值閘門才寫成正式功能
+
 ---
 
 ## 驗證計畫
