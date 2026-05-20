@@ -426,6 +426,43 @@ Task 5 和 Task 6 可平行開發。
   - [ ] 評估是否上 UI（v1 不上 UI 決策保留）
   - [ ] 過使用者價值閘門才寫成正式功能
 
+### Task 11: GitHub 依賴升級工具接入（Renovate）
+
+**性質**：infra 變更，決策已落定於 [`ADR-003`](./ADR-003-dependency-upgrade-tool.md)。
+
+**目標**：建立 Renovate-based 依賴升級流水線，含 Electron stack 手動 review 閘門 + native/packaging smoke CI。
+
+**動機**：
+- 25 個 deps × solo maintainer 沒餘力手動巡邏
+- 安全 CVE 沒有自動 patch 通道
+- pnpm-lock.yaml 自然漂移無定期 refresh 機制
+- Electron 33 + better-sqlite3 native module 升級高風險，要跟其他 deps 分開對待
+
+**決策摘要**（詳 ADR-003）：採 Renovate，不採 Dependabot version PRs，不做 Hybrid 雙 bot。理由：Renovate `dependencyDashboardApproval` 對 Electron stack 是必需、`lockFileMaintenance` 原生對應 pnpm 維護需求、Hybrid 會踩 lockfile contention。
+
+**動工時機**：2026-05-21 後（v1.13.0 Tasks Panel dogfood 滿）
+
+**影響範圍**：
+- Add: `.github/renovate.json`（packageRules: Electron stack dashboard approval / TypeScript 拉出 / safe patch automerge / safe minor manual / GitHub Actions 獨立）
+- Add: `.github/workflows/electron-smoke.yml`（Electron stack PR 觸發：electron-rebuild + native binding 驗證 + pnpm dist mac+win）
+- Modify: `package.json` 加 `"packageManager": "pnpm@<current-version>"` 鎖 pnpm 版本
+- Repo settings: branch protection 設 required status checks（vitest / node typecheck / web typecheck / electron-smoke）
+- Repo settings: 安裝 Renovate GitHub App + 確認 Dependency Graph + Dependabot alerts 啟用（不啟用 version PRs）
+
+**依賴**：無（infra 變更，獨立於其他 Task）
+
+**驗收條件**：
+- Given 提交 PR 升 highlight.js patch → When CI 全綠 → Then Renovate platform automerge 自動 merge
+- Given 提交 PR 升 electron major → When 觸發 → Then 進 Dependency Dashboard 等手動勾選，不開 PR
+- Given 提交 PR 升 typescript minor → When 觸發 → Then 開 PR 但 automerge: false，等手動 review
+- Given Renovate 開的 lockFileMaintenance PR → When 跑 CI → Then mac+win electron-smoke 都過才 merge
+- Given GitHub Advisory 出現 ccRewind dep 的 CVE → When Renovate 偵測 → Then 開 security label 的 PR 不受 weekly schedule 限制
+
+**收尾條件**：
+- 第一週 PR 行為符合預期（patch automerge + minor manual + Electron dashboard）
+- 一個月後評估是否把 safe minor 也放 automerge（觀察 dogfood 是否撞壞）
+- 記 follow-up：Renovate 行為若偏離 ADR-003 預期，回 ADR 補 Trigger 並重評
+
 ---
 
 ## 驗證計畫
