@@ -328,6 +328,7 @@ ccRewind 刻意不做這些事：
 | 7.7 | ✅ 完成 | Token Budget 子系統 i18n 補完（engine 改 discriminated-union InsightData、43 keys lockstep）+ 1M plan 偵測修正（226K 不再被誤報「113% of 200K」）+ panel 錯誤訊息 fail-close（v1.12.1） |
 | 7.8 | ✅ 完成 | UTF-16 lone surrogate normalization：parser 出口加 `toWellFormed()` 防爆，下游 pipeline 不再被破損的 unicode 卡住（v1.12.2） |
 | 8 | ✅ 完成 | Tasks Panel：掃描 `~/.claude/tasks/` 在 ChatView 顯示 TODO 歷史快照（migration v18 新增 session_tasks 表、append-mode PK 解耦 session reindex）（v1.13.0） |
+| 9 | ✅ 完成 | Tool-error 偵測基建（migration v19 加 `tool_error_count`，跨專案盤點 34.2% sessions 含 `is_error`，等 Phase D 上 UI）+ Session ID chip 一鍵複製 + Renovate 自動依賴升級（ADR-003 五條 packageRules + mac/win electron-smoke）+ summarizer 跳過 slash-command wrapper + 搜尋結果 group header 顯示日期（v1.14.0） |
 | — | 📋 遠期 | 資料壓縮功能（保留可還原，補 exclusion 硬刪的絕對性） |
 | — | 📋 遠期 | In-App 自動更新（待 Apple Developer ID code signing） |
 

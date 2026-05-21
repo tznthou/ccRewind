@@ -7,6 +7,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.14.0] - 2026-05-21
+
+### Added
+
+- **Session ID chip with one-click copy** (`a0e0b3e`). ChatView toolbar now has a sessionId chip: shows the 8-char prefix, copies the full UUID on click, 1.5s visual flash, screen-reader announcement. Carrying the sessionId out to external tools (grep, `claude --resume`, issue reports) used to mean digging through devtools selectors — now it's a single click.
+- **Tool-error detection infrastructure (migration v19)** (`7c862e3`, `f804ce1`). New `tool_error_count` column on `messages` (NOT NULL DEFAULT 0); the parser counts `is_error: true` tool_result blocks per message during ingest, feeding the downstream degradation-detection work (Phase D). **No UI in this release** — pure plumbing. Cross-project scans show 34.2% of sessions contain at least one `is_error`, which is the most direct signal of "Claude Code recovered on the next try vs. got stuck in a loop" — but we're holding off on surface design until real data from Phase D tells us what users actually need to see.
+- **Renovate + Electron smoke workflow** (`bf7e8f8`, PR #20). `.github/renovate.json` configured with ADR-003's five packageRules (Electron-stack dashboard / TypeScript carve-out / safe-patch automerge / minor manual / GitHub Actions); new mac+win matrix `electron-smoke.yml` runs `pnpm dist` to validate native bindings (better-sqlite3 ABI). `packageManager` pinned to `pnpm@10.20.0`; the `with: version` field removed from `pnpm/action-setup` calls in CI to resolve the double-pin conflict. See `docs/ADR-003-dependency-upgrade-tool.md`.
+
+### Fixed
+
+- **Search result group headers now show the date** (`f7fb897`). `SearchResults` / `SessionSearchResults` group headers switched from `formatTime` (HH:MM) to `formatDateTime` (MM/DD HH:MM), so cross-day search results no longer leave you guessing which day a match came from. Individual match timestamps stay HH:MM because the group header already covers the date, keeping the row layout tight.
+- **Summarizer now skips slash-command wrapper messages** (`20a8c91`). When the user types `/command args`, the JSONL first records a wrapper user message (content is a `<command-name>` XML stub), with the actual prompt in the next entry. The intent extractor used to grab the first user message and end up with the empty wrapper. It now detects and skips those wrappers, falling through to the real intent.
+
+### Changed
+
+- **`SUMMARY_VERSION` 2 → 3** (rides on migration v19). **The first Sync after upgrading to v1.14.0 will reparse every session** (measured at ~30–60s for 1,104 sessions / ~550k messages) to backfill the new `tool_error_count` column. This is a one-time cost; subsequent syncs return to normal incremental behavior.
+
+### Docs
+
+- **ADR-003 + PLAN.md Task 11** (`908de19`). Captures the Renovate-vs-Dependabot decision, the rationale behind each of the five packageRules, and why Electron smoke matters, all written up as ADR-003; PLAN.md adds Task 11 tracking the rollout.
+
 ## [1.13.0] - 2026-05-14
 
 ### Added

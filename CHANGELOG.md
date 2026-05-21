@@ -6,6 +6,27 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.14.0] - 2026-05-21
+
+### Added
+
+- **Session ID Chip 一鍵複製**（`a0e0b3e`）。ChatView toolbar 加 sessionId chip：顯示前 8 碼縮寫 + 點擊複製完整 UUID + 1.5s 視覺 flash + SR announcement。回放某段對話時要把 sessionId 帶到外部工具（grep、`claude --resume`、issue 回報）的高頻動作，從「展開 dev tools 找 selector」降到「一點」。
+- **Tool error 偵測基礎建設（migration v19）**（`7c862e3`、`f804ce1`）。`messages` 表新增 `tool_error_count` 欄位（NOT NULL DEFAULT 0），parser 在 ingest 時統計每則 message 中 `is_error: true` 的 tool_result block 數量，供後續 degradation detection（Phase D）使用。此版**不上 UI**，是純基建：跨專案盤點顯示 34.2% sessions 含 `is_error`，是判斷「Claude Code 改一次就過 vs. 連續錯卡住」的最直接訊號之一，但 v1 不上面板，等 Phase D 真實資料才設計呈現方式。
+- **Renovate + Electron smoke workflow**（`bf7e8f8`、PR #20）。`.github/renovate.json` 配 ADR-003 五條 packageRules（Electron stack dashboard / TypeScript 拉出 / safe patch automerge / minor manual / GitHub Actions），新增 mac+win matrix `electron-smoke.yml` 跑 `pnpm dist` 驗 native binding（better-sqlite3 ABI）。`packageManager` 鎖死 `pnpm@10.20.0`，CI 從 `pnpm/action-setup` 拿掉 `with: version` 避免雙寫衝突。詳見 `docs/ADR-003-dependency-upgrade-tool.md`。
+
+### Fixed
+
+- **搜尋結果 group header 顯示日期**（`f7fb897`）。`SearchResults` / `SessionSearchResults` 的 group header 從 `formatTime`（HH:MM）改用 `formatDateTime`（MM/DD HH:MM），跨日搜尋結果不再只看到時間分不清哪一天。個別 match timestamp 維持 HH:MM，因 group header 已 cover 日期，保持單列排版簡潔。
+- **Summarizer 跳過 slash-command wrapper messages**（`20a8c91`）。`/command args` 形式的 user 輸入會在 JSONL 裡先被包成一個 wrapper user message（content 為 `<command-name>` XML），真正的 prompt 在下一筆。intent extraction 原本抓 first user message 結果常常拿到空殼。新版偵測並跳過這類 wrapper，往下找真正的 intent。
+
+### Changed
+
+- **`SUMMARY_VERSION` 2 → 3**（隨 migration v19）。**升級到 v1.14.0 後第一次按 Sync 會 reparse 所有 sessions**（實測 1104 sessions / 約 55 萬 messages 需 30–60 秒），用來 backfill `tool_error_count` 欄位。一次性副作用，後續同步走正常增量。
+
+### Docs
+
+- **ADR-003 + PLAN.md Task 11**（`908de19`）。Renovate vs Dependabot 決策過程、5 條 packageRules 設計依據、Electron smoke 必要性論證寫成 ADR-003；PLAN.md 加 Task 11 紀錄落地步驟。
+
 ## [1.13.0] - 2026-05-14
 
 ### Added
