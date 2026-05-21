@@ -1,0 +1,129 @@
+name: Electron Smoke
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'electron-builder.yml'
+      - '.github/workflows/electron-smoke.yml'
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Cache pnpm store (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: ~/.pnpm-store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Cache pnpm store (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\pnpm\store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
+
+      - name: Cache Electron (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/electron
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      - name: Cache Electron (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ~\AppData\Local\electron\Cache
+          key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-electron-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Rebuild better-sqlite3 for Electron
+        run: pnpm exec electron-rebuild -f -o better-sqlite3
+
+      - name: Write native binding smoke script
+        shell: bash
+        run: |
+          cat > "$RUNNER_TEMP/smoke.cjs" <<'EOF'
+          const Database = require('better-sqlite3');
+          const db = new Database(':memory:');
+          db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)');
+          db.prepare('INSERT INTO t (v) VALUES (?)').run('hello');
+          const row = db.prepare('SELECT v FROM t WHERE id = 1').get();
+          if (!row || row.v !== 'hello') {
+            throw new Error('better-sqlite3 native binding failed');
+          }
+          console.log('native binding OK');
+          db.close();
+          EOF
+
+      - name: Run native binding smoke
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: pnpm exec electron "$RUNNER_TEMP/smoke.cjs"
+
+      - name: Build
+        run: pnpm build
+
+      - name: Package (electron-builder)
+        run: pnpm dist
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify artifacts (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          DMG_COUNT=$(find dist -name "*.dmg" 2>/dev/null | wc -l)
+          if [ "$DMG_COUNT" -eq 0 ]; then
+            echo "ERROR: No DMG files generated"
+            exit 1
+          fi
+          echo "macOS artifacts:"
+          find dist -name "*.dmg" -o -name "*.zip" | grep -v blockmap | while read -r f; do
+            echo "  $(basename "$f")"
+          done
+
+      - name: Verify artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          EXE_COUNT=$(find dist -name "*.exe" 2>/dev/null | wc -l)
+          if [ "$EXE_COUNT" -eq 0 ]; then
+            echo "ERROR: No EXE files generated"
+            exit 1
+          fi
+          echo "Windows artifacts:"
+          find dist -name "*.exe" -o -name "*.zip" | grep -v blockmap | while read -r f; do
+            echo "  $(basename "$f")"
+          done
