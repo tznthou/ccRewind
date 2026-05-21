@@ -327,6 +327,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 7.7 | ✅ Done | Token Budget subsystem i18n completion (engine refactored to discriminated-union `InsightData`, 43 keys lockstep) + 1M plan detection fix (226K no longer misreported as "113% of 200K") + panel error message fails closed (v1.12.1) |
 | 7.8 | ✅ Done | UTF-16 lone surrogate normalization: parser-exit `toWellFormed()` guard so the downstream pipeline no longer chokes on malformed unicode (v1.12.2) |
 | 8 | ✅ Done | Tasks Panel: scans `~/.claude/tasks/` and surfaces per-session TODO history snapshots inline in ChatView (migration v18 adds `session_tasks`; append-mode PK decoupled from session reindex) (v1.13.0) |
+| 9 | ✅ Done | Tool-error detection infrastructure (migration v19 adds `tool_error_count`; cross-project scan shows 34.2% of sessions contain `is_error`; UI surface awaits Phase D) + sessionId chip with one-click copy + Renovate-driven dependency upgrades (ADR-003 five packageRules + mac/win electron-smoke) + summarizer skips slash-command wrappers + search-result group headers show the date (v1.14.0) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 

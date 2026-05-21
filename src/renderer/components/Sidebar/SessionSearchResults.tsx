@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
-import { formatTime } from '../../utils/formatTime'
+import { formatDateTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
 import SearchSyntaxHints from './SearchSyntaxHints'
 import type { SessionSearchResult } from '../../../shared/types'
@@ -66,7 +66,7 @@ export default function SessionSearchResults() {
           >
             <div className={styles.groupHeader}>
               <span className={styles.sessionTitle}>{r.sessionTitle ?? r.sessionId.slice(0, 8)}</span>
-              {r.startedAt && <span className={styles.sessionDate}>{formatTime(r.startedAt)}</span>}
+              {r.startedAt && <span className={styles.sessionDate}>{formatDateTime(r.startedAt)}</span>}
               {r.outcomeStatus && <span className={styles.tagBadge}>{r.outcomeStatus}</span>}
             </div>
             <div className={styles.groupBody}>
