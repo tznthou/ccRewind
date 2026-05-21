@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
-import { formatTime } from '../../utils/formatTime'
+import { formatTime, formatDateTime } from '../../utils/formatTime'
 import { renderSnippet } from '../../utils/renderSnippet'
 import SearchSyntaxHints from './SearchSyntaxHints'
 import type { SearchResult, GroupedSearchResult, Message } from '../../../shared/types'
@@ -157,7 +157,7 @@ export default function SearchResults() {
             <button className={styles.groupHeader} onClick={() => toggleGroup(g.sessionId)}>
               <span className={styles.expandIcon}>{collapsed ? '▸' : '▾'}</span>
               <span className={styles.sessionTitle}>{g.sessionTitle ?? g.sessionId.slice(0, 8)}</span>
-              {g.sessionStartedAt && <span className={styles.sessionDate}>{formatTime(g.sessionStartedAt)}</span>}
+              {g.sessionStartedAt && <span className={styles.sessionDate}>{formatDateTime(g.sessionStartedAt)}</span>}
               <span className={styles.matchCount}>{g.matches.length}</span>
             </button>
             {!collapsed && (
