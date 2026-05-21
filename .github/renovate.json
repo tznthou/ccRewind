@@ -1,0 +1,101 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":semanticCommits"
+  ],
+  "timezone": "Asia/Taipei",
+  "schedule": [
+    "before 10am on monday"
+  ],
+  "minimumReleaseAge": "3 days",
+  "prHourlyLimit": 1,
+  "prConcurrentLimit": 3,
+  "rangeStrategy": "bump",
+  "platformAutomerge": true,
+  "major": {
+    "dependencyDashboardApproval": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": [
+      "before 6am on monday"
+    ],
+    "automerge": true
+  },
+  "vulnerabilityAlerts": {
+    "labels": [
+      "security",
+      "dependencies"
+    ],
+    "vulnerabilityFixStrategy": "lowest"
+  },
+  "osvVulnerabilityAlerts": true,
+  "packageRules": [
+    {
+      "description": "Electron/native stack — Chromium + Node ABI 高風險，永遠手動 review",
+      "matchPackageNames": [
+        "electron",
+        "better-sqlite3",
+        "electron-builder",
+        "electron-vite"
+      ],
+      "groupName": "Electron/native stack",
+      "dependencyDashboardApproval": true,
+      "automerge": false
+    },
+    {
+      "description": "TypeScript + @types — 雙 typecheck 對 type literal 變動敏感，拉出單獨手動 review",
+      "matchPackageNames": [
+        "typescript",
+        "/^@types\\//"
+      ],
+      "groupName": "TypeScript 生態",
+      "automerge": false
+    },
+    {
+      "description": "低風險 patch automerge 白名單",
+      "matchUpdateTypes": [
+        "patch"
+      ],
+      "matchPackageNames": [
+        "@tanstack/react-virtual",
+        "highlight.js",
+        "react-markdown",
+        "recharts",
+        "rehype-highlight",
+        "rehype-sanitize",
+        "remark-gfm",
+        "react",
+        "react-dom",
+        "vite",
+        "vitest",
+        "eslint",
+        "/^@eslint\\//",
+        "/^@typescript-eslint\\//"
+      ],
+      "groupName": "safe patch dependencies",
+      "automerge": true
+    },
+    {
+      "description": "Minor 先 group 不 automerge，dogfood 觀察一個月後再放寬",
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "safe minor dependencies",
+      "automerge": false
+    },
+    {
+      "description": "GitHub Actions 獨立 group + manual review",
+      "matchManagers": [
+        "github-actions"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "GitHub Actions",
+      "automerge": false
+    }
+  ]
+}
