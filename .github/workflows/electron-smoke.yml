@@ -68,27 +68,11 @@ jobs:
       - name: Rebuild better-sqlite3 for Electron
         run: pnpm exec electron-rebuild -f -o better-sqlite3
 
-      - name: Write native binding smoke script
-        shell: bash
-        run: |
-          cat > "$RUNNER_TEMP/smoke.cjs" <<'EOF'
-          const Database = require('better-sqlite3');
-          const db = new Database(':memory:');
-          db.exec('CREATE TABLE t (id INTEGER PRIMARY KEY, v TEXT)');
-          db.prepare('INSERT INTO t (v) VALUES (?)').run('hello');
-          const row = db.prepare('SELECT v FROM t WHERE id = 1').get();
-          if (!row || row.v !== 'hello') {
-            throw new Error('better-sqlite3 native binding failed');
-          }
-          console.log('native binding OK');
-          db.close();
-          EOF
-
       - name: Run native binding smoke
         shell: bash
         env:
           ELECTRON_RUN_AS_NODE: '1'
-        run: pnpm exec electron "$RUNNER_TEMP/smoke.cjs"
+        run: pnpm exec electron scripts/electron-smoke.cjs
 
       - name: Build
         run: pnpm build
