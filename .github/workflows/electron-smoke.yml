@@ -32,7 +32,7 @@ jobs:
 
       - name: Cache pnpm store (macOS)
         if: runner.os == 'macOS'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.pnpm-store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
@@ -40,7 +40,7 @@ jobs:
 
       - name: Cache pnpm store (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~\AppData\Local\pnpm\store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
@@ -48,7 +48,7 @@ jobs:
 
       - name: Cache Electron (macOS)
         if: runner.os == 'macOS'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/Library/Caches/electron
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
@@ -56,7 +56,7 @@ jobs:
 
       - name: Cache Electron (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~\AppData\Local\electron\Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
