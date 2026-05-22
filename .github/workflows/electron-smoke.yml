@@ -28,7 +28,7 @@ jobs:
           python-version: '3.11'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
 
       - name: Cache pnpm store (macOS)
         if: runner.os == 'macOS'
