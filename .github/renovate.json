@@ -96,6 +96,13 @@
       ],
       "groupName": "GitHub Actions",
       "automerge": false
+    },
+    {
+      "description": "pnpm/action-setup pin v4 — v5 BREAKING 改用 Node.js 24, v6.0.4-v6.0.8 仍密集 patch PATH/npm bootstrap (撞 better-sqlite3 install node-gyp not found). 等 v6 穩定再升, 詳見 PR #34 fail log + feedback memory",
+      "matchPackageNames": [
+        "pnpm/action-setup"
+      ],
+      "allowedVersions": "<5.0.0"
     }
   ]
 }
