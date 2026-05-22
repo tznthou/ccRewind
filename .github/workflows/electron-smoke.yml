@@ -2,11 +2,6 @@ name: Electron Smoke
 
 on:
   pull_request:
-    paths:
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - 'electron-builder.yml'
-      - '.github/workflows/electron-smoke.yml'
   workflow_dispatch:
 
 jobs:
