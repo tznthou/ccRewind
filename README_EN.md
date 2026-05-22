@@ -292,6 +292,12 @@ Existing solutions are either too heavy (RAG, vector search) or solving a differ
 
 That's what ccRewind is: an indexed field notebook for AI archaeology.
 
+### What Came Next
+
+"Depth over breadth" was the starting principle — but what does "depth" actually mean? Talking with people at AI meetups, an answer slowly formed: not piling on more features, but reading more layers out of the same JSONL. What got changed. Where planning stalled. Whether the conversation went smoothly. How the subagent forked off.
+
+As for which conversations are worth keeping, and how to file them away — that question outgrew this scope and became another tool: ccRecall, the second piece of ccFamily. But that's a story for another day.
+
 ### Non-goals
 
 ccRewind deliberately does not:
