@@ -335,6 +335,37 @@
   border-radius: 3px;
 }
 
+/* 可跳轉的 chip 是 button：reset 預設外觀並補互動回饋（hover / 鍵盤 focus） */
+.taskBlockedByChipClickable {
+  border: none;
+  font-size: var(--font-size-xs);
+  line-height: inherit;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.taskBlockedByChipClickable:hover {
+  background: var(--color-bg-hover);
+  color: var(--color-text);
+}
+
+.taskBlockedByChipClickable:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+/* 點 chip 跳轉到目標 task 後，短暫高亮背景由 accent 淡出，提示「跳到這裡」 */
+@keyframes taskItemFlash {
+  from { background: var(--color-accent-light); }
+  to { background: transparent; }
+}
+
+.taskItemFlash {
+  animation: taskItemFlash 1.2s ease-out;
+  border-radius: 3px;
+}
+
 .subagentCount {
   font-size: 10px;
   color: var(--color-text-muted);
