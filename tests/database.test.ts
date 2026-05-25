@@ -1645,6 +1645,95 @@ describe('migration v19: tool_error_count column on messages', () => {
   })
 })
 
+describe('migration v20: session_stars table', () => {
+  it('session_stars table exists', () => {
+    const tables = db.rawAll<{ name: string }>(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='session_stars'",
+    )
+    expect(tables).toHaveLength(1)
+  })
+
+  it('setSessionStarred toggles starred state', () => {
+    db.indexSession({
+      sessionId: 'star-1', projectId: 'p-star', projectDisplayName: '/star',
+      title: 't', messageCount: 1, filePath: '/tmp/star.jsonl', fileSize: 1,
+      fileMtime: '2026-05-26T00:00:00.000Z', startedAt: '2026-05-26T00:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0 })],
+    })
+    const before = db.getSessions('p-star')
+    expect(before[0].starred).toBe(false)
+
+    db.setSessionStarred('star-1', true)
+    const after = db.getSessions('p-star')
+    expect(after[0].starred).toBe(true)
+
+    db.setSessionStarred('star-1', false)
+    const reverted = db.getSessions('p-star')
+    expect(reverted[0].starred).toBe(false)
+  })
+
+  it('setSessionStarred is idempotent (double star does not throw)', () => {
+    db.indexSession({
+      sessionId: 'star-idem', projectId: 'p-star', projectDisplayName: '/star',
+      title: 't', messageCount: 1, filePath: '/tmp/star-idem.jsonl', fileSize: 1,
+      fileMtime: '2026-05-26T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0 })],
+    })
+    db.setSessionStarred('star-idem', true)
+    db.setSessionStarred('star-idem', true)
+    const sessions = db.getSessions('p-star')
+    const s = sessions.find(x => x.id === 'star-idem')
+    expect(s?.starred).toBe(true)
+  })
+
+  it('setSessionStarred throws for nonexistent session', () => {
+    expect(() => db.setSessionStarred('nonexistent-id', true)).toThrow('Session not found')
+  })
+
+  it('starred state survives reindex (delete + reinsert)', () => {
+    db.indexSession({
+      sessionId: 'star-reindex', projectId: 'p-star', projectDisplayName: '/star',
+      title: 'v1', messageCount: 1, filePath: '/tmp/star-reindex.jsonl', fileSize: 1,
+      fileMtime: '2026-05-26T00:00:00.000Z', startedAt: '2026-05-26T00:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0 })],
+    })
+    db.setSessionStarred('star-reindex', true)
+
+    db.indexSession({
+      sessionId: 'star-reindex', projectId: 'p-star', projectDisplayName: '/star',
+      title: 'v2', messageCount: 2, filePath: '/tmp/star-reindex.jsonl', fileSize: 2,
+      fileMtime: '2026-05-26T01:00:00.000Z', startedAt: '2026-05-26T00:00:00.000Z', endedAt: null,
+      messages: [
+        msg({ type: 'user', role: 'user', sequence: 0 }),
+        msg({ type: 'assistant', role: 'assistant', sequence: 1 }),
+      ],
+    })
+
+    const sessions = db.getSessions('p-star')
+    const s = sessions.find(x => x.id === 'star-reindex')
+    expect(s?.title).toBe('v2')
+    expect(s?.starred).toBe(true)
+  })
+
+  it('deleteSessionsBatch cleans up orphaned stars', () => {
+    db.indexSession({
+      sessionId: 'star-del', projectId: 'p-del', projectDisplayName: '/del',
+      title: 't', messageCount: 1, filePath: '/tmp/star-del.jsonl', fileSize: 1,
+      fileMtime: '2026-05-26T00:00:00.000Z', startedAt: '2026-05-26T00:00:00.000Z', endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', sequence: 0 })],
+    })
+    db.setSessionStarred('star-del', true)
+
+    const rule = { projectId: 'p-del', dateFrom: null, dateTo: null }
+    db.applyExclusion(rule)
+
+    const rows = db.rawAll<{ session_id: string }>(
+      "SELECT session_id FROM session_stars WHERE session_id = 'star-del'",
+    )
+    expect(rows).toHaveLength(0)
+  })
+})
+
 describe('database maintenance (stats + compact)', () => {
   it('getDatabaseMaintenanceStats returns current DB metrics', () => {
     const stats = db.getDatabaseMaintenanceStats()

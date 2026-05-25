@@ -473,6 +473,18 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 20,
+    description: 'add session_stars table for user-managed star/bookmark',
+    up: (db) => {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS session_stars (
+          session_id TEXT PRIMARY KEY,
+          starred_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -748,13 +760,15 @@ export class Database {
 
   getSessions(projectId: string): SessionMeta[] {
     const rows = this.db.prepare(
-      `SELECT id, project_id, title, message_count, started_at, ended_at, archived,
-              summary_text, intent_text, outcome_status, duration_seconds, active_duration_seconds, summary_version,
-              tags, files_touched, tools_used, total_input_tokens, total_output_tokens
-       FROM sessions
-       WHERE project_id = ?
-         AND id ${Database.EXCLUDE_SUBAGENTS}
-       ORDER BY started_at DESC`,
+      `SELECT s.id, s.project_id, s.title, s.message_count, s.started_at, s.ended_at, s.archived,
+              s.summary_text, s.intent_text, s.outcome_status, s.duration_seconds, s.active_duration_seconds, s.summary_version,
+              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens,
+              CASE WHEN st.session_id IS NOT NULL THEN 1 ELSE 0 END AS starred
+       FROM sessions s
+       LEFT JOIN session_stars st ON s.id = st.session_id
+       WHERE s.project_id = ?
+         AND s.id ${Database.EXCLUDE_SUBAGENTS}
+       ORDER BY s.started_at DESC`,
     ).all(projectId) as Array<{
       id: string
       project_id: string
@@ -774,6 +788,7 @@ export class Database {
       tools_used: string | null
       total_input_tokens: number | null
       total_output_tokens: number | null
+      starred: number
     }>
 
     return rows.map(r => ({
@@ -795,7 +810,18 @@ export class Database {
       toolsUsed: r.tools_used,
       totalInputTokens: r.total_input_tokens,
       totalOutputTokens: r.total_output_tokens,
+      starred: r.starred === 1,
     }))
+  }
+
+  setSessionStarred(sessionId: string, starred: boolean): void {
+    const exists = this.db.prepare('SELECT 1 FROM sessions WHERE id = ?').get(sessionId)
+    if (!exists) throw new Error('Session not found')
+    if (starred) {
+      this.db.prepare('INSERT OR IGNORE INTO session_stars (session_id) VALUES (?)').run(sessionId)
+    } else {
+      this.db.prepare('DELETE FROM session_stars WHERE session_id = ?').run(sessionId)
+    }
   }
 
   /** 將 DB 中不在 keepIds 集合的 session 標記為 archived（JSONL 已從磁碟消失），排除 subagent sessions */
@@ -2195,6 +2221,7 @@ export class Database {
       this.db.prepare(`DELETE FROM messages WHERE session_id IN (${ph})`).run(...chunk)
       this.db.prepare(`DELETE FROM session_files WHERE session_id IN (${ph})`).run(...chunk)
       this.db.prepare(`DELETE FROM subagent_sessions WHERE id IN (${ph})`).run(...chunk)
+      this.db.prepare(`DELETE FROM session_stars WHERE session_id IN (${ph})`).run(...chunk)
     })
     this.chunkedIn(parentSessionIds, (ph, chunk) => {
       this.db.prepare(`DELETE FROM subagent_sessions WHERE parent_session_id IN (${ph})`).run(...chunk)
