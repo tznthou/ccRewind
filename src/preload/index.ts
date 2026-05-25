@@ -23,6 +23,7 @@ const api: ElectronAPI = {
   getRelatedSessions: (sessionId, limit) => ipcRenderer.invoke('session:related', sessionId, limit),
   getSubagentSessions: (parentSessionId) => ipcRenderer.invoke('session:subagents', parentSessionId),
   getSessionTasks: (sessionId) => ipcRenderer.invoke('session:tasks', sessionId),
+  setSessionStarred: (sessionId, starred) => ipcRenderer.invoke('session:set-starred', sessionId, starred),
   checkForUpdates: () => ipcRenderer.invoke('updates:check'),
   getUpdateState: () => ipcRenderer.invoke('updates:get-state'),
   openReleasePage: () => ipcRenderer.invoke('updates:open-release'),

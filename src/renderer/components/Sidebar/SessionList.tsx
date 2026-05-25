@@ -123,10 +123,10 @@ export default function SessionList() {
           ★
         </button>
       </div>
-    {showStarredOnly && sortedSessions.length === 0 ? (
-      <div className={styles.statusText}>{t('sidebar.sessionList.empty.noStarred')}</div>
-    ) : (
-    <div
+      {showStarredOnly && sortedSessions.length === 0 ? (
+        <div className={styles.statusText}>{t('sidebar.sessionList.empty.noStarred')}</div>
+      ) : (
+      <div
       ref={parentRef}
       className={styles.sessionListContainer}
       aria-label={t('sidebar.sessionList.aria.label')}
@@ -226,8 +226,8 @@ export default function SessionList() {
           )
         })}
       </div>
-    </div>
-    )}
+      </div>
+      )}
     </>
   )
 }

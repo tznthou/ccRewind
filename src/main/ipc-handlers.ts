@@ -114,6 +114,12 @@ export function registerIpcHandlers(db: Database): void {
     return db.getSessionTasks(sessionId)
   })
 
+  ipcMain.handle('session:set-starred', (_event, sessionId: unknown, starred: unknown) => {
+    if (typeof sessionId !== 'string') throw new Error('Invalid sessionId')
+    if (typeof starred !== 'boolean') throw new Error('Invalid starred')
+    db.setSessionStarred(sessionId, starred)
+  })
+
   // ── Phase 3.5: 統計儀表板 ──
 
   ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
