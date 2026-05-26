@@ -3,7 +3,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178C6.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19+-61DAFB.svg)](https://reactjs.org/)
-[![Electron](https://img.shields.io/badge/Electron-33+-47848F.svg)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-41+-47848F.svg)](https://www.electronjs.org/)
 
 [English](README_EN.md)
 
@@ -175,13 +175,13 @@ graph TB
 
 | 技術 | 用途 | 備註 |
 |------|------|------|
-| Electron 33 | 桌面應用框架 | macOS hiddenInset title bar |
+| Electron 41 | 桌面應用框架 | macOS hiddenInset title bar |
 | React 19 | UI 框架 | 函式元件 + hooks |
 | TypeScript 5.7 | 型別安全 | strict mode |
-| better-sqlite3 11 | SQLite binding | 含 FTS5 全文搜尋 |
+| better-sqlite3 12 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖、甜甜圈圖（Context Budget + Dashboard） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 445 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 469 個測試，透過 Electron 執行 |
 
 ---
 
@@ -251,6 +251,7 @@ ccRewind/
 │   │   ├── database.ts        # SQLite + FTS5 管理（含 sessions_fts + session_files + 統計查詢 + Jaccard）
 │   │   ├── indexer.ts         # 增量索引器
 │   │   ├── summarizer.ts      # 結構化摘要引擎（意圖提取 + outcome 推斷 + 多信號標籤 + session_files）
+│   │   ├── task-parser.ts     # Tasks JSON 解析器（~/.claude/tasks/）
 │   │   ├── exporter.ts        # Markdown 匯出
 │   │   ├── updater.ts         # GitHub Release 更新偵測
 │   │   └── ipc-handlers.ts    # IPC 通訊處理
@@ -267,6 +268,7 @@ ccRewind/
 │   │   │   ├── TokenBudget/   # Context Budget 面板：面積圖、圓餅圖、熱力條、Insights
 │   │   │   ├── ThemeSwitcher/ # 三主題切換按鈕
 │   │   │   ├── FontScaleSwitcher/ # 三檔字級縮放（含 ARIA radio 鍵盤模式）
+│   │   │   ├── LiveRegion/    # 全域 aria-live 通知（搜尋結果、sync 狀態）
 │   │   │   └── UpdateBanner/  # 更新通知橫幅
 │   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav
 │   │   ├── i18n/              # LanguageSwitcher + 訊息目錄 + useI18n（zh-TW + en）
@@ -274,7 +276,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext（語言／主題／字級皆 localStorage 持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（445 個）
+├── tests/                     # Vitest 測試（469 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

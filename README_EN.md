@@ -3,7 +3,7 @@
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178C6.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19+-61DAFB.svg)](https://reactjs.org/)
-[![Electron](https://img.shields.io/badge/Electron-33+-47848F.svg)](https://www.electronjs.org/)
+[![Electron](https://img.shields.io/badge/Electron-41+-47848F.svg)](https://www.electronjs.org/)
 
 [中文](README.md)
 
@@ -174,13 +174,13 @@ graph TB
 
 | Technology | Purpose | Notes |
 |------------|---------|-------|
-| Electron 33 | Desktop app framework | macOS hiddenInset title bar |
+| Electron 41 | Desktop app framework | macOS hiddenInset title bar |
 | React 19 | UI framework | Function components + hooks |
 | TypeScript 5.7 | Type safety | Strict mode |
-| better-sqlite3 11 | SQLite binding | With FTS5 full-text search |
+| better-sqlite3 12 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 445 tests, run through Electron |
+| Vitest 3 | Test framework | 469 tests, run through Electron |
 
 ---
 
@@ -250,6 +250,7 @@ ccRewind/
 │   │   ├── database.ts        # SQLite + FTS5 management (incl. sessions_fts)
 │   │   ├── indexer.ts         # Incremental indexer
 │   │   ├── summarizer.ts      # Session auto-summary (heuristic)
+│   │   ├── task-parser.ts     # Tasks JSON parser (~/.claude/tasks/)
 │   │   ├── exporter.ts        # Markdown export
 │   │   ├── updater.ts         # GitHub Release update checker
 │   │   └── ipc-handlers.ts    # IPC communication handlers
@@ -266,6 +267,7 @@ ccRewind/
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
 │   │   │   ├── FontScaleSwitcher/ # Three-tier font zoom with ARIA radio keyboard pattern
+│   │   │   ├── LiveRegion/    # Global aria-live announcements (search results, sync status)
 │   │   │   └── UpdateBanner/  # Update notification banner
 │   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav
 │   │   ├── i18n/              # LanguageSwitcher + message catalog + useI18n (zh-TW + en)
@@ -273,7 +275,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (445)
+├── tests/                     # Vitest tests (469)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
