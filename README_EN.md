@@ -71,6 +71,7 @@ Built for depth, not breadth.
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
 | **Full-Text Search** | FTS5 index with pagination, results grouped by session. Two modes: "Messages" (content) and "Tags/Files" (session metadata). Filter by date range (7d/30d/90d) and toggle between relevance or chronological sort |
 | **Search Context Preview** | Expand any search result to see 2 surrounding messages without navigating away. Results show session date and outcome status badge |
+| **Session Star/Bookmark** | Hover to reveal ☆, click to toggle ★, and use the ★ filter to show only starred sessions. Independent `session_stars` table survives reindex; optimistic update for instant feedback |
 
 </details>
 
@@ -334,6 +335,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 7.8 | ✅ Done | UTF-16 lone surrogate normalization: parser-exit `toWellFormed()` guard so the downstream pipeline no longer chokes on malformed unicode (v1.12.2) |
 | 8 | ✅ Done | Tasks Panel: scans `~/.claude/tasks/` and surfaces per-session TODO history snapshots inline in ChatView (migration v18 adds `session_tasks`; append-mode PK decoupled from session reindex) (v1.13.0) |
 | 9 | ✅ Done | Tool-error detection infrastructure (migration v19 adds `tool_error_count`; cross-project scan shows 34.2% of sessions contain `is_error`; UI surface awaits Phase D) + sessionId chip with one-click copy + Renovate-driven dependency upgrades (ADR-003 five packageRules + mac/win electron-smoke) + summarizer skips slash-command wrappers + search-result group headers show the date (v1.14.0) |
+| 10 | ✅ Done | Session star/bookmark: hover-reveal ☆ toggle + ★ filter, independent `session_stars` table (migration v20, no FK, survives reindex) + optimistic update + a11y + i18n (v1.15.0) |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 

@@ -6,6 +6,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.15.0] - 2026-05-26
+
+### Added
+
+- **Session 星號標記**（`2e2d5dd`）。Session 列表支援星號標記：hover 顯示 ☆ 按鈕，點擊切換 ★ 標記，搭配 ★ filter 按鈕只看加星的 session。獨立 `session_stars` 表（migration v20，無 FK），reindex 不會洗掉星號；optimistic update + rollback 確保 UI 即時回饋。支援 a11y（`aria-pressed`、`aria-label`）與 i18n（繁中＋英）。
+
 ## [1.14.0] - 2026-05-21
 
 ### Added

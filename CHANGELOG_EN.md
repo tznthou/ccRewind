@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.15.0] - 2026-05-26
+
+### Added
+
+- **Session star/bookmark** (`2e2d5dd`). Session list now supports star bookmarks: hover to reveal ☆, click to toggle ★, and use the ★ filter button to show only starred sessions. Backed by an independent `session_stars` table (migration v20, no FK) that survives reindex; optimistic update with rollback for instant UI feedback. Full a11y (`aria-pressed`, `aria-label`) and i18n (zh-TW + en).
+
 ## [1.14.0] - 2026-05-21
 
 ### Added
