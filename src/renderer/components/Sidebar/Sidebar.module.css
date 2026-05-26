@@ -149,11 +149,44 @@
   background-color: var(--color-accent-light);
 }
 
+.sessionTitleRow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .sessionTitle {
   font-size: var(--font-size-sm);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.starButton {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  padding: 0 2px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s, color 0.15s;
+}
+
+.sessionItem:hover .starButton,
+.starButton:focus-visible,
+.starActive {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.starActive {
+  color: var(--color-accent);
 }
 
 .sessionMeta {

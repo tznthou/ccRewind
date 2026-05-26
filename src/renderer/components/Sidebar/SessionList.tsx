@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
@@ -27,16 +27,45 @@ export default function SessionList() {
   const parentRef = useRef<HTMLDivElement>(null)
   const itemHeight = SESSION_ITEM_HEIGHT[theme]
   const [sortKey, setSortKey] = useState<SortKey>('time')
+  const [showStarredOnly, setShowStarredOnly] = useState(false)
+  const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    setStarredIds(new Set(sessions.filter(s => s.starred).map(s => s.id)))
+  }, [sessions])
+
+  const toggleStar = useCallback((sessionId: string) => {
+    const wasStarred = starredIds.has(sessionId)
+    setStarredIds(prev => {
+      const next = new Set(prev)
+      if (wasStarred) next.delete(sessionId)
+      else next.add(sessionId)
+      return next
+    })
+    window.api.setSessionStarred(sessionId, !wasStarred).catch(() => {
+      setStarredIds(prev => {
+        const reverted = new Set(prev)
+        if (wasStarred) reverted.add(sessionId)
+        else reverted.delete(sessionId)
+        return reverted
+      })
+    })
+  }, [starredIds])
+
+  const filteredSessions = useMemo(() => {
+    if (!showStarredOnly) return sessions
+    return sessions.filter(s => starredIds.has(s.id))
+  }, [sessions, showStarredOnly, starredIds])
 
   const sortedSessions = useMemo(() => {
     if (sortKey === 'tokens') {
-      return [...sessions].sort((a, b) =>
+      return [...filteredSessions].sort((a, b) =>
         ((b.totalInputTokens ?? 0) + (b.totalOutputTokens ?? 0))
         - ((a.totalInputTokens ?? 0) + (a.totalOutputTokens ?? 0)),
       )
     }
-    return sessions // already sorted by time from hook
-  }, [sessions, sortKey])
+    return filteredSessions
+  }, [filteredSessions, sortKey])
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual 的 useVirtualizer 跟 React Compiler memoization 不相容（third-party API design 限制）
   const virtualizer = useVirtualizer({
@@ -85,8 +114,19 @@ export default function SessionList() {
         >
           Tokens
         </button>
+        <button
+          className={`${styles.sortButton} ${showStarredOnly ? styles.sortActive : ''}`}
+          onClick={() => setShowStarredOnly(prev => !prev)}
+          aria-pressed={showStarredOnly}
+          aria-label={t('sidebar.sessionList.starFilter')}
+        >
+          ★
+        </button>
       </div>
-    <div
+      {showStarredOnly && sortedSessions.length === 0 ? (
+        <div className={styles.statusText}>{t('sidebar.sessionList.empty.noStarred')}</div>
+      ) : (
+      <div
       ref={parentRef}
       className={styles.sessionListContainer}
       aria-label={t('sidebar.sessionList.aria.label')}
@@ -103,6 +143,7 @@ export default function SessionList() {
           const session = sortedSessions[virtualItem.index]
           const isSelected = session.id === selectedSessionId
           const active = isActive(virtualItem.index)
+          const isStarred = starredIds.has(session.id)
           return (
             <div
               key={session.id}
@@ -122,8 +163,27 @@ export default function SessionList() {
                 dispatch({ type: 'SELECT_SESSION', sessionId: session.id })
               }}
             >
-              <div className={styles.sessionTitle}>
-                {session.intentText || session.title || session.id.slice(0, 8)}
+              <div className={styles.sessionTitleRow}>
+                <div className={styles.sessionTitle}>
+                  {session.intentText || session.title || session.id.slice(0, 8)}
+                </div>
+                <button
+                  className={`${styles.starButton} ${isStarred ? styles.starActive : ''}`}
+                  aria-pressed={isStarred}
+                  aria-label={isStarred ? t('sidebar.sessionList.unstar') : t('sidebar.sessionList.star')}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleStar(session.id)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.stopPropagation()
+                    }
+                  }}
+                  tabIndex={-1}
+                >
+                  {isStarred ? '★' : '☆'}
+                </button>
               </div>
               <div className={styles.sessionMeta}>
                 <span>
@@ -166,7 +226,8 @@ export default function SessionList() {
           )
         })}
       </div>
-    </div>
+      </div>
+      )}
     </>
   )
 }

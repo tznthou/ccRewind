@@ -81,6 +81,7 @@ export interface SessionMeta {
   /** Token 彙總（Phase 2.5） */
   totalInputTokens: number | null
   totalOutputTokens: number | null
+  starred: boolean
 }
 
 /** 訊息 */
@@ -427,6 +428,7 @@ export interface ElectronAPI {
   getSubagentSessions: (parentSessionId: string) => Promise<SubagentSession[]>
   /** 取得 session 的 task 清單（依 task_id 數字順序回傳） */
   getSessionTasks: (sessionId: string) => Promise<SessionTask[]>
+  setSessionStarred: (sessionId: string, starred: boolean) => Promise<void>
   /** 訂閱 indexer 進度，回傳取消訂閱函式 */
   onIndexerStatus: (callback: (status: IndexerStatus) => void) => () => void
   /** 手動觸發 reindex（與 focus auto-trigger 共用 in-flight 合併） */
