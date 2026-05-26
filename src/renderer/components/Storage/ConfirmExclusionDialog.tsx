@@ -18,18 +18,24 @@ const HIGH_IMPACT_RATIO = 0.5
 export default function ConfirmExclusionDialog({ title, preview, totalSessions, isApplying, onConfirm, onCancel }: Props) {
   const { t } = useI18n()
   const [acknowledged, setAcknowledged] = useState(false)
+  const isEmpty = preview.sessionCount === 0
   const impactRatio = totalSessions > 0 ? preview.sessionCount / totalSessions : 0
-  const highImpact = impactRatio > HIGH_IMPACT_RATIO
+  const highImpact = !isEmpty && impactRatio > HIGH_IMPACT_RATIO
 
   return (
     <div className={styles.backdrop} onClick={() => { if (!isApplying) onCancel() }}>
       <div className={styles.dialog} onClick={e => e.stopPropagation()}>
         <div className={styles.dialogTitle}>{title}</div>
         <div className={styles.dialogSummary}>
-          <ExclusionPreviewSummary preview={preview} />
-          {totalSessions > 0 && (
-            <span>{t('storage.confirm.impactRatio', { percent: (impactRatio * 100).toFixed(1) })}</span>
-          )}
+          {isEmpty
+            ? <span>{t('storage.confirm.emptyProjectHint')}</span>
+            : <>
+                <ExclusionPreviewSummary preview={preview} />
+                {totalSessions > 0 && (
+                  <span>{t('storage.confirm.impactRatio', { percent: (impactRatio * 100).toFixed(1) })}</span>
+                )}
+              </>
+          }
         </div>
 
         {highImpact && (
@@ -45,7 +51,7 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
             disabled={isApplying}
             onChange={e => setAcknowledged(e.target.checked)}
           />
-          {t('storage.confirm.acknowledge')}
+          {isEmpty ? t('storage.confirm.acknowledgeExclude') : t('storage.confirm.acknowledge')}
         </label>
 
         <div className={styles.dialogActions}>
@@ -55,7 +61,9 @@ export default function ConfirmExclusionDialog({ title, preview, totalSessions, 
             disabled={!acknowledged || isApplying}
             onClick={onConfirm}
           >
-            {isApplying ? t('storage.confirm.deleting') : t('storage.confirm.deleteAction')}
+            {isApplying
+              ? isEmpty ? t('storage.confirm.excluding') : t('storage.confirm.deleting')
+              : isEmpty ? t('storage.confirm.excludeAction') : t('storage.confirm.deleteAction')}
           </button>
         </div>
       </div>
