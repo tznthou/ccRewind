@@ -1,6 +1,6 @@
 # ccRewind — 功能演進路線圖
 
-> 最後更新：2026-05-05
+> 最後更新：2026-05-26
 > 狀態標示：✅ 已交付 / 📋 遠期規劃 / 💤 Backlog
 
 ---
@@ -24,6 +24,10 @@
 | 7.5 | v1.11.0 | ✅ | a11y polish 收尾 + license relicense + README 雙版重組 |
 | 7.6 | v1.12.0 | ✅ | Dashboard readability：i18n + a11y data exposure + visible legend + outcome inference v2 |
 | 7.7 | v1.12.1 | ✅ | Token Budget i18n 補完 + 1M plan 偵測修正 + panel error fail-close |
+| 7.8 | v1.12.2 | ✅ | UTF-16 lone surrogate normalization |
+| 8 | v1.13.0 | ✅ | Tasks Panel：TODO 歷史快照 + append-mode PK |
+| 9 | v1.14.0 | ✅ | Tool-error 偵測基建 + Session ID chip + Renovate + 搜尋日期 header |
+| 10 | v1.15.0 | ✅ | Session 星號標記 + ★ filter |
 | — | — | 📋 | 資料壓縮功能（保留可還原） |
 | — | — | 📋 | In-App 自動更新（待 Apple Developer ID code signing） |
 | — | — | 💤 | 其餘見 Backlog |
@@ -354,6 +358,69 @@
 
 - **問題**：`TokenBudgetPanel` 的 catch path 把 IPC 失敗的 raw `e.message` 直接塞進 `setError` 顯示——可能把內部訊息（檔案路徑、native module error、SQLite reason）漏到 end user，但 panel 對使用者承諾的只是「沒辦法讀 token 統計」
 - **修正**：fail-close——對使用者顯示 generic i18n `tokenBudget.error.loadFailed`，underlying error 只在 DEV build 透過 `console.error` 印；對齊 OWASP A09（Logging Failures）+ A10（內部資訊洩漏）
+
+---
+
+## Phase 7.8 ✅ UTF-16 lone surrogate normalization（v1.12.2）
+
+**目標**：修復 JSONL 中偶爾出現的 UTF-16 lone surrogate（未配對的 `\uD800`–`\uDFFF`）導致下游 pipeline 炸掉的問題。
+
+- Parser 出口加 `toWellFormed()` 防爆，將 lone surrogate 替換為 U+FFFD
+- 放在 ingestion boundary，不做 NFC/NFD 正規化（避免副作用）
+- 既有 JSON.parse 會還原 lone surrogate，`toWellFormed` 在 parse 後接住
+
+---
+
+## Phase 8 ✅ Tasks Panel（v1.13.0）
+
+**目標**：在 ChatView 內顯示 Claude Code 的 TODO 歷史快照，讓使用者回溯「當時想做什麼 / 做到哪 / 卡在哪」。
+
+- 自動掃描 `~/.claude/tasks/{sessionId}/*.json`，解析 subject / status（pending / in_progress / completed）/ blockedBy 依賴
+- Migration v18 新增 `session_tasks` 表，`(session_id, task_id)` 複合 PK
+- Append-mode PK 與 session reindex 解耦——刪掉 session 重建時不會把 task 歷史一起洗掉
+- blockedBy chips 顯示 subject 文字 + 點擊跳轉到被擋的 task（Phase D，PR #38）
+- `task-parser.ts` 寬容解析：malformed JSON 跳過不中斷、空目錄 / `.lock` 檔正常忽略
+
+---
+
+## Phase 9 ✅ Tool-error 偵測基建 + Renovate + 搜尋日期（v1.14.0）
+
+**目標**：四項獨立改進打包交付。
+
+### 9-A. Tool-error 偵測基建
+
+- Migration v19 加 `tool_error_count` 欄位，parser 從 `tool_use_result.is_error === true` 抽取計數
+- 跨專案盤點：34.2% sessions 含 is_error
+- SUMMARY_VERSION 2 → 3 強制 reparse，確保舊 session 補上 error count
+- v1 不上 UI（等 Phase D 收真實資料再評估）
+
+### 9-B. Session ID chip 一鍵複製
+
+- ChatView toolbar 顯示 session UUID chip，點擊複製到剪貼簿
+
+### 9-C. Renovate 自動依賴升級
+
+- ADR-003 決策：採 Renovate，不採 Dependabot
+- 五條 packageRules（Electron stack dashboard approval / TypeScript 分組 / safe patch/minor / GitHub Actions / lockFileMaintenance）
+- `electron-smoke.yml` CI：mac + win 雙平台 smoke test
+- Branch protection 四項 required checks
+
+### 9-D. 搜尋結果日期 + summarizer 修正
+
+- 搜尋結果 group header 顯示 session 日期
+- Summarizer 跳過 slash-command wrapper 訊息，避免摘要被 `/` 指令污染
+
+---
+
+## Phase 10 ✅ Session 星號標記（v1.15.0）
+
+**目標**：讓使用者標記重要 session，快速篩選回顧。
+
+- Hover 顯示 ☆ 按鈕，點擊切換 ★ 標記
+- ★ filter 按鈕：只顯示加星的 session
+- 獨立 `session_stars` 表（migration v20，無 FK），reindex 不洗掉星號
+- Optimistic update：UI 即時回饋，不等 DB 寫完
+- 完整 a11y（aria-pressed、keyboard toggle）+ i18n（zh-TW + en）
 
 ---
 
