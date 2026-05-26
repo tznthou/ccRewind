@@ -7,7 +7,7 @@
 
 [中文](README.md)
 
-Search, inspect, and reconstruct Claude Code sessions. Lightweight, read-only, offline-first — your `~/.claude/` stays untouched.
+Retrace every decision you made with Claude Code. Lightweight, read-only, offline-first — your `~/.claude/` stays untouched.
 
 <p align="center">
   <img src="docs/icon-github.png" alt="ccRewind" width="128" />
@@ -293,11 +293,17 @@ Conversations with Claude Code are scattered across `~/.claude/projects/` as JSO
 
 Existing solutions are either too heavy (RAG, vector search) or solving a different problem (memory injection, context management). I just wanted to quietly revisit past conversations, like flipping through an archaeologist's field notebook.
 
-That's what ccRewind is: an indexed field notebook for AI archaeology.
+So I built ccRewind. At first, it was just that — an indexed field notebook.
 
 ### What Came Next
 
 "Depth over breadth" was the starting principle — but what does "depth" actually mean? Talking with people at AI meetups, an answer slowly formed: not piling on more features, but reading more layers out of the same JSONL. What got changed. Where planning stalled. Whether the conversation went smoothly. How the subagent forked off.
+
+Then it outgrew archaeology.
+
+I'd been browsing old sessions to revisit past design decisions — plain archaeology. When I hit a bug, I'd copy-paste chunks of conversation into the next session as context. At some point I realized: just grab the session ID. Paste it into a new conversation and you jump straight back to that context — faster, sharper, no wall of text.
+
+Archaeology turned into traceability. You think you're browsing history; really you're chasing a decision trail — which conversation buried this bug, where that design pivot happened. Nobody planned that workflow. It emerged from use.
 
 As for which conversations are worth keeping, and how to file them away — that question outgrew this scope and became another tool: ccRecall, the second piece of ccFamily. But that's a story for another day.
 
