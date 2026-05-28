@@ -41,7 +41,8 @@ export default function StoragePage() {
   const openConfirm = useCallback(async (rule: ExclusionRuleInput, title: string) => {
     try {
       const preview = await window.api.previewExclusion(rule)
-      if (preview.sessionCount === 0) {
+      const isProjectOnly = !!(rule.projectId && !rule.dateFrom && !rule.dateTo)
+      if (preview.sessionCount === 0 && !isProjectOnly) {
         return
       }
       setPending({ preview, title })
