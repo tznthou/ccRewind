@@ -305,6 +305,8 @@ I'd been browsing old sessions to revisit past design decisions — plain archae
 
 Archaeology turned into traceability. You think you're browsing history; really you're chasing a decision trail — which conversation buried this bug, where that design pivot happened. Nobody planned that workflow. It emerged from use.
 
+Then the trail went cold. Session JSONL files expire after 30 days by default — `--resume` breaks, the session ID points to nothing. But ccRewind's SQLite is still there. Query `~/.ccrewind/index.db` with Python's built-in `sqlite3` — summaries, tags, file history, all retrievable. Paste it into a new session and the thread picks up again. Traceability, revived. This too wasn't planned.
+
 As for which conversations are worth keeping, and how to file them away — that question outgrew this scope and became another tool: ccRecall, the second piece of ccFamily. But that's a story for another day.
 
 ### Non-goals

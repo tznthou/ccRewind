@@ -306,6 +306,8 @@ ccRewind/
 
 考古裡長出了追溯。你以為自己在翻歷史，其實你在追一條線：這個 bug 是哪段對話埋的？那個設計轉彎是在哪裡決定的？沒人規劃過這件事。是用出來的。
 
+然後那條線斷了。Session JSONL 預設 30 天就清掉，`--resume` 失效，session ID 指向的對話不見了。但 ccRewind 的 SQLite 還在——用 Python 內建的 `sqlite3` 查 `~/.ccrewind/index.db`，摘要、標籤、檔案歷史都撈得回來，貼進新的 session 就接上了。追溯又活了。這也不是規劃出來的。
+
 至於什麼內容值得留下來、我們又該怎麼把它收起來，這條線繼續走下去，長出了 ccRecall，成為 ccFamily 的一環。那又是另外一個故事了。
 
 ### Non-goals
