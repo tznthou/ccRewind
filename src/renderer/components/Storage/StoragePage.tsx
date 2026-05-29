@@ -35,6 +35,7 @@ export default function StoragePage() {
   }, [t])
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- mount-fetch: 載入 storage overview
     refresh()
   }, [refresh])
 

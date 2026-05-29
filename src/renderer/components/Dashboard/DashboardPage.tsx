@@ -85,8 +85,8 @@ export default function DashboardPage() {
 
   useEffect(() => {
     let cancelled = false
-    setLoading(true)
     ;(async () => {
+      setLoading(true)
       try {
         const results = await Promise.allSettled([
           window.api.getUsageStats(projectFilter, range),

@@ -74,6 +74,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   const [showFiles, setShowFiles] = useState(false)
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 切 session 時 reset 面板狀態再 fetch (reset-on-id)
     setShowFiles(false)
     setSessionFiles([])
     let cancelled = false
