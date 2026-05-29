@@ -44,10 +44,13 @@ export default function SearchBar() {
   const searchTypeRef = useRef(searchType)
   const scopeRef = useRef(scope)
   const searchSeqRef = useRef(0)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref: 最新值供 executeSearch async callback 讀, 刻意避免其 identity 變動
   searchTypeRef.current = searchType
+  // eslint-disable-next-line react-hooks/refs -- latest-ref
   scopeRef.current = scope
 
   // 外部清搜尋（如切換專案）時同步 input
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- sync 外部 searchQuery 到本地 input state
   useEffect(() => { setInput(searchQuery) }, [searchQuery])
 
   const announceResult = useCallback((type: SearchScope, count: number, groups: number, q: string) => {
@@ -97,6 +100,7 @@ export default function SearchBar() {
   // filter 變更時，若已有搜尋 query 則自動重新搜尋
   useEffect(() => {
     if (searchQuery) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- filter 變更時重搜, executeSearch 內 setSearching 為刻意
       executeSearch(searchQuery, buildSearchOptions(dateRange, sortBy))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- 只在 filter 變更時觸發

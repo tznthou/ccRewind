@@ -80,6 +80,7 @@ export default function SearchResults() {
 
   const groups = useMemo(() => groupSearchResults(searchResults), [searchResults])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- searchQuery 變更時 reset 摺疊 (reset-on-prop)
   useEffect(() => { setCollapsedGroups(new Set()) }, [searchQuery])
 
   const toggleGroup = (sessionId: string) => {
@@ -150,6 +151,7 @@ export default function SearchResults() {
       {...listboxProps}
     >
       <div className={styles.count}>{t('sidebar.searchResults.count', { count: searchResults.length, groups: groups.length })}</div>
+      {/* eslint-disable-next-line react-hooks/refs -- ref-as-cache: contextCacheRef 快取 context, render 讀取為刻意 */}
       {groups.map((g) => {
         const collapsed = collapsedGroups.has(g.sessionId)
         return (

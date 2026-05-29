@@ -17,7 +17,7 @@ export default function FontScaleSwitcher() {
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLButtonElement>, currentIndex: number) => {
-      let nextIndex = currentIndex
+      let nextIndex: number
       switch (event.key) {
         case 'ArrowRight':
         case 'ArrowDown':
