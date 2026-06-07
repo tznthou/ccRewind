@@ -7,6 +7,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **Attribution tracking (migration v21)**. Parser extracts `attributionSkill`, `attributionPlugin`, `attributionMcpServer`, `attributionMcpTool`, and `attributionAgent` from JSONL top-level fields into the `messages` table. Enables tracing which skill, plugin, or MCP tool generated each AI response — archaeological context like "this answer was produced using context7 MCP + Explore agent." All fields guarded to ≤512 chars, consistent with existing uuid/requestId bounds.
+- **Image block detection + base64 stripping**. `parseContent` now handles `type: "image"` blocks, setting `hasImage` to true. Before storing `contentJson`, base64 image data (`source.type === "base64"`) is precisely stripped (replaced with `[base64-stripped]`), preserving block structure (type, media_type) for future UI placeholders. Prevents screenshots and pasted images from bloating the SQLite DB.
+- **Structured API error parsing**. System messages now store `system_subtype` (≤128 char guard); when `subtype === "api_error"`, the parser extracts `error.status` (HTTP status code, e.g., 529 overloaded) into `api_error_status`. Provides first-party data for degradation detection: SQL-queryable "how many 529 errors in the past 7 days."
+- **Edited file tracking (attachment parsing)**. Parser extracts `filename` from `attachment.type === "edited_text_file"` entries (≤4096 char guard); the summarizer's `extractFileEvents` integrates these as `operation: "edit"` events, automatically feeding into `session_files` and `filesTouched`. Known behavior: the same file may appear in both a tool_use Edit and an edited_text_file attachment, incrementing the aggregated count — does not affect functional correctness.
+
+### Changed
+
+- **`SUMMARY_VERSION` 3 → 4** (rides on migration v21). **The first Sync after upgrading will reparse every session** to populate new fields (attribution, hasImage, systemSubtype, apiErrorStatus) and append edited_text_file session_files events. One-time cost; subsequent syncs return to normal incremental behavior.
+- **`extractFileEvents` structural refactor**. Changed from `continue` early-return to `if` block so the new `editedFilePath` check isn't skipped by the tool_use guard. Logically equivalent refactor with no behavioral change (other than the new editedFilePath events).
+
 ## [1.15.0] - 2026-05-26
 
 ### Added

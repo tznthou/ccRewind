@@ -700,3 +700,257 @@ describe('parseTaskFile', () => {
     expect(result).toBeNull()
   })
 })
+
+// ── v21 schema: image / attribution / api_error / edited_text_file ──
+
+describe('parseContent — image block', () => {
+  it('detects image block and sets hasImage', () => {
+    const content = [
+      { type: 'text', text: 'Here is the screenshot' },
+      { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'iVBOR...' } },
+    ]
+    const result = parseContent(content)
+    expect(result.hasImage).toBe(true)
+    expect(result.contentText).toBe('Here is the screenshot')
+  })
+
+  it('hasImage false when no image block', () => {
+    const content = [{ type: 'text', text: 'No images here' }]
+    const result = parseContent(content)
+    expect(result.hasImage).toBe(false)
+  })
+
+  it('hasImage false for string content', () => {
+    const result = parseContent('Just a string')
+    expect(result.hasImage).toBe(false)
+  })
+
+  it('hasImage false for null content', () => {
+    const result = parseContent(null)
+    expect(result.hasImage).toBe(false)
+  })
+})
+
+describe('parseLine — base64 image stripping in contentJson', () => {
+  it('strips base64 data from image blocks in contentJson', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'img-1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'text', text: 'Look at this' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'A'.repeat(1000) } },
+        ],
+      },
+    })
+    const result = parseLine(line)!
+    expect(result.hasImage).toBe(true)
+    const parsed = JSON.parse(result.contentJson!)
+    expect(parsed[1].type).toBe('image')
+    expect(parsed[1].source.type).toBe('base64')
+    expect(parsed[1].source.media_type).toBe('image/png')
+    expect(parsed[1].source.data).toBe('[base64-stripped]')
+  })
+
+  it('preserves non-base64 image source intact', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'img-2',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'url', url: 'https://example.com/img.png' } },
+        ],
+      },
+    })
+    const result = parseLine(line)!
+    expect(result.hasImage).toBe(true)
+    const parsed = JSON.parse(result.contentJson!)
+    expect(parsed[0].source.url).toBe('https://example.com/img.png')
+  })
+
+  it('does not strip tool_result content even if long', () => {
+    const longContent = 'x'.repeat(2000)
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'tr-1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 't1', content: longContent },
+        ],
+      },
+    })
+    const result = parseLine(line)!
+    expect(result.hasImage).toBe(false)
+    const parsed = JSON.parse(result.contentJson!)
+    expect(parsed[0].content).toBe(longContent)
+  })
+})
+
+describe('parseLine — attribution fields', () => {
+  it('extracts attributionSkill from assistant entry', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attributionSkill: 'save-t',
+      message: { role: 'assistant', content: 'Done' },
+    })
+    const result = parseLine(line)!
+    expect(result.attributionSkill).toBe('save-t')
+    expect(result.attributionPlugin).toBeNull()
+    expect(result.attributionMcpServer).toBeNull()
+    expect(result.attributionMcpTool).toBeNull()
+    expect(result.attributionAgent).toBeNull()
+  })
+
+  it('extracts attributionMcpServer and attributionMcpTool', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a2',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attributionMcpServer: 'context7',
+      attributionMcpTool: 'query-docs',
+      message: { role: 'assistant', content: 'Found docs' },
+    })
+    const result = parseLine(line)!
+    expect(result.attributionMcpServer).toBe('context7')
+    expect(result.attributionMcpTool).toBe('query-docs')
+  })
+
+  it('attributionAgent from subagent entry', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a3',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attributionAgent: 'Explore',
+      message: { role: 'assistant', content: 'Searched' },
+    })
+    const result = parseLine(line)!
+    expect(result.attributionAgent).toBe('Explore')
+  })
+
+  it('non-string attribution values are ignored', () => {
+    const line = JSON.stringify({
+      type: 'assistant',
+      uuid: 'a4',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attributionSkill: 42,
+      message: { role: 'assistant', content: 'Bad' },
+    })
+    const result = parseLine(line)!
+    expect(result.attributionSkill).toBeNull()
+  })
+})
+
+describe('parseLine — system subtype and api_error', () => {
+  it('extracts system subtype', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      uuid: 'sys-1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      subtype: 'turn_duration',
+      durationMs: 5000,
+      content: '',
+    })
+    const result = parseLine(line)!
+    expect(result.systemSubtype).toBe('turn_duration')
+    expect(result.apiErrorStatus).toBeNull()
+  })
+
+  it('extracts api_error status', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      uuid: 'sys-2',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      subtype: 'api_error',
+      error: { status: 529, type: 'overloaded_error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      content: '',
+    })
+    const result = parseLine(line)!
+    expect(result.systemSubtype).toBe('api_error')
+    expect(result.apiErrorStatus).toBe(529)
+  })
+
+  it('api_error with missing error object → null status', () => {
+    const line = JSON.stringify({
+      type: 'system',
+      uuid: 'sys-3',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      subtype: 'api_error',
+      content: '',
+    })
+    const result = parseLine(line)!
+    expect(result.systemSubtype).toBe('api_error')
+    expect(result.apiErrorStatus).toBeNull()
+  })
+
+  it('non-system type → systemSubtype null', () => {
+    const line = JSON.stringify({
+      type: 'user',
+      uuid: 'u-1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      subtype: 'should-be-ignored',
+      message: { role: 'user', content: 'Hi' },
+    })
+    const result = parseLine(line)!
+    expect(result.systemSubtype).toBeNull()
+  })
+})
+
+describe('parseLine — edited_text_file attachment', () => {
+  it('extracts filename from edited_text_file attachment', () => {
+    const line = JSON.stringify({
+      type: 'attachment',
+      uuid: 'att-1',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attachment: {
+        type: 'edited_text_file',
+        filename: '/Users/dev/project/src/app.tsx',
+        snippet: '1\timport React from "react"',
+      },
+    })
+    const result = parseLine(line)!
+    expect(result.editedFilePath).toBe('/Users/dev/project/src/app.tsx')
+  })
+
+  it('non-edited_text_file attachment → editedFilePath null', () => {
+    const line = JSON.stringify({
+      type: 'attachment',
+      uuid: 'att-2',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+      attachment: { type: 'hook_success', hookName: 'start', content: 'ok' },
+    })
+    const result = parseLine(line)!
+    expect(result.editedFilePath).toBeNull()
+  })
+
+  it('missing attachment object → editedFilePath null', () => {
+    const line = JSON.stringify({
+      type: 'attachment',
+      uuid: 'att-3',
+      sessionId: 's1',
+      timestamp: '2026-06-07T00:00:00Z',
+    })
+    const result = parseLine(line)!
+    expect(result.editedFilePath).toBeNull()
+  })
+})

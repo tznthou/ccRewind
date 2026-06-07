@@ -22,6 +22,15 @@ function line(overrides: Partial<ParsedLine> = {}): ParsedLine {
     cacheReadTokens: null,
     cacheCreationTokens: null,
     model: null,
+    hasImage: false,
+    attributionSkill: null,
+    attributionPlugin: null,
+    attributionMcpServer: null,
+    attributionMcpTool: null,
+    attributionAgent: null,
+    systemSubtype: null,
+    apiErrorStatus: null,
+    editedFilePath: null,
     ...overrides,
   }
 }
@@ -875,5 +884,45 @@ describe('computeActiveTime', () => {
       line({ timestamp: '2024-01-01T10:20:00Z' }),  // +600s → skipped
     ]
     expect(computeActiveTime(messages)).toBe(0)
+  })
+})
+
+describe('editedFilePath → session_files integration', () => {
+  it('includes edited_text_file attachment paths in session_files', () => {
+    const { sessionFiles } = summarizeSession([
+      line({ type: 'attachment', editedFilePath: '/src/app.tsx' }),
+    ])
+    expect(sessionFiles.length).toBe(1)
+    expect(sessionFiles[0].filePath).toBe('/src/app.tsx')
+    expect(sessionFiles[0].operation).toBe('edit')
+    expect(sessionFiles[0].count).toBe(1)
+  })
+
+  it('aggregates with tool_use Edit for same file', () => {
+    const { sessionFiles } = summarizeSession([
+      line({
+        type: 'assistant',
+        hasToolUse: true,
+        contentJson: toolUseContent([{ name: 'Edit', input: { file_path: '/src/app.tsx' } }]),
+      }),
+      line({ type: 'attachment', editedFilePath: '/src/app.tsx' }),
+    ])
+    const edits = sessionFiles.filter(f => f.filePath === '/src/app.tsx' && f.operation === 'edit')
+    expect(edits.length).toBe(1)
+    expect(edits[0].count).toBe(2)
+  })
+
+  it('filters noise paths from editedFilePath', () => {
+    const { sessionFiles } = summarizeSession([
+      line({ type: 'attachment', editedFilePath: '/project/node_modules/pkg/index.js' }),
+    ])
+    expect(sessionFiles.length).toBe(0)
+  })
+
+  it('includes editedFilePath in filesTouched', () => {
+    const { summary } = summarizeSession([
+      line({ type: 'attachment', editedFilePath: '/src/utils.ts' }),
+    ])
+    expect(summary.filesTouched).toContain('/src/utils.ts')
   })
 })
