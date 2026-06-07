@@ -34,6 +34,14 @@ export interface MessageInput {
   cacheCreationTokens: number | null
   model: string | null
   toolErrorCount?: number
+  hasImage: boolean
+  attributionSkill: string | null
+  attributionPlugin: string | null
+  attributionMcpServer: string | null
+  attributionMcpTool: string | null
+  attributionAgent: string | null
+  systemSubtype: string | null
+  apiErrorStatus: number | null
 }
 
 /** session_files 寫入用型別 */
@@ -485,6 +493,26 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 21,
+    description: 'add image/attribution/system_subtype/api_error columns to messages; force reindex',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN has_image INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE messages ADD COLUMN attribution_skill TEXT;
+        ALTER TABLE messages ADD COLUMN attribution_plugin TEXT;
+        ALTER TABLE messages ADD COLUMN attribution_mcp_server TEXT;
+        ALTER TABLE messages ADD COLUMN attribution_mcp_tool TEXT;
+        ALTER TABLE messages ADD COLUMN attribution_agent TEXT;
+        ALTER TABLE messages ADD COLUMN system_subtype TEXT;
+        ALTER TABLE messages ADD COLUMN api_error_status INTEGER;
+      `)
+      db.exec(`
+        UPDATE sessions SET file_mtime = NULL;
+        UPDATE subagent_sessions SET file_mtime = NULL;
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -506,6 +534,14 @@ interface MessageRow {
   cache_creation_tokens: number | null
   model: string | null
   tool_error_count: number | null
+  has_image: number
+  attribution_skill: string | null
+  attribution_plugin: string | null
+  attribution_mcp_server: string | null
+  attribution_mcp_tool: string | null
+  attribution_agent: string | null
+  system_subtype: string | null
+  api_error_status: number | null
 }
 
 /** MessageRow → Message 轉換 */
@@ -528,6 +564,14 @@ function mapMessageRow(r: MessageRow): Message {
     cacheCreationTokens: r.cache_creation_tokens,
     model: r.model,
     toolErrorCount: r.tool_error_count ?? 0,
+    hasImage: r.has_image === 1,
+    attributionSkill: r.attribution_skill,
+    attributionPlugin: r.attribution_plugin,
+    attributionMcpServer: r.attribution_mcp_server,
+    attributionMcpTool: r.attribution_mcp_tool,
+    attributionAgent: r.attribution_agent,
+    systemSubtype: r.system_subtype,
+    apiErrorStatus: r.api_error_status,
   }
 }
 
@@ -1145,8 +1189,8 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -1163,6 +1207,9 @@ export class Database {
           m.inputTokens, m.outputTokens, m.cacheReadTokens, m.cacheCreationTokens, m.model,
           m.uuid,
           m.toolErrorCount ?? 0,
+          m.hasImage ? 1 : 0,
+          m.attributionSkill, m.attributionPlugin, m.attributionMcpServer, m.attributionMcpTool, m.attributionAgent,
+          m.systemSubtype, m.apiErrorStatus,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
@@ -1185,7 +1232,9 @@ export class Database {
              mc.content_json, m.has_tool_use, m.has_tool_result,
              m.tool_names, m.timestamp, m.sequence,
              m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count
+             m.tool_error_count, m.has_image,
+             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
+             m.system_subtype, m.api_error_status
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
       WHERE m.session_id = ?
@@ -1202,7 +1251,9 @@ export class Database {
              mc.content_json, m.has_tool_use, m.has_tool_result,
              m.tool_names, m.timestamp, m.sequence,
              m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count
+             m.tool_error_count, m.has_image,
+             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
+             m.system_subtype, m.api_error_status
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
     `

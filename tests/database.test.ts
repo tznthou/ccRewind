@@ -25,6 +25,14 @@ function msg(overrides: Partial<MessageInput> & { type: string; sequence: number
     cacheReadTokens: null,
     cacheCreationTokens: null,
     model: null,
+    hasImage: false,
+    attributionSkill: null,
+    attributionPlugin: null,
+    attributionMcpServer: null,
+    attributionMcpTool: null,
+    attributionAgent: null,
+    systemSubtype: null,
+    apiErrorStatus: null,
     ...overrides,
   }
 }
@@ -1765,5 +1773,74 @@ describe('database maintenance (stats + compact)', () => {
     })
     const result = db.compactDatabase()
     expect(result.releasedBytes).toBeGreaterThanOrEqual(0)
+  })
+})
+
+describe('migration v21: image/attribution/system_subtype/api_error columns', () => {
+  it('schema version is at least 21', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(21)
+  })
+
+  it('new columns exist on messages table', () => {
+    const cols = db.rawAll<{ name: string }>("PRAGMA table_info(messages)")
+    const names = cols.map(c => c.name)
+    expect(names).toContain('has_image')
+    expect(names).toContain('attribution_skill')
+    expect(names).toContain('attribution_plugin')
+    expect(names).toContain('attribution_mcp_server')
+    expect(names).toContain('attribution_mcp_tool')
+    expect(names).toContain('attribution_agent')
+    expect(names).toContain('system_subtype')
+    expect(names).toContain('api_error_status')
+  })
+
+  it('stores and retrieves hasImage', () => {
+    db.upsertProject('p1', 'Project')
+    db.indexSession({
+      sessionId: 'img-sess', projectId: 'p1', projectDisplayName: 'Project',
+      title: 'Image test', messageCount: 1, filePath: '/tmp/i.jsonl', fileSize: 1,
+      fileMtime: '2026-06-07T00:00:00Z', startedAt: '2026-06-07T00:00:00Z', endedAt: null,
+      messages: [msg({ type: 'user', sequence: 0, hasImage: true })],
+    })
+    const msgs = db.getMessages('img-sess')
+    expect(msgs[0].hasImage).toBe(true)
+  })
+
+  it('stores and retrieves attribution fields', () => {
+    db.upsertProject('p1', 'Project')
+    db.indexSession({
+      sessionId: 'attr-sess', projectId: 'p1', projectDisplayName: 'Project',
+      title: 'Attribution test', messageCount: 1, filePath: '/tmp/a.jsonl', fileSize: 1,
+      fileMtime: '2026-06-07T00:00:00Z', startedAt: '2026-06-07T00:00:00Z', endedAt: null,
+      messages: [msg({
+        type: 'assistant', sequence: 0,
+        attributionSkill: 'save-t',
+        attributionMcpServer: 'context7',
+        attributionMcpTool: 'query-docs',
+      })],
+    })
+    const msgs = db.getMessages('attr-sess')
+    expect(msgs[0].attributionSkill).toBe('save-t')
+    expect(msgs[0].attributionPlugin).toBeNull()
+    expect(msgs[0].attributionMcpServer).toBe('context7')
+    expect(msgs[0].attributionMcpTool).toBe('query-docs')
+    expect(msgs[0].attributionAgent).toBeNull()
+  })
+
+  it('stores and retrieves systemSubtype and apiErrorStatus', () => {
+    db.upsertProject('p1', 'Project')
+    db.indexSession({
+      sessionId: 'err-sess', projectId: 'p1', projectDisplayName: 'Project',
+      title: 'Error test', messageCount: 1, filePath: '/tmp/e.jsonl', fileSize: 1,
+      fileMtime: '2026-06-07T00:00:00Z', startedAt: '2026-06-07T00:00:00Z', endedAt: null,
+      messages: [msg({
+        type: 'system', sequence: 0,
+        systemSubtype: 'api_error',
+        apiErrorStatus: 529,
+      })],
+    })
+    const msgs = db.getMessages('err-sess')
+    expect(msgs[0].systemSubtype).toBe('api_error')
+    expect(msgs[0].apiErrorStatus).toBe(529)
   })
 })

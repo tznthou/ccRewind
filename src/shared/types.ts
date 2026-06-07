@@ -105,6 +105,14 @@ export interface Message {
   model: string | null
   /** message.content 內 tool_result block 標 is_error: true 的個數（v19 引入，舊資料未 reindex 為 0） */
   toolErrorCount?: number
+  hasImage: boolean
+  attributionSkill: string | null
+  attributionPlugin: string | null
+  attributionMcpServer: string | null
+  attributionMcpTool: string | null
+  attributionAgent: string | null
+  systemSubtype: string | null
+  apiErrorStatus: number | null
 }
 
 /** Session Token 統計（Context Budget 視覺化用） */
@@ -598,6 +606,15 @@ export interface ParsedLine {
    *  source: JSONL tool_use_result 全量輸出 boolean（true 8.6% / false 91.4%），嚴格 === true 過濾。
    *  用途：degradation detection POC（Task 10），DB 寫入 messages.tool_error_count。 */
   toolErrorCount?: number
+  hasImage: boolean
+  attributionSkill: string | null
+  attributionPlugin: string | null
+  attributionMcpServer: string | null
+  attributionMcpTool: string | null
+  attributionAgent: string | null
+  systemSubtype: string | null
+  apiErrorStatus: number | null
+  editedFilePath: string | null
 }
 
 /** 整個 session 解析結果 */

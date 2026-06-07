@@ -94,7 +94,8 @@ Built for depth, not breadth.
 |---------|-------------|
 | **Statistics Dashboard** | Cross-session analytics: usage trend (dual-axis area chart), efficiency trend (tokens/turn), waste detection (high-token low-outcome sessions with click-to-navigate), project health (outcome stacked bar + trend arrows), tool/tag distribution, work pattern heatmap |
 | **Cross-Session Archaeology** | File history drawer (click a file to see every session that touched it), related session recommendations (Jaccard similarity), expandable file chips |
-| **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions |
+| **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions. Also integrates attachment-level file edit records, covering file changes beyond tool calls |
+| **Attribution Tracking** | Records which Skill, Plugin, MCP Server/Tool, or Agent produced each AI response — trace "how was this answer generated" and reconstruct the decision path from output back to tooling |
 | **Session Auto-Summary** | Structured rule engine: intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), outcome inference (committed/tested/in-progress), and 20+ multi-signal tags |
 | **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
 | **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. Append-mode (session_id, task_id) PK is decoupled from session reindex, so deleting and rebuilding a session never wipes its task history |
@@ -109,6 +110,7 @@ Built for depth, not breadth.
 | **Data Preservation** | Automatically archives conversations when JSONL files are deleted. No history is ever lost |
 | **Storage Management** | Inspect index DB footprint (size, session/message counts, per-project breakdown with visual bars) and reclaim space via exclusion rules — exclude an entire project in one click, or a date range, or remove existing rules. Every destructive action funnels through a unified confirm dialog (checkbox acknowledgement + red banner above 50% impact), with an apply-token IPC handshake closing the renderer trust-boundary gap |
 | **DB Compaction** | Storage page surfaces reclaimable space (`freelist × page_size` from live PRAGMA reads) with a one-click VACUUM button that releases pages left behind by SQLite DELETE. The confirm dialog spells out that compaction only reorganizes file structure and never deletes conversations |
+| **Image Block Handling** | Detects screenshots and pasted images in conversations, flagging messages that contain images. Precisely strips base64 image data during storage (preserving structural metadata), preventing index database bloat |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
 | **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
 
@@ -180,7 +182,7 @@ graph TB
 | better-sqlite3 12 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 469 tests, run through Electron |
+| Vitest 3 | Test framework | 496 tests, run through Electron |
 
 ---
 
@@ -346,6 +348,7 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 | 8 | ✅ Done | Tasks Panel: scans `~/.claude/tasks/` and surfaces per-session TODO history snapshots inline in ChatView (migration v18 adds `session_tasks`; append-mode PK decoupled from session reindex) (v1.13.0) |
 | 9 | ✅ Done | Tool-error detection infrastructure (migration v19 adds `tool_error_count`; cross-project scan shows 34.2% of sessions contain `is_error`; UI surface awaits Phase D) + sessionId chip with one-click copy + Renovate-driven dependency upgrades (ADR-003 five packageRules + mac/win electron-smoke) + summarizer skips slash-command wrappers + search-result group headers show the date (v1.14.0) |
 | 10 | ✅ Done | Session star/bookmark: hover-reveal ☆ toggle + ★ filter, independent `session_stars` table (migration v20, no FK, survives reindex) + optimistic update + a11y + i18n (v1.15.0) |
+| 11 | ✅ Done | JSONL schema v21: attribution tracking (skill/plugin/MCP/agent) + image block detection with base64 stripping + structured API error parsing + edited_text_file integration into session_files |
 | — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
 | — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
 

@@ -3,8 +3,8 @@ import type { SessionFileInput } from './database'
 
 /** 摘要引擎版本（每次規則改動時遞增，讓 backfill 可追蹤） */
 // v3 (2026-05-18): parser 抽 is_error → messages.tool_error_count (Task 10 Phase C / migration v19)。
-// 升版觸發 indexer 視所有舊 session 為 stale，下次 Sync 重 parse 填 tool_error_count。
-export const SUMMARY_VERSION = 3
+// v4 (2026-06-07): edited_text_file attachment → session_files; image/attribution/apiError (migration v21)。
+export const SUMMARY_VERSION = 4
 
 const MAX_INTENT_LEN = 120
 const MAX_SUMMARY_LEN = 300
@@ -314,24 +314,31 @@ function extractFileEvents(messages: ParsedLine[]): FileEvent[] {
   const events: FileEvent[] = []
   for (let seq = 0; seq < messages.length; seq++) {
     const msg = messages[seq]
-    if (!msg.hasToolUse || !msg.contentJson) continue
-    try {
-      const content = JSON.parse(msg.contentJson) as unknown[]
-      for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
-        const b = block as Record<string, unknown>
-        if (b.type !== 'tool_use') continue
-        const name = b.name as string
-        const pathKey = FILE_PATH_KEYS[name]
-        if (!pathKey) continue
-        const input = b.input as Record<string, unknown> | undefined
-        const filePath = input?.[pathKey]
-        if (typeof filePath !== 'string' || !filePath) continue
-        if (isNoisePath(filePath)) continue
-        const operation = TOOL_OPERATION_MAP[name] ?? 'discovery'
-        events.push({ filePath, operation, sequence: seq })
-      }
-    } catch { /* malformed contentJson */ }
+    // tool_use blocks
+    if (msg.hasToolUse && msg.contentJson) {
+      try {
+        const content = JSON.parse(msg.contentJson) as unknown[]
+        for (const block of content) {
+          if (typeof block !== 'object' || block === null) continue
+          const b = block as Record<string, unknown>
+          if (b.type !== 'tool_use') continue
+          const name = b.name as string
+          const pathKey = FILE_PATH_KEYS[name]
+          if (!pathKey) continue
+          const input = b.input as Record<string, unknown> | undefined
+          const filePath = input?.[pathKey]
+          if (typeof filePath !== 'string' || !filePath) continue
+          if (isNoisePath(filePath)) continue
+          const operation = TOOL_OPERATION_MAP[name] ?? 'discovery'
+          events.push({ filePath, operation, sequence: seq })
+        }
+      } catch { /* malformed contentJson */ }
+    }
+
+    // edited_text_file attachment（CC v2.1.168+）
+    if (msg.editedFilePath && !isNoisePath(msg.editedFilePath)) {
+      events.push({ filePath: msg.editedFilePath, operation: 'edit', sequence: seq })
+    }
   }
   return events
 }

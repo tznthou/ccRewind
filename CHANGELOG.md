@@ -6,6 +6,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [Unreleased]
+
+### Added
+
+- **Attribution 歸因追蹤（migration v21）**。Parser 從 JSONL 頂層提取 `attributionSkill`、`attributionPlugin`、`attributionMcpServer`、`attributionMcpTool`、`attributionAgent` 五個欄位，寫入 `messages` 表。可追溯每條 AI 回覆使用了哪個 skill、plugin 或 MCP 工具——「這段回答是用 context7 MCP + Explore agent 生成的」這類考古線索。所有欄位附 ≤512 字元長度 guard，對齊既有 uuid/requestId 防護模式。
+- **Image block 偵測 + base64 剝離**。`parseContent` 新增 `case 'image'`，訊息含圖片時 `hasImage` 標記為 true。`contentJson` 序列化前精確剝除 `source.type === 'base64'` 的 image block data（替換為 `[base64-stripped]`），保留 block 結構（type、media_type）供 UI 未來做 placeholder。防止截圖貼圖導致 SQLite DB 膨脹。
+- **API error 結構化解析**。`system` 訊息新增 `system_subtype` 欄位存儲（≤128 字元 guard）；`subtype === 'api_error'` 時提取 `error.status`（HTTP status code，如 529 overloaded）存入 `api_error_status`。為 degradation detection 提供一手資料：可 SQL 查詢「過去 7 天 529 錯誤出現幾次」。
+- **Edited file 追蹤（attachment 解析）**。Parser 從 `attachment.type === 'edited_text_file'` 提取 `filename`（≤4096 字元 guard），Summarizer 的 `extractFileEvents` 整合為 `operation: 'edit'` 事件，自動計入 `session_files` 和 `filesTouched`。已知行為：同一檔案可能同時有 tool_use Edit 和 edited_text_file attachment，聚合後 count 會多算，不影響功能正確性。
+
+### Changed
+
+- **`SUMMARY_VERSION` 3 → 4**（隨 migration v21）。**升級後第一次 Sync 會 reparse 所有 sessions**，用來填入新欄位（attribution、hasImage、systemSubtype、apiErrorStatus）並補充 edited_text_file 的 session_files 事件。一次性副作用，後續同步走正常增量。
+- **`extractFileEvents` 結構重構**。從 `continue` early-return 改為 `if` block，讓 `editedFilePath` 檢查不被 tool_use guard 跳過。純邏輯等價重構，無行為變化（除了新增 editedFilePath 事件）。
+
 ## [1.15.0] - 2026-05-26
 
 ### Added

@@ -107,6 +107,14 @@ function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
     cacheCreationTokens: msg.cacheCreationTokens,
     model: msg.model,
     toolErrorCount: msg.toolErrorCount,
+    hasImage: msg.hasImage,
+    attributionSkill: msg.attributionSkill,
+    attributionPlugin: msg.attributionPlugin,
+    attributionMcpServer: msg.attributionMcpServer,
+    attributionMcpTool: msg.attributionMcpTool,
+    attributionAgent: msg.attributionAgent,
+    systemSubtype: msg.systemSubtype,
+    apiErrorStatus: msg.apiErrorStatus,
   }))
 }
 

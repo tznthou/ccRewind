@@ -5,6 +5,7 @@ interface ContentResult {
   contentText: string | null
   hasToolUse: boolean
   hasToolResult: boolean
+  hasImage: boolean
   toolNames: string[]
   isCommandWrapped: boolean
   toolErrorCount: number
@@ -58,22 +59,23 @@ export function ensureWellFormed(s: string): string {
 /** 解析 message.content 欄位，處理 string 和 array 兩種格式 */
 export function parseContent(content: unknown): ContentResult {
   if (content == null) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, hasImage: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
   }
 
   if (typeof content === 'string') {
     const isCommandWrapped = hasCommandWrapper(content)
     const cleaned = ensureWellFormed(stripSystemXml(content))
-    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped, toolErrorCount: 0 }
+    return { contentText: cleaned || null, hasToolUse: false, hasToolResult: false, hasImage: false, toolNames: [], isCommandWrapped, toolErrorCount: 0 }
   }
 
   if (!Array.isArray(content)) {
-    return { contentText: null, hasToolUse: false, hasToolResult: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
+    return { contentText: null, hasToolUse: false, hasToolResult: false, hasImage: false, toolNames: [], isCommandWrapped: false, toolErrorCount: 0 }
   }
 
   const textParts: string[] = []
   let hasToolUse = false
   let hasToolResult = false
+  let hasImage = false
   const toolNames: string[] = []
   let isCommandWrapped = false
   let toolErrorCount = 0
@@ -96,10 +98,11 @@ export function parseContent(content: unknown): ContentResult {
         break
       case 'tool_result':
         hasToolResult = true
-        // is_error 全量輸出 boolean（true 8.6%, false 91.4%, 無字串/數字變體）→ 嚴格 === true 過濾
         if (b.is_error === true) toolErrorCount++
         break
-      // thinking, server_tool_use 等 → 跳過
+      case 'image':
+        hasImage = true
+        break
     }
   }
 
@@ -107,6 +110,7 @@ export function parseContent(content: unknown): ContentResult {
     contentText: textParts.length > 0 ? textParts.join('\n') : null,
     hasToolUse,
     hasToolResult,
+    hasImage,
     toolNames,
     isCommandWrapped,
     toolErrorCount,
@@ -140,6 +144,19 @@ function parseUsage(message: Record<string, unknown>): {
   }
 }
 
+/** Strip base64 data from image content blocks before storage, preserving block structure for UI placeholder */
+function stripImageBase64(content: unknown): unknown {
+  if (!Array.isArray(content)) return content
+  return content.map(block => {
+    if (block == null || typeof block !== 'object') return block
+    const b = block as Record<string, unknown>
+    if (b.type !== 'image') return block
+    const source = b.source as Record<string, unknown> | undefined
+    if (!source || typeof source !== 'object' || source.type !== 'base64') return block
+    return { ...b, source: { ...source, data: '[base64-stripped]' } }
+  })
+}
+
 /** 解析單行 JSONL，失敗回傳 null */
 export function parseLine(line: string): ParsedLine | null {
   if (!line.trim()) return null
@@ -168,6 +185,7 @@ export function parseLine(line: string): ParsedLine | null {
   let contentJson: string | null = null
   let hasToolUse = false
   let hasToolResult = false
+  let hasImage = false
   let toolNames: string[] = []
   let inputTokens: number | null = null
   let outputTokens: number | null = null
@@ -186,11 +204,13 @@ export function parseLine(line: string): ParsedLine | null {
     contentText = result.contentText
     hasToolUse = result.hasToolUse
     hasToolResult = result.hasToolResult
+    hasImage = result.hasImage
     toolNames = result.toolNames
     isCommandWrapped = result.isCommandWrapped
     toolErrorCount = result.toolErrorCount
-    contentJson = message.content != null
-      ? JSON.stringify(message.content, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
+    const strippedContent = hasImage ? stripImageBase64(message.content) : message.content
+    contentJson = strippedContent != null
+      ? JSON.stringify(strippedContent, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
       : null
 
     // Token usage（僅 assistant 訊息有值）
@@ -206,6 +226,37 @@ export function parseLine(line: string): ParsedLine | null {
     if (hasCommandWrapper(rawContent)) isCommandWrapped = true
     const cleaned = ensureWellFormed(stripSystemXml(rawContent))
     contentText = cleaned || null
+  }
+
+  // Attribution（頂層欄位，非 message 內；length cap 對齊 uuid/requestId guard）
+  const attributionSkill = typeof obj.attributionSkill === 'string' && obj.attributionSkill.length <= 512 ? obj.attributionSkill : null
+  const attributionPlugin = typeof obj.attributionPlugin === 'string' && obj.attributionPlugin.length <= 512 ? obj.attributionPlugin : null
+  const attributionMcpServer = typeof obj.attributionMcpServer === 'string' && obj.attributionMcpServer.length <= 512 ? obj.attributionMcpServer : null
+  const attributionMcpTool = typeof obj.attributionMcpTool === 'string' && obj.attributionMcpTool.length <= 512 ? obj.attributionMcpTool : null
+  const attributionAgent = typeof obj.attributionAgent === 'string' && obj.attributionAgent.length <= 512 ? obj.attributionAgent : null
+
+  // System subtype + API error
+  let systemSubtype: string | null = null
+  let apiErrorStatus: number | null = null
+  if (type === 'system') {
+    const rawSubtype = typeof obj.subtype === 'string' ? obj.subtype : null
+    systemSubtype = rawSubtype && rawSubtype.length <= 128 ? rawSubtype : null
+    if (systemSubtype === 'api_error') {
+      const err = obj.error as Record<string, unknown> | undefined
+      if (err && typeof err === 'object') {
+        apiErrorStatus = typeof err.status === 'number' ? err.status : null
+      }
+    }
+  }
+
+  // Attachment: edited_text_file
+  let editedFilePath: string | null = null
+  if (type === 'attachment') {
+    const att = obj.attachment as Record<string, unknown> | undefined
+    if (att && typeof att === 'object' && att.type === 'edited_text_file') {
+      const rawPath = typeof att.filename === 'string' ? att.filename : null
+      editedFilePath = rawPath && rawPath.length <= 4096 ? rawPath : null
+    }
   }
 
   return {
@@ -229,6 +280,15 @@ export function parseLine(line: string): ParsedLine | null {
     requestId,
     isCommandWrapped,
     toolErrorCount,
+    hasImage,
+    attributionSkill,
+    attributionPlugin,
+    attributionMcpServer,
+    attributionMcpTool,
+    attributionAgent,
+    systemSubtype,
+    apiErrorStatus,
+    editedFilePath,
   }
 }
 
