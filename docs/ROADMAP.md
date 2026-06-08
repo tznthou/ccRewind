@@ -1,6 +1,6 @@
 # ccRewind — 功能演進路線圖
 
-> 最後更新：2026-05-26
+> 最後更新：2026-06-08
 > 狀態標示：✅ 已交付 / 📋 遠期規劃 / 💤 Backlog
 
 ---
@@ -28,6 +28,7 @@
 | 8 | v1.13.0 | ✅ | Tasks Panel：TODO 歷史快照 + append-mode PK |
 | 9 | v1.14.0 | ✅ | Tool-error 偵測基建 + Session ID chip + Renovate + 搜尋日期 header |
 | 10 | v1.15.0 | ✅ | Session 星號標記 + ★ filter |
+| 11 | v1.16.0 | ✅ | JSONL schema v21：Attribution + image + api_error + edited_text_file |
 | — | — | 📋 | 資料壓縮功能（保留可還原） |
 | — | — | 📋 | In-App 自動更新（待 Apple Developer ID code signing） |
 | — | — | 💤 | 其餘見 Backlog |
@@ -421,6 +422,40 @@
 - 獨立 `session_stars` 表（migration v20，無 FK），reindex 不洗掉星號
 - Optimistic update：UI 即時回饋，不等 DB 寫完
 - 完整 a11y（aria-pressed、keyboard toggle）+ i18n（zh-TW + en）
+
+---
+
+## Phase 11 ✅ JSONL schema v21（v1.16.0）
+
+**目標**：解析 Claude Code v2.1.168 新增的 4 類 JSONL schema 變化，讓考古資料更完整。
+
+### 11-A. Attribution 歸因追蹤
+
+- Parser 從 assistant entries 頂層提取 `attributionSkill` / `attributionPlugin` / `attributionMcpServer` / `attributionMcpTool` / `attributionAgent` 五個欄位
+- 可追溯每條 AI 回覆使用了哪個 skill、plugin 或 MCP 工具
+- 所有欄位附 ≤512 字元長度 guard
+
+### 11-B. Image block 偵測 + base64 剝離
+
+- `parseContent` 新增 `case 'image'`，訊息含圖片時 `hasImage` 標記為 true
+- `contentJson` 序列化前精確剝除 `source.type === 'base64'` 的 image block data（替換為 `[base64-stripped]`），保留 block 結構
+- 防止截圖貼圖導致 SQLite DB 膨脹
+
+### 11-C. API error 結構化解析
+
+- `system` 訊息新增 `system_subtype` 欄位（≤128 字元 guard）
+- `subtype === 'api_error'` 時提取 `error.status`（HTTP status code）存入 `api_error_status`
+- 為 degradation detection 提供一手資料
+
+### 11-D. Edited file 追蹤（attachment 解析）
+
+- Parser 從 `attachment.type === 'edited_text_file'` 提取 `filename`（≤4096 字元 guard）
+- Summarizer `extractFileEvents` 整合為 `operation: 'edit'` 事件，自動計入 `session_files` 和 `filesTouched`
+
+### Migration & 版本
+
+- Migration v21 加 8 欄位到 messages 表，invalidate file_mtime 強制 reindex
+- `SUMMARY_VERSION` 3 → 4，第一次 Sync 會 reparse 所有 sessions 填入新欄位
 
 ---
 

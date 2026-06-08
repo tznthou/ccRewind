@@ -130,4 +130,4 @@ Sidebar 最上方的搜尋列支援兩種模式（右側 radio 切換）：
 索引資料庫在 `~/.ccrewind/index.db`（macOS / Linux）或對應的 home 目錄。刪掉整個 `~/.ccrewind/` 資料夾，下次啟動會從零重建。
 
 **沒有 API Key 可以用嗎？**
-可以。所有核心功能（瀏覽、搜尋、摘要、標籤、Dashboard、匯出）都是本地規則引擎生成，零 API 成本。未來 BYOK 模式會是可選的加值選項。
+可以。所有功能（瀏覽、搜尋、摘要、標籤、Dashboard、匯出）都是本地規則引擎生成，零 API 成本，不需要任何 API Key。
