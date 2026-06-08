@@ -327,31 +327,6 @@ If what you need is "make Claude remember what was said before," look at memory 
 
 See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 
-| Phase | Status | Theme |
-|-------|--------|-------|
-| 1 | ✅ Done | Foundation: table splitting, data preservation, pagination, grouping |
-| 2 | ✅ Done | Session summary (heuristic), search context preview, scope expansion |
-| 2.5 | ✅ Done | Context Budget: token usage tracking, area chart, pie chart, heat bar, sorting |
-| 2.6 | ✅ Done | Token Insights Engine: auto-interpret charts (spike detection, cache assessment, hot spot marking, trend analysis) |
-| 3 | ✅ Done | Summary quality upgrade + file reverse index (cross-session archaeology foundation) |
-| 3.5 | ✅ Done | Statistics dashboard + cross-session archaeology UI |
-| 4 | ✅ Done | Advanced dashboard: efficiency trends, waste detection, project health |
-| 4.5 | ✅ Done | Search UX: date filter, sort toggle, intent_text search, result date & outcome badges |
-| 5 | ✅ Done | Active time calculation + subagent indexing + requestId token dedup |
-| 5.5 | ✅ Done | Subagent frontend UI: chip navigation + breadcrumb back |
-| 6 | ✅ Done | Storage management: exclusion_rules + overview page + project breakdown + date-range rules + IPC apply-token handshake + indexer skip (v1.9.0) |
-| 7 | ✅ Done | i18n + comprehensive a11y upgrade: bilingual UI (zh-TW + en), keyboard navigation, aria-live announcements, font scale, sync UX (v1.10.0) |
-| 7.5 | ✅ Done | a11y polish + license relicense (AGPL-3.0 → GPL-3.0-or-later) + README bilingual restructure (v1.11.0) |
-| 7.6 | ✅ Done | Dashboard readability pass: full i18n across 7 cards + a11y data exposure (chart values now reach screen readers) + visible outcome legend + outcome inference v2 (NULL 53% → 15.3%) (v1.12.0) |
-| 7.7 | ✅ Done | Token Budget subsystem i18n completion (engine refactored to discriminated-union `InsightData`, 43 keys lockstep) + 1M plan detection fix (226K no longer misreported as "113% of 200K") + panel error message fails closed (v1.12.1) |
-| 7.8 | ✅ Done | UTF-16 lone surrogate normalization: parser-exit `toWellFormed()` guard so the downstream pipeline no longer chokes on malformed unicode (v1.12.2) |
-| 8 | ✅ Done | Tasks Panel: scans `~/.claude/tasks/` and surfaces per-session TODO history snapshots inline in ChatView (migration v18 adds `session_tasks`; append-mode PK decoupled from session reindex) (v1.13.0) |
-| 9 | ✅ Done | Tool-error detection infrastructure (migration v19 adds `tool_error_count`; cross-project scan shows 34.2% of sessions contain `is_error`; UI surface awaits Phase D) + sessionId chip with one-click copy + Renovate-driven dependency upgrades (ADR-003 five packageRules + mac/win electron-smoke) + summarizer skips slash-command wrappers + search-result group headers show the date (v1.14.0) |
-| 10 | ✅ Done | Session star/bookmark: hover-reveal ☆ toggle + ★ filter, independent `session_stars` table (migration v20, no FK, survives reindex) + optimistic update + a11y + i18n (v1.15.0) |
-| 11 | ✅ Done | JSONL schema v21: attribution tracking (skill/plugin/MCP/agent) + image block detection with base64 stripping + structured API error parsing + edited_text_file integration into session_files |
-| — | 📋 Future | Data compression (preserve-and-compact alternative to the absolute hard-delete of exclusion) |
-| — | 📋 Future | In-app auto-update (requires Apple Developer ID code signing) |
-
 ---
 
 ## License

@@ -328,31 +328,6 @@ ccRewind 刻意不做這些事：
 
 詳見 [docs/ROADMAP.md](docs/ROADMAP.md)。
 
-| Phase | 狀態 | 主題 |
-|-------|------|------|
-| 1 | ✅ 完成 | 基礎建設：表拆分、資料保全、分頁、分組 |
-| 2 | ✅ 完成 | Session 摘要（規則式）、搜尋上下文預覽、Scope 擴展 |
-| 2.5 | ✅ 完成 | Context Budget 視覺化：token 用量追蹤、面積圖、圓餅圖、熱力條、排序 |
-| 2.6 | ✅ 完成 | Token Insights Engine：自動解讀圖表（spike 偵測、cache 評估、熱點標記、趨勢分析） |
-| 3 | ✅ 完成 | 摘要品質升級 + 檔案反向索引（跨 Session 考古地基） |
-| 3.5 | ✅ 完成 | 統計儀表板 + 跨 Session 考古 UI（護城河版本） |
-| 4 | ✅ 完成 | Dashboard 進階功能：效率趨勢、浪費偵測、專案健康度 |
-| 4.5 | ✅ 完成 | 搜尋體驗強化：日期過濾、排序切換、intent_text 搜尋、結果日期與 outcome badge |
-| 5 | ✅ 完成 | Active Time 計算 + Subagent 索引 + requestId Token 去重 |
-| 5.5 | ✅ 完成 | Subagent 前端 UI：chips 導覽 + breadcrumb 返回 |
-| 6 | ✅ 完成 | 儲存管理：exclusion_rules + 總覽頁 + 專案佔用 + 日期範圍排除 + IPC apply-token handshake + indexer skip（v1.9.0） |
-| 7 | ✅ 完成 | i18n + 全面 a11y 升級：繁中／英雙語、鍵盤導覽、aria-live announcements、字級縮放、sync UX（v1.10.0） |
-| 7.5 | ✅ 完成 | a11y polish 收尾 + License relicense（AGPL-3.0 → GPL-3.0-or-later）+ README 雙版重組（v1.11.0） |
-| 7.6 | ✅ 完成 | Dashboard readability：7 cards 完整 i18n + a11y data exposure（SR 聽得到 chart 數值）+ ProjectHealth visible legend + outcome inference v2（NULL 53%→15.3%）（v1.12.0） |
-| 7.7 | ✅ 完成 | Token Budget 子系統 i18n 補完（engine 改 discriminated-union InsightData、43 keys lockstep）+ 1M plan 偵測修正（226K 不再被誤報「113% of 200K」）+ panel 錯誤訊息 fail-close（v1.12.1） |
-| 7.8 | ✅ 完成 | UTF-16 lone surrogate normalization：parser 出口加 `toWellFormed()` 防爆，下游 pipeline 不再被破損的 unicode 卡住（v1.12.2） |
-| 8 | ✅ 完成 | Tasks Panel：掃描 `~/.claude/tasks/` 在 ChatView 顯示 TODO 歷史快照（migration v18 新增 session_tasks 表、append-mode PK 解耦 session reindex）（v1.13.0） |
-| 9 | ✅ 完成 | Tool-error 偵測基建（migration v19 加 `tool_error_count`，跨專案盤點 34.2% sessions 含 `is_error`，等 Phase D 上 UI）+ Session ID chip 一鍵複製 + Renovate 自動依賴升級（ADR-003 五條 packageRules + mac/win electron-smoke）+ summarizer 跳過 slash-command wrapper + 搜尋結果 group header 顯示日期（v1.14.0） |
-| 10 | ✅ 完成 | Session 星號標記：hover 顯示 ☆ 按鈕 + ★ filter，獨立 `session_stars` 表（migration v20，無 FK，reindex 不洗掉）+ optimistic update + a11y + i18n（v1.15.0） |
-| 11 | ✅ 完成 | JSONL schema v21：Attribution 歸因追蹤（skill/plugin/MCP/agent）+ image block 偵測與 base64 剝離 + API error 結構化解析 + edited_text_file 檔案追蹤整合 session_files |
-| — | 📋 遠期 | 資料壓縮功能（保留可還原，補 exclusion 硬刪的絕對性） |
-| — | 📋 遠期 | In-App 自動更新（待 Apple Developer ID code signing） |
-
 ---
 
 ## 授權
