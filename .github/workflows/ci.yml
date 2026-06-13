@@ -18,13 +18,13 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '20.20.2'
           cache: 'pnpm'
 
       - name: Setup Python (for node-gyp fallback path)
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -46,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '20.20.2'
           cache: 'pnpm'
 
       - name: Cache Electron binary
@@ -59,7 +59,7 @@ jobs:
       - name: Setup Python (for node-gyp fallback path)
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
