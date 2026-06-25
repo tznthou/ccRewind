@@ -70,7 +70,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'  # node 22 for better-sqlite3 prebuild (see electron-smoke.yml)
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -139,7 +139,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'  # node 22 for better-sqlite3 prebuild (see electron-smoke.yml)
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
