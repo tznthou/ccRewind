@@ -1550,12 +1550,17 @@ describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
   })
 
   it('inactive: threshold picks old sessions only', () => {
-    // 所有 seeded session 都是 2026-01 ~ 03 的，當前時間為 2026-04-20（見 env context）
+    // getInactiveSessions 以 SQLite DATE('now') 計算門檻，樣本必須相對真實時間產生，不可寫死日期：
+    // 否則時間推移後近期樣本會漂過 90 天門檻造成假性失敗（原寫死「當前為 2026-04-20」的假設已於 2026-06 失效）。
+    const DAY_MS = 24 * 60 * 60 * 1000
+    const oldEndedAt = new Date(Date.now() - 200 * DAY_MS).toISOString()
+    const recentEndedAt = new Date(Date.now() - 10 * DAY_MS).toISOString()
+    seedSession('s-old', 'proj-b', '/b', oldEndedAt, 1)
+    seedSession('s-recent', 'proj-b', '/b', recentEndedAt, 1)
     const inactive90 = db.getInactiveSessions(90)
-    // 超過 90 天的 → s-a1 (100+ 天) 應該被挑
-    expect(inactive90.map(s => s.sessionId)).toContain('s-a1')
-    // 最近的 s-b1 (~30 天) 不應該被挑
-    expect(inactive90.map(s => s.sessionId)).not.toContain('s-b1')
+    // 200 天前 -> 超過門檻 -> 應被挑；10 天前 -> 未達門檻 -> 不應被挑
+    expect(inactive90.map(s => s.sessionId)).toContain('s-old')
+    expect(inactive90.map(s => s.sessionId)).not.toContain('s-recent')
   })
 
   it('inactive: threshold 0 picks all sessions with ended_at', () => {
