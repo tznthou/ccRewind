@@ -20,7 +20,11 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          # node 22 (not 20): better-sqlite3 ships a node-v127 win32 prebuild, so `pnpm install`
+          # fetches it instead of source-building. node 20 has no prebuild, falls back to node-gyp,
+          # and needs Visual Studio -- which broke when the runner moved to VS18. electron-rebuild
+          # (postinstall/dist) uses the electron-v145 prebuild. Net: zero native compilation.
+          node-version: '22'
 
       - name: Setup Python (for node-gyp fallback path)
         uses: actions/setup-python@v6
