@@ -1,0 +1,59 @@
+.thinkingBlock {
+  margin: var(--space-sm) 0;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  cursor: pointer;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg-sidebar);
+  user-select: none;
+}
+
+.summary:hover,
+.summary:focus-visible {
+  background-color: var(--color-bg-hover);
+}
+
+.summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+
+.icon {
+  font-size: var(--font-size-sm);
+  flex-shrink: 0;
+}
+
+.label {
+  font-size: var(--font-size-xs);
+  font-style: italic;
+}
+
+.content {
+  padding: var(--space-md);
+  font-size: var(--font-size-sm);
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  background-color: var(--color-bg);
+  border-top: 1px dashed var(--color-border);
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* Theme A — Archive: hard shadow（與 ToolBlock 視覺一致） */
+:global([data-theme="archive"]) .thinkingBlock {
+  box-shadow: var(--shadow-card);
+}
+
+/* Theme C — Terminal: mono summary */
+:global([data-theme="terminal"]) .summary {
+  font-family: var(--font-code);
+}

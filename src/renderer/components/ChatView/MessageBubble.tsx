@@ -1,7 +1,9 @@
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
+import ThinkingBlock from './ThinkingBlock'
+import { extractThinkingBlocks } from './contentBlocks'
 import { formatTime } from '../../utils/formatTime'
 import { highlightText } from '../../utils/highlightText'
 import { useI18n } from '../../i18n/useI18n'
@@ -52,13 +54,14 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
+  const thinkingBlocks = useMemo(() => extractThinkingBlocks(message.contentJson), [message.contentJson])
   const heatProps = !isUser ? getHeatProps(heat) : undefined
 
   // last-prompt 不顯示
   if (message.type === 'last-prompt') return null
 
-  // 無可顯示內容（如僅含 thinking blocks）→ 不渲染空氣泡
-  if (!message.contentText && toolBlocks.length === 0) return null
+  // 完全無可顯示內容 → 不渲染空氣泡（thinking 現在會渲染，故一併納入判斷）
+  if (!message.contentText && toolBlocks.length === 0 && thinkingBlocks.length === 0) return null
 
   // queue-operation 顯示為系統提示
   if (isSystem) {
@@ -78,6 +81,10 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>
       </div>
+
+      {thinkingBlocks.map((block, i) => (
+        <ThinkingBlock key={`thinking-${i}`} thinking={block.thinking} searchQuery={searchQuery} />
+      ))}
 
       {message.contentText && (
         <div className={styles.content}>

@@ -6,6 +6,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.17.0] - 2026-06-28
+
+### Added
+
+- **對話檢視渲染 thinking blocks**。assistant 的 thinking（推理過程）一直完整保留在 `message_content.content_json`（parser 寬容保留整個 content array），但過去 UI 只渲染 content_text 與 tool blocks，導致 thinking 完全看不到。新增 `extractThinkingBlocks` 寬容解析與 `ThinkingBlock` 折疊元件（複用 `MarkdownRenderer`），在 assistant 訊息的輸出文字前以可折疊區塊呈現。預設收合且 lazy mount（單則可達數萬字，收合時不掛載解析）；`contentJson` extraction memoized，避免搜尋 re-render 重複解析。不動 parser 與 schema，不需 re-index。i18n 支援繁中與英文。
+
 ## [1.16.0] - 2026-06-07
 
 ### Added
