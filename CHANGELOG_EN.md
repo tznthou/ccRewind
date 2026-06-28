@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.17.0] - 2026-06-28
+
+### Added
+
+- **Render thinking blocks in the conversation view**. Assistant thinking (reasoning) has always been preserved verbatim in `message_content.content_json` (the parser keeps the full content array), but the UI only rendered content_text and tool blocks, so thinking was invisible. Adds `extractThinkingBlocks` (lenient parse) and a collapsible `ThinkingBlock` component (reusing `MarkdownRenderer`), shown as a collapsible block above the assistant's output text. Default-collapsed and lazy-mounted (a single block can run tens of thousands of chars; collapsed blocks aren't parsed); `contentJson` extraction is memoized to avoid re-parsing on search re-renders. No parser or schema change, no re-index. i18n zh-TW and en.
+
 ## [1.16.0] - 2026-06-07
 
 ### Added
