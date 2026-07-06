@@ -463,6 +463,48 @@ Task 5 和 Task 6 可平行開發。
 - 一個月後評估是否把 safe minor 也放 automerge（觀察 dogfood 是否撞壞）
 - 記 follow-up：Renovate 行為若偏離 ADR-003 預期，回 ADR 補 Trigger 並重評
 
+### Task 12: JSONL 樹狀結構完整性（parentUuid / compaction / rewind / version）
+
+**性質**：spike，已過 `/plan-critic --deep`（2026-07-06，1 FAIL 3 WARN，建議全數採納）收斂範圍。A / C / B1 可直接排入實作；B2（rewind 跨檔案血緣）待驗證步驟決定範圍，見下。
+
+**目標**：修正三個透過外部讀者技術審查發現的既有架構缺口。
+
+**動機**：
+- dev.to 首發文（Parsing Claude Code's JSONL）留言（Skillselion，2026-07-06）指出三點，經 Explore agent 逐一查證程式碼後全部成立
+- 影響真實資料正確性：rewind 分支的 session 在 UI 顯示為兩個互不相干的對話，無法呈現分支關係；compaction summary 混入時間軸、無法辨識子類型；unknown-type 封存缺 schema version，無法回答「這個 shape 是哪個版本引入的」
+- `docs/SPEC.md:245` 已自承「全部儲存，不區分子類型」是已知限制，這次是把限制轉成具體修復項
+
+**現況證據**（2026-07-06 查證，Explore agent）：
+- `parentUuid` 在 `parser.ts:177` 有解析，但 `indexer.ts:91-119` 轉 `MessageInput` 時未複製，DB 從未有 `parent_uuid` 欄位；全部排序查詢用 `sequence = 陣列索引`（`indexer.ts:92`；`database.ts:1241,1268,1272,1454` 的 `ORDER BY sequence`）
+- 全 `src/` 無 `isCompactSummary`/`isSidechain`/`rewind`/`fork` 的對話語意處理；`scanner.ts:64-69` 把每個 `.jsonl` 檔當獨立 session，rewind 分支出的新 sessionId 檔案間無 lineage 關聯；跨檔案唯一機制是 uuid 去重（`indexer.ts:207-213`），非樹狀拼接
+- `message_archive` 表（`database.ts:653-656`）恆為兩欄（`message_id`, `raw_json`），從未存過 JSONL 頂層 `version` 欄位；資訊仍在 raw_json 全文內，只是未結構化抽出
+
+**不做什麼**（plan-critic 收斂後排除）：
+- 不做 UI 分支樹視覺化。留言者的建議是給「在此資料上建索引的人」的資料庫設計建議，不是 ccRewind 產品需要的 UI 功能
+- 排序邏輯暫不改成真正樹狀遍歷；parentUuid 先落地為中繼資料，UI 渲染順序維持既有 sequence，等出現具體案例（使用者回報 rewound session 顯示錯亂）才動排序邏輯
+- `version` 欄位不擴及所有 message，只存在 `message_archive`（對應實際回報的問題範圍：unknown-type 封存查無版本）
+
+**影響範圍**：
+- Sub-item A（parentUuid 落地，可直接排入實作）：`indexer.ts`（複製欄位）、`database.ts`（migration 加 `parent_uuid` column + index）、`shared/types.ts`
+- Sub-item C（version 結構化，可直接排入實作）：`parser.ts`（讀頂層 `version`）、`database.ts`（migration 加 `version` column，僅 `message_archive` 表）
+- Sub-item B1（compaction/sidechain 子類型標記，可直接排入實作）：`parser.ts`（讀 `isCompactSummary`/`isSidechain`）、`database.ts`（messages 表加對應欄位）、ChatView（依欄位標記特殊區塊，不做血緣關聯）
+- Sub-item B2（rewind 跨檔案血緣，範圍待驗證，見下）：`scanner.ts`（分支關聯機制，做法未定）
+
+**依賴**：Task 3（Database + Indexer）
+
+**B2 驗證步驟**（動工前，取代原決策點「血緣要做多深」）：
+找一個實際觸發過 rewind 的 session，比對新 sessionId 檔案首筆 entry 的 `parentUuid`，是否指向舊檔案裡某個既有 uuid：
+- 指得到 → 血緣幾乎免費，只需 uuid 全域索引（跨檔案查找），不用新欄位/新機制，併入 A 一起做
+- 指不到 → 才需要討論要不要做、用什麼替代方式（例如 mtime 鄰近性當弱關聯提示），值不值得投入
+
+**Backfill 策略**：既有已索引 session 是否強制 reparse 補新欄位，比照 Task 10 的 `SUMMARY_VERSION` 強制 reparse 機制辦理（bump 對應 version 常數，觸發下次啟動時 reparse）。
+
+**版本排程**（2026-07-07 已裁決）：A/C/B1 獨立排入 **v1.18.0**，不跟 Task 9（Tasks Panel 完整實作決策）、Task 10 Phase D（新 POC）綁在同一版本——後兩者各自決策時程未定，不讓 Task 12 等待。
+
+**完成信號**：
+- [ ] B2 驗證步驟完成，B 的實際範圍確定（併入 A 或另議）
+- [ ] A/C/B1（+ 視 B2 結果）實作完成，隨 v1.18.0 發布
+
 ---
 
 ## 驗證計畫
