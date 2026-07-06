@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+
+reviews:
+  profile: chill
+  poem: false
+  auto_review:
+    enabled: true
+    drafts: false
+  commit_status: true
+  fail_commit_status: false
+  path_filters:
+    - "!out/**"
+    - "!dist/**"
+    - "!pnpm-lock.yaml"
+  path_instructions:
+    - path: "src/main/**"
+      instructions: >-
+        Electron main process. better-sqlite3 (synchronous API) only, never
+        sql.js. All IPC must use invoke/handle (Promise-based), never
+        send/on. All file path handling must use Node.js's `path` module,
+        never hardcoded separators. This app is strictly read-only against
+        `~/.claude/` — flag any write, rename, or delete targeting that
+        directory.
+    - path: "src/main/parser.ts"
+      instructions: >-
+        JSONL parsing must stay tolerant: unknown message types or fields
+        are preserved as raw JSON, never thrown on or silently dropped.
+    - path: "src/renderer/**"
+      instructions: >-
+        React functional components with hooks only, no class components.
+    - path: "src/shared/**"
+      instructions: >-
+        Types and utilities shared across the IPC boundary between main and
+        renderer — check that changes here keep both sides in sync.
+    - path: "tests/**"
+      instructions: >-
+        Tests are the spec, not pass-fodder: flag any changed assertion
+        that isn't justified by an explanation of why the old assertion was
+        wrong. Tests must never touch real `~/.claude/` or `~/.ccrewind/` —
+        filesystem/DB fixtures require mkdtemp or equivalent isolation.
+  tools:
+    eslint:
+      enabled: true
