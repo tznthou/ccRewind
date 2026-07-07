@@ -858,7 +858,7 @@ export class Database {
     const rows = this.db.prepare(
       `SELECT s.id, s.project_id, s.title, s.message_count, s.started_at, s.ended_at, s.archived,
               s.summary_text, s.intent_text, s.outcome_status, s.duration_seconds, s.active_duration_seconds, s.summary_version,
-              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens,
+              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens, s.has_remote_control,
               CASE WHEN st.session_id IS NOT NULL THEN 1 ELSE 0 END AS starred
        FROM sessions s
        LEFT JOIN session_stars st ON s.id = st.session_id
@@ -884,6 +884,7 @@ export class Database {
       tools_used: string | null
       total_input_tokens: number | null
       total_output_tokens: number | null
+      has_remote_control: number
       starred: number
     }>
 
@@ -906,6 +907,7 @@ export class Database {
       toolsUsed: r.tools_used,
       totalInputTokens: r.total_input_tokens,
       totalOutputTokens: r.total_output_tokens,
+      hasRemoteControl: r.has_remote_control === 1,
       starred: r.starred === 1,
     }))
   }
@@ -1210,11 +1212,14 @@ export class Database {
         if (m.inputTokens != null) totalInput += m.inputTokens
         if (m.outputTokens != null) totalOutput += m.outputTokens
       }
+      // bridge-session type 貫穿整個 session 生命週期、非逐輪出現，故用「存在與否」
+      // 判斷整個 session 是否曾透過 remote-control 連線，而非逐訊息標記
+      const hasRemoteControl = params.messages.some(m => m.type === 'bridge-session')
       const insertResult = this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at,
           summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, active_duration_seconds, summary_version,
-          tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          tags, files_touched, tools_used, total_input_tokens, total_output_tokens, has_remote_control)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
@@ -1225,6 +1230,7 @@ export class Database {
         params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
         totalInput || null, totalOutput || null,
+        hasRemoteControl ? 1 : 0,
       )
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(

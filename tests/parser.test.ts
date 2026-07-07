@@ -475,6 +475,13 @@ describe('parseLine rawJson preservation (parseFailed fallback)', () => {
     expect(result!.rawJson).toBeNull()
   })
 
+  it('known type (bridge-session) → rawJson is null', () => {
+    const line = JSON.stringify({ type: 'bridge-session', bridgeSessionId: 'cse_abc', lastSequenceNum: 0, sessionId: 's1' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBeNull()
+  })
+
   it('unknown type → rawJson preserves entire original line (debug fallback)', () => {
     const line = JSON.stringify({
       type: 'reasoning-trace',

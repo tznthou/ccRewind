@@ -81,6 +81,8 @@ export interface SessionMeta {
   /** Token 彙總（Phase 2.5） */
   totalInputTokens: number | null
   totalOutputTokens: number | null
+  /** 是否曾出現 bridge-session type（remote-control 連線），indexer 推導（v23 引入） */
+  hasRemoteControl: boolean
   starred: boolean
 }
 
