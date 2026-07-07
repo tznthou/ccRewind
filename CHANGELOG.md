@@ -6,6 +6,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.18.0] - 2026-07-07
+
+### Added
+
+- **JSONL 樹狀結構完整性（migration v22）**。修正 dev.to 讀者技術審查（Skillselion，2026-07-06）指出的三個既有缺口：
+  - **parentUuid 落地**：`parser.ts` 早已解析但 `indexer.ts` 從未複製進 `MessageInput`，`messages` 表新增 `parent_uuid` 欄位 + index。中繼資料落地供後續分岔判斷使用；UI 渲染順序仍用既有 `sequence`，不做樹狀重排。
+  - **compaction/sidechain 子類型標記**：解析 JSONL 頂層 `isCompactSummary`/`isSidechain`，`messages` 表新增對應欄位，ChatView 依欄位顯示徽章。
+  - **同檔案 rewind 棄用分支標記**：新增 `markAbandonedBranches`，識別「同一 parentUuid 下有 2 個以上真人輸入分支、其中分支沿 parentUuid 鏈可推導的最遠距離明顯短於（< 10%）同組最長分支」的棄用分支，標記 `is_abandoned_branch`；ChatView 以虛線邊框 + 「已捨棄分支（rewind）」徽章呈現。原始「1-hop 有無直接子節點」判定法對真實資料驗證時漏抓——棄用分支常多帶 1 筆 bookkeeping entry（如 attachment）才真正斷鏈；改為比較各分支延伸深度的比例後才正確捕捉到真實案例（如 rewind 後被取代的「繼續」分支）。
+  - **message_archive 補 `version` 欄位**：unknown-type entry 封存時本身常缺 JSONL 頂層 `version`（該類 entry 不帶版本字串），改用同檔案鄰近 entry 的值回填（`resolveNearestVersions`），可回答「這個 shape 是哪個版本引入的」。
+
+### Changed
+
+- 隨 migration v22 強制全量 reparse（`file_mtime` 重置），既有 session 補填 `parent_uuid`/`is_compact_summary`/`is_sidechain`/`is_abandoned_branch`/`message_archive.version`。
+
 ## [1.17.0] - 2026-06-28
 
 ### Added

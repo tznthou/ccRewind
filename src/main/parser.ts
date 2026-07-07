@@ -179,6 +179,10 @@ export function parseLine(line: string): ParsedLine | null {
   const timestamp = typeof obj.timestamp === 'string' ? obj.timestamp : null
   const rawRequestId = typeof obj.requestId === 'string' ? obj.requestId : null
   const requestId = rawRequestId && rawRequestId.length <= 128 ? rawRequestId : null
+  const rawVersion = typeof obj.version === 'string' ? obj.version : null
+  const version = rawVersion && rawVersion.length <= 32 ? rawVersion : null
+  const isCompactSummary = obj.isCompactSummary === true
+  const isSidechain = obj.isSidechain === true
 
   let role: 'user' | 'assistant' | null = null
   let contentText: string | null = null
@@ -289,6 +293,9 @@ export function parseLine(line: string): ParsedLine | null {
     systemSubtype,
     apiErrorStatus,
     editedFilePath,
+    version,
+    isCompactSummary,
+    isSidechain,
   }
 }
 

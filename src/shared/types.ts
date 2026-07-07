@@ -113,6 +113,14 @@ export interface Message {
   attributionAgent: string | null
   systemSubtype: string | null
   apiErrorStatus: number | null
+  /** JSONL 頂層 parentUuid（同檔案內樹狀關係中繼資料，v22 引入；UI 渲染順序仍用 sequence，不做樹狀重排） */
+  parentUuid: string | null
+  /** JSONL 頂層 isCompactSummary（v22 引入） */
+  isCompactSummary: boolean
+  /** JSONL 頂層 isSidechain（v22 引入） */
+  isSidechain: boolean
+  /** indexer 推導：同一 parentUuid 有多個真人分岔、此則無任何後續 entry（rewind 棄用分支，v22 引入） */
+  isAbandonedBranch: boolean
 }
 
 /** Session Token 統計（Context Budget 視覺化用） */
@@ -615,6 +623,15 @@ export interface ParsedLine {
   systemSubtype: string | null
   apiErrorStatus: number | null
   editedFilePath: string | null
+  /** JSONL 頂層 version（CC 版本字串，如 "2.1.201"）。多數 entry 皆有，少數 unknown-type entry 沒有——
+   *  indexer 用鄰近 entry 的值回填後存進 message_archive，供除錯回答「這個 shape 是哪個版本引入的」 */
+  version: string | null
+  /** JSONL 頂層 isCompactSummary：此 user entry 是否為 compact 產生的摘要 */
+  isCompactSummary: boolean
+  /** JSONL 頂層 isSidechain：此 entry 是否屬於 sidechain（實測上 100% 對應 subagent transcript） */
+  isSidechain: boolean
+  /** indexer 推導欄位（非 parser 產生）：同一 parentUuid 下的棄用分支，見 indexer.ts markAbandonedBranches() */
+  isAbandonedBranch?: boolean
 }
 
 /** 整個 session 解析結果 */

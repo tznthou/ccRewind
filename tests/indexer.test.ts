@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
 import { Database } from '../src/main/database'
-import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, type ProgressCallback } from '../src/main/indexer'
+import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
 import type { ExclusionRule, IndexerStatus, ParsedLine } from '../src/shared/types'
 
 let tmpDir: string
@@ -273,6 +273,79 @@ describe('runIndexer', () => {
   })
 })
 
+describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/isSidechain/isAbandonedBranch/version)', () => {
+  it('propagates parentUuid, marks abandoned fork branch, stores flags, backfills message_archive version', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    const forkSession = [
+      {
+        type: 'user', uuid: 'root', timestamp: '2026-07-07T10:00:00.000Z', sessionId: 'sess-fork', version: '2.1.196',
+        message: { role: 'user', content: 'first message' },
+      },
+      {
+        type: 'assistant', uuid: 'a-root', parentUuid: 'root', timestamp: '2026-07-07T10:00:01.000Z', sessionId: 'sess-fork', version: '2.1.196',
+        message: { role: 'assistant', content: 'ok, proceeding' },
+      },
+      // unknown type（不在 KNOWN_MESSAGE_TYPES）本身沒有 version 欄位，靠鄰近 entry 回填
+      { type: 'mode', sessionId: 'sess-fork', timestamp: '2026-07-07T10:00:02.000Z' },
+      {
+        type: 'user', uuid: 'dead-end', parentUuid: 'a-root', timestamp: '2026-07-07T10:00:03.000Z', sessionId: 'sess-fork', version: '2.1.196',
+        message: { role: 'user', content: '補上' },
+      },
+      {
+        type: 'user', uuid: 'continues', parentUuid: 'a-root', timestamp: '2026-07-07T10:00:04.000Z', sessionId: 'sess-fork', version: '2.1.201',
+        message: { role: 'user', content: '先不補，但我們有辦法修復這個問題嗎？' },
+      },
+      {
+        type: 'user', uuid: 'compact-1', parentUuid: 'continues', isCompactSummary: true, timestamp: '2026-07-07T10:00:05.000Z', sessionId: 'sess-fork', version: '2.1.201',
+        message: { role: 'user', content: 'compact summary text' },
+      },
+    ]
+    await createProject(baseDir, '-Users-test-fork', { 'sess-fork': forkSession })
+
+    await runIndexer(db, undefined, baseDir)
+
+    // Message（renderer 讀取型別）不外露 uuid，改用 contentText 定位（見 shared/types.ts）
+    const messages = db.getMessages('sess-fork')
+    const byContent = new Map(messages.filter(m => m.contentText).map(m => [m.contentText, m]))
+
+    expect(byContent.get('ok, proceeding')?.parentUuid).toBe('root')
+    expect(byContent.get('補上')?.isAbandonedBranch).toBe(true)
+    expect(byContent.get('先不補，但我們有辦法修復這個問題嗎？')?.isAbandonedBranch).toBe(false)
+    expect(byContent.get('compact summary text')?.isCompactSummary).toBe(true)
+
+    // unknown-type 'mode' entry：raw_json 存進 message_archive，version 用鄰近值（前一筆 a-root）回填
+    const archived = db.rawAll<{ version: string | null }>(
+      "SELECT ma.version AS version FROM message_archive ma JOIN messages m ON m.id = ma.message_id WHERE m.session_id = 'sess-fork' AND m.type = 'mode'",
+    )
+    expect(archived).toHaveLength(1)
+    expect(archived[0].version).toBe('2.1.196')
+  })
+
+  it('isSidechain flows through from subagent transcript', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-side', { 'sess-side': sampleSession1 })
+    // subagent transcript：CC 對 sidechain 一律標 isSidechain: true
+    const sessionDir = path.join(baseDir, '-Users-test-side', 'sess-side')
+    await mkdir(path.join(sessionDir, 'subagents'), { recursive: true })
+    await writeFile(
+      path.join(sessionDir, 'subagents', 'agent-a1.jsonl'),
+      makeJsonl([
+        {
+          type: 'user', uuid: 'sub-u1', isSidechain: true, timestamp: '2026-07-07T10:00:00.000Z', sessionId: 'agent-a1',
+          message: { role: 'user', content: 'subagent task' },
+        },
+      ]),
+    )
+
+    await runIndexer(db, undefined, baseDir)
+
+    // subagentId 由 indexer 組成 `${parentSessionId}/${bareId}`（見 scanner.ts scanSubagents）
+    const subMessages = db.getMessages('sess-side/agent-a1')
+    expect(subMessages).toHaveLength(1)
+    expect(subMessages[0].isSidechain).toBe(true)
+  })
+})
+
 // ── deduplicateTokensByRequestId ──
 
 /** 建立最小 ParsedLine 供 dedup 測試 */
@@ -296,6 +369,9 @@ function makeParsedLine(overrides: Partial<ParsedLine> = {}): ParsedLine {
     cacheCreationTokens: null,
     model: null,
     requestId: null,
+    version: null,
+    isCompactSummary: false,
+    isSidechain: false,
     ...overrides,
   }
 }
@@ -401,6 +477,188 @@ describe('deduplicateTokensByRequestId', () => {
     deduplicateTokensByRequestId(lines)
     // original should be untouched
     expect(lines[0].inputTokens).toBe(3000)
+  })
+})
+
+// ── markAbandonedBranches (Task 12 / B2) ──
+
+/** fork 測試用 user turn：預設是「真人輸入」（role=user, 無 tool_result, 非 sidechain/compact） */
+function humanTurn(overrides: Partial<ParsedLine> = {}): ParsedLine {
+  return makeParsedLine({ type: 'user', role: 'user', hasToolResult: false, ...overrides })
+}
+
+describe('markAbandonedBranches', () => {
+  it('single child per parent → nothing marked, returns same array reference', () => {
+    const lines = [
+      humanTurn({ uuid: 'u1', parentUuid: null }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'a1', parentUuid: 'u1' }),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result).toBe(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('real fork: dead-end branch marked, continuing branch untouched', () => {
+    const lines = [
+      humanTurn({ uuid: 'root', parentUuid: null }),
+      humanTurn({ uuid: 'dead-end', parentUuid: 'root', contentText: '補上' }),
+      humanTurn({ uuid: 'continues', parentUuid: 'root', contentText: '先不補，但我們有辦法修復這個問題嗎？' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'a1', parentUuid: 'continues' }),
+    ]
+    const result = markAbandonedBranches(lines)
+    const byUuid = new Map(result.map(l => [l.uuid, l]))
+    expect(byUuid.get('dead-end')?.isAbandonedBranch).toBe(true)
+    expect(byUuid.get('continues')?.isAbandonedBranch).toBeUndefined()
+    expect(byUuid.get('root')?.isAbandonedBranch).toBeUndefined()
+  })
+
+  it('excludes tool_use/tool_result parallel-call noise sharing one parentUuid', () => {
+    // 一個 assistant turn 觸發 2 個平行 tool_use，各自的 tool_result 都指向同一個 parentUuid
+    const lines = [
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'asst-1', parentUuid: null, hasToolUse: true }),
+      makeParsedLine({ type: 'user', role: 'user', uuid: 'result-1', parentUuid: 'asst-1', hasToolResult: true }),
+      makeParsedLine({ type: 'user', role: 'user', uuid: 'result-2', parentUuid: 'asst-1', hasToolResult: true }),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('excludes isSidechain/isCompactSummary entries from fork candidates', () => {
+    const lines = [
+      humanTurn({ uuid: 'real-human', parentUuid: 'root' }),
+      humanTurn({ uuid: 'sidechain-child', parentUuid: 'root', isSidechain: true }),
+      humanTurn({ uuid: 'compact-child', parentUuid: 'root', isCompactSummary: true }),
+    ]
+    // root 只有 1 個「真人輸入」候選（sidechain/compact 都被排除），不足 2 個不算 fork
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('3-way fork: marks both dead-ends, leaves continuing branch alone', () => {
+    const lines = [
+      humanTurn({ uuid: 'dead-1', parentUuid: 'root' }),
+      humanTurn({ uuid: 'dead-2', parentUuid: 'root' }),
+      humanTurn({ uuid: 'continues', parentUuid: 'root' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'a1', parentUuid: 'continues' }),
+    ]
+    const result = markAbandonedBranches(lines)
+    const byUuid = new Map(result.map(l => [l.uuid, l]))
+    expect(byUuid.get('dead-1')?.isAbandonedBranch).toBe(true)
+    expect(byUuid.get('dead-2')?.isAbandonedBranch).toBe(true)
+    expect(byUuid.get('continues')?.isAbandonedBranch).toBeUndefined()
+  })
+
+  it('both branches continue → neither marked (fork ≠ always-abandoned, matches evap-shield validation case)', () => {
+    const lines = [
+      humanTurn({ uuid: 'branch-1', parentUuid: 'root' }),
+      humanTurn({ uuid: 'branch-2', parentUuid: 'root' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'a1', parentUuid: 'branch-1' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 'a2', parentUuid: 'branch-2' }),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('null parentUuid entries never grouped as fork children', () => {
+    const lines = [
+      humanTurn({ uuid: 'u1', parentUuid: null }),
+      humanTurn({ uuid: 'u2', parentUuid: null }),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('marks a branch with 1 trailing bookkeeping hop when sibling reaches far further (real markdown-tool "git init" rewind shape)', () => {
+    // 真實案例：棄用分支「繼續」1-hop 有子節點（attachment）才斷鏈，勝出分支延續 77 筆。
+    // 舊演算法（只查有無 1-hop 子節點）會漏抓「繼續」；新演算法比深度比例才抓得到。
+    const lines = [
+      humanTurn({ uuid: 'root', parentUuid: null }),
+      humanTurn({ uuid: 'abandoned', parentUuid: 'root', contentText: '繼續' }),
+      makeParsedLine({ type: 'attachment', uuid: 'bookkeeping', parentUuid: 'abandoned' }), // 唯一一筆，之後斷鏈
+      humanTurn({ uuid: 'winner', parentUuid: 'root', contentText: 'git init 我覺得這個階段有問題' }),
+      ...Array.from({ length: 20 }, (_, i) =>
+        makeParsedLine({ type: 'assistant', role: 'assistant', uuid: `chain-${i}`, parentUuid: i === 0 ? 'winner' : `chain-${i - 1}` }),
+      ),
+    ]
+    const result = markAbandonedBranches(lines)
+    const byUuid = new Map(result.map(l => [l.uuid, l]))
+    expect(byUuid.get('abandoned')?.isAbandonedBranch).toBe(true)
+    expect(byUuid.get('winner')?.isAbandonedBranch).toBeUndefined()
+  })
+
+  it('does not mark a branch that is merely somewhat shorter (ratio above threshold)', () => {
+    // 2 vs 15：2/15 ≈ 13.3%，高於 10% 門檻，不算棄用（只是稍短，非明顯棄用）
+    const lines = [
+      humanTurn({ uuid: 'root', parentUuid: null }),
+      humanTurn({ uuid: 'shorter', parentUuid: 'root' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 's1', parentUuid: 'shorter' }),
+      makeParsedLine({ type: 'assistant', role: 'assistant', uuid: 's2', parentUuid: 's1' }),
+      humanTurn({ uuid: 'longer', parentUuid: 'root' }),
+      ...Array.from({ length: 15 }, (_, i) =>
+        makeParsedLine({ type: 'assistant', role: 'assistant', uuid: `l-${i}`, parentUuid: i === 0 ? 'longer' : `l-${i - 1}` }),
+      ),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+
+  it('all candidates are immediate dead ends (maxDepth 0) → none marked, no false "winner"', () => {
+    const lines = [
+      humanTurn({ uuid: 'root', parentUuid: null }),
+      humanTurn({ uuid: 'dead-a', parentUuid: 'root' }),
+      humanTurn({ uuid: 'dead-b', parentUuid: 'root' }),
+    ]
+    const result = markAbandonedBranches(lines)
+    expect(result.every(l => !l.isAbandonedBranch)).toBe(true)
+  })
+})
+
+// ── resolveNearestVersions (Task 12 / C) ──
+
+describe('resolveNearestVersions', () => {
+  it('all lines have version → passes through unchanged', () => {
+    const lines = [
+      makeParsedLine({ version: '2.1.196' }),
+      makeParsedLine({ version: '2.1.196' }),
+    ]
+    expect(resolveNearestVersions(lines)).toEqual(['2.1.196', '2.1.196'])
+  })
+
+  it('leading gap backfilled from first following version', () => {
+    const lines = [
+      makeParsedLine({ version: null }),
+      makeParsedLine({ version: null }),
+      makeParsedLine({ version: '2.1.196' }),
+    ]
+    expect(resolveNearestVersions(lines)).toEqual(['2.1.196', '2.1.196', '2.1.196'])
+  })
+
+  it('trailing gap forward-filled from last seen version', () => {
+    const lines = [
+      makeParsedLine({ version: '2.1.196' }),
+      makeParsedLine({ version: null }),
+      makeParsedLine({ version: null }),
+    ]
+    expect(resolveNearestVersions(lines)).toEqual(['2.1.196', '2.1.196', '2.1.196'])
+  })
+
+  it('version change mid-file: entries take nearest preceding version', () => {
+    const lines = [
+      makeParsedLine({ version: '2.1.196' }),
+      makeParsedLine({ version: null }),
+      makeParsedLine({ version: '2.1.201' }),
+      makeParsedLine({ version: null }),
+    ]
+    expect(resolveNearestVersions(lines)).toEqual(['2.1.196', '2.1.196', '2.1.201', '2.1.201'])
+  })
+
+  it('no version anywhere → all null', () => {
+    const lines = [makeParsedLine({ version: null }), makeParsedLine({ version: null })]
+    expect(resolveNearestVersions(lines)).toEqual([null, null])
+  })
+
+  it('empty array → empty result', () => {
+    expect(resolveNearestVersions([])).toEqual([])
   })
 })
 
