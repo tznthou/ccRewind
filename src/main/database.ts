@@ -557,6 +557,20 @@ const migrations: Migration[] = [
   },
 ]
 
+/** getMessages / getMessageContext 共用的 SELECT 欄位清單，與 MessageRow/mapMessageRow 相鄰維護避免加欄漏改 */
+const MESSAGE_SELECT = `
+  SELECT m.id, m.session_id, m.type, m.role, m.content_text,
+         mc.content_json, m.has_tool_use, m.has_tool_result,
+         m.tool_names, m.timestamp, m.sequence,
+         m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
+         m.tool_error_count, m.has_image,
+         m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
+         m.system_subtype, m.api_error_status,
+         m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
+  FROM messages m
+  LEFT JOIN message_content mc ON mc.message_id = m.id
+`
+
 /** DB SELECT messages 的原始行型別 */
 interface MessageRow {
   id: number
@@ -1287,51 +1301,27 @@ export class Database {
   // ── Messages ─���
 
   getMessages(sessionId: string): Message[] {
-    const rows = this.db.prepare(`
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count, m.has_image,
-             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-      WHERE m.session_id = ?
-      ORDER BY m.sequence
-    `).all(sessionId) as Array<MessageRow>
+    const rows = this.db.prepare(
+      `${MESSAGE_SELECT} WHERE m.session_id = ? ORDER BY m.sequence`,
+    ).all(sessionId) as Array<MessageRow>
 
     return rows.map(mapMessageRow)
   }
 
   /** 取得指定訊息及其前後 range 則訊息（搜尋結果上下文預覽） */
   getMessageContext(messageId: number, range = 2): MessageContext {
-    const msgSelect = `
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count, m.has_image,
-             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-    `
-
-    const target = this.db.prepare(`${msgSelect} WHERE m.id = ?`).get(messageId) as MessageRow | undefined
+    const target = this.db.prepare(`${MESSAGE_SELECT} WHERE m.id = ?`).get(messageId) as MessageRow | undefined
 
     if (!target) {
       return { target: null, before: [], after: [] }
     }
 
     const beforeRows = this.db.prepare(
-      `${msgSelect} WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ? ORDER BY m.sequence`,
+      `${MESSAGE_SELECT} WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ? ORDER BY m.sequence`,
     ).all(target.session_id, target.sequence, target.sequence - range) as MessageRow[]
 
     const afterRows = this.db.prepare(
-      `${msgSelect} WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ? ORDER BY m.sequence`,
+      `${MESSAGE_SELECT} WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ? ORDER BY m.sequence`,
     ).all(target.session_id, target.sequence, target.sequence + range) as MessageRow[]
 
     return {
