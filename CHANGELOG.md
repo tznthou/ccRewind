@@ -19,6 +19,7 @@
 ### Changed
 
 - 隨 migration v22 強制全量 reparse（`file_mtime` 重置），既有 session 補填 `parent_uuid`/`is_compact_summary`/`is_sidechain`/`is_abandoned_branch`/`message_archive.version`。
+- README 補上兩個此前遺漏的使用者可見功能：v1.17.0 的思考過程摺疊、本版的 rewind 棄用分支標記。同步修正 tech stack 表格與 project structure tree 兩處測試數不一致（496/469 → 實際 534），TypeScript badge 與版本號更新至實際使用的 5.9。
 
 ## [1.17.0] - 2026-06-28
 

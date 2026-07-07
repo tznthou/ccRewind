@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Migration v22 forces a full reparse (`file_mtime` reset) so existing sessions backfill `parent_uuid`/`is_compact_summary`/`is_sidechain`/`is_abandoned_branch`/`message_archive.version`.
+- README caught up on two user-visible features it had missed: v1.17.0's thinking-block collapsing and this release's rewind abandoned-branch marking. Also fixed two inconsistent test counts in the tech stack table and project structure tree (496/469 → the actual 534), and bumped the TypeScript badge/version to the one actually in use (5.9).
 
 ## [1.17.0] - 2026-06-28
 

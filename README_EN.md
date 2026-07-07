@@ -1,7 +1,7 @@
 # ccRewind
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7+-3178C6.svg)](https://www.typescriptlang.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.9+-3178C6.svg)](https://www.typescriptlang.org/)
 [![React](https://img.shields.io/badge/React-19+-61DAFB.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41+-47848F.svg)](https://www.electronjs.org/)
 
@@ -67,6 +67,8 @@ Built for depth, not breadth.
 | Feature | Description |
 |---------|-------------|
 | **Conversation Browser** | User/assistant bubble UI with Markdown rendering + syntax highlighting |
+| **Thinking Block Collapsing** | Assistant's thinking (reasoning) rendered as a collapsible block, collapsed by default with lazy mounting so large reasoning traces don't affect performance |
+| **Rewind Branch Detection** | Detects forks created by mid-conversation rewinds within the same session, marking the superseded branch with a dashed border + badge instead of leaving it looking like an unanswered orphan message |
 | **Tool Collapsing** | tool_use / tool_result blocks collapsed by default, click to expand |
 | **Markdown Export** | One-click export session to `.md` with metadata table + tool `<details>` blocks |
 | **Full-Text Search** | FTS5 index with pagination, results grouped by session. Two modes: "Messages" (content) and "Tags/Files" (session metadata). Filter by date range (7d/30d/90d) and toggle between relevance or chronological sort |
@@ -178,11 +180,11 @@ graph TB
 |------------|---------|-------|
 | Electron 41 | Desktop app framework | macOS hiddenInset title bar |
 | React 19 | UI framework | Function components + hooks |
-| TypeScript 5.7 | Type safety | Strict mode |
+| TypeScript 5.9 | Type safety | Strict mode |
 | better-sqlite3 12 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 496 tests, run through Electron |
+| Vitest 3 | Test framework | 534 tests, run through Electron |
 
 ---
 
@@ -277,7 +279,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (469)
+├── tests/                     # Vitest tests (534)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
