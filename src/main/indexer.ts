@@ -324,12 +324,15 @@ export async function runIndexer(
     // requestId token 去重：同一 API response 的多個 entries 只保留最後一個的 token
     const dedupedLines = deduplicateTokensByRequestId(parsed.messages)
 
+    // 標記同檔案內 rewind 棄用分支（parentUuid 多重真人分岔、其中一支延伸深度遠短於最長分支）。
+    // 必須在 UUID 去重「之前」跑：resumed session 會把先前 entries replay 進新檔案，
+    // 若先去重會抽掉分支鏈中的中繼 entry，讓真正延續的分支被誤判成深度驟降的棄用分支。
+    const markedLines = markAbandonedBranches(dedupedLines)
+
     // UUID 去重：過濾掉其他 session 已索引的 replay entries（排除自身，避免 re-index 時自己匹配自己）
-    const uuids = dedupedLines.filter(m => m.uuid).map(m => m.uuid!)
+    const uuids = markedLines.filter(m => m.uuid).map(m => m.uuid!)
     const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
-    const dedupedMessages = dedupedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
-    // 標記同檔案內 rewind 棄用分支（parentUuid 多重真人分岔、其中一支延伸深度遠短於最長分支）
-    const messages = markAbandonedBranches(dedupedMessages)
+    const messages = markedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
     // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
     if (messages.length === 0 && parsed.messages.length > 0) continue

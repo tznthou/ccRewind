@@ -344,6 +344,41 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
     expect(subMessages).toHaveLength(1)
     expect(subMessages[0].isSidechain).toBe(true)
   })
+
+  it('marks the correct branch abandoned even when a resumed session replays a mid-chain ancestor that gets cross-session deduped (CodeRabbit-caught regression)', async () => {
+    // markAbandonedBranches 必須在 UUID 去重「之前」跑：resumed session 的 replay entries
+    // 會被去重濾掉；若順序反了，'long' 分支透過 l1 延續到 l2/l3/l4 的鏈路會因為 l1 被抽掉而斷開，
+    // 導致 computeMaxReachableIndex 誤判 'long' 深度為 0，跟 'short' 打平（maxDepth=0 guard 生效，
+    // 兩支都不會被標記——真正的 fork 反而完全偵測不到）。
+    const baseDir = path.join(tmpDir, 'projects')
+    const olderSession = [
+      {
+        type: 'assistant', uuid: 'l1', timestamp: '2026-07-01T09:00:00.000Z', sessionId: 'sess-old',
+        message: { role: 'assistant', content: '之後在 resumed session 被 replay 的一行' },
+      },
+    ]
+    const resumedSession = [
+      { type: 'user', uuid: 'root', timestamp: '2026-07-02T09:00:00.000Z', sessionId: 'sess-new', message: { role: 'user', content: '起點' } },
+      { type: 'user', uuid: 'long', parentUuid: 'root', timestamp: '2026-07-02T09:00:01.000Z', sessionId: 'sess-new', message: { role: 'user', content: '繼續原方向' } },
+      // 跟 sess-old 共用同一個 uuid：indexer 會把這行當成 replay duplicate 從 sess-new 濾掉
+      {
+        type: 'assistant', uuid: 'l1', parentUuid: 'long', timestamp: '2026-07-02T09:00:02.000Z', sessionId: 'sess-new',
+        message: { role: 'assistant', content: '之後在 resumed session 被 replay 的一行' },
+      },
+      { type: 'assistant', uuid: 'l2', parentUuid: 'l1', timestamp: '2026-07-02T09:00:03.000Z', sessionId: 'sess-new', message: { role: 'assistant', content: '繼續處理 A' } },
+      { type: 'assistant', uuid: 'l3', parentUuid: 'l2', timestamp: '2026-07-02T09:00:04.000Z', sessionId: 'sess-new', message: { role: 'assistant', content: '繼續處理 B' } },
+      { type: 'assistant', uuid: 'l4', parentUuid: 'l3', timestamp: '2026-07-02T09:00:05.000Z', sessionId: 'sess-new', message: { role: 'assistant', content: '繼續處理 C' } },
+      { type: 'user', uuid: 'short', parentUuid: 'root', timestamp: '2026-07-02T09:00:06.000Z', sessionId: 'sess-new', message: { role: 'user', content: '換個方向試試' } },
+    ]
+    await createProject(baseDir, '-Users-test-resume-fork', { 'sess-old': olderSession, 'sess-new': resumedSession })
+
+    await runIndexer(db, undefined, baseDir)
+
+    const newMessages = db.getMessages('sess-new')
+    const byContent = new Map(newMessages.map(m => [m.contentText, m]))
+    expect(byContent.get('繼續原方向')?.isAbandonedBranch).toBe(false)
+    expect(byContent.get('換個方向試試')?.isAbandonedBranch).toBe(true)
+  })
 })
 
 // ── deduplicateTokensByRequestId ──
