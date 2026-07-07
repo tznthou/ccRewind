@@ -50,6 +50,8 @@ export interface MessageInput {
   isAbandonedBranch: boolean
   /** message_archive 專用：raw_json 所屬 CC 版本（鄰近值回填，見 indexer.ts resolveNearestVersions） */
   version: string | null
+  /** frame-link type 的 Artifact 連結 */
+  frameUrl: string | null
 }
 
 /** session_files 寫入用型別 */
@@ -539,7 +541,35 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 23,
+    description: 'add frame_url to messages, has_remote_control to sessions; whitelist mode/agent-setting/bridge-session/frame-link; force reindex',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN frame_url TEXT;
+        ALTER TABLE sessions ADD COLUMN has_remote_control INTEGER NOT NULL DEFAULT 0;
+      `)
+      db.exec(`
+        UPDATE sessions SET file_mtime = NULL;
+        UPDATE subagent_sessions SET file_mtime = NULL;
+      `)
+    },
+  },
 ]
+
+/** getMessages / getMessageContext 共用的 SELECT 欄位清單，與 MessageRow/mapMessageRow 相鄰維護避免加欄漏改 */
+const MESSAGE_SELECT = `
+  SELECT m.id, m.session_id, m.type, m.role, m.content_text,
+         mc.content_json, m.has_tool_use, m.has_tool_result,
+         m.tool_names, m.timestamp, m.sequence,
+         m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
+         m.tool_error_count, m.has_image,
+         m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
+         m.system_subtype, m.api_error_status,
+         m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
+  FROM messages m
+  LEFT JOIN message_content mc ON mc.message_id = m.id
+`
 
 /** DB SELECT messages 的原始行型別 */
 interface MessageRow {
@@ -572,6 +602,7 @@ interface MessageRow {
   is_compact_summary: number
   is_sidechain: number
   is_abandoned_branch: number
+  frame_url: string | null
 }
 
 /** MessageRow → Message 轉換 */
@@ -606,6 +637,7 @@ function mapMessageRow(r: MessageRow): Message {
     isCompactSummary: r.is_compact_summary === 1,
     isSidechain: r.is_sidechain === 1,
     isAbandonedBranch: r.is_abandoned_branch === 1,
+    frameUrl: r.frame_url,
   }
 }
 
@@ -840,7 +872,7 @@ export class Database {
     const rows = this.db.prepare(
       `SELECT s.id, s.project_id, s.title, s.message_count, s.started_at, s.ended_at, s.archived,
               s.summary_text, s.intent_text, s.outcome_status, s.duration_seconds, s.active_duration_seconds, s.summary_version,
-              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens,
+              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens, s.has_remote_control,
               CASE WHEN st.session_id IS NOT NULL THEN 1 ELSE 0 END AS starred
        FROM sessions s
        LEFT JOIN session_stars st ON s.id = st.session_id
@@ -866,6 +898,7 @@ export class Database {
       tools_used: string | null
       total_input_tokens: number | null
       total_output_tokens: number | null
+      has_remote_control: number
       starred: number
     }>
 
@@ -888,6 +921,7 @@ export class Database {
       toolsUsed: r.tools_used,
       totalInputTokens: r.total_input_tokens,
       totalOutputTokens: r.total_output_tokens,
+      hasRemoteControl: r.has_remote_control === 1,
       starred: r.starred === 1,
     }))
   }
@@ -1192,11 +1226,14 @@ export class Database {
         if (m.inputTokens != null) totalInput += m.inputTokens
         if (m.outputTokens != null) totalOutput += m.outputTokens
       }
+      // bridge-session type 貫穿整個 session 生命週期、非逐輪出現，故用「存在與否」
+      // 判斷整個 session 是否曾透過 remote-control 連線，而非逐訊息標記
+      const hasRemoteControl = params.messages.some(m => m.type === 'bridge-session')
       const insertResult = this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at,
           summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, active_duration_seconds, summary_version,
-          tags, files_touched, tools_used, total_input_tokens, total_output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          tags, files_touched, tools_used, total_input_tokens, total_output_tokens, has_remote_control)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
@@ -1207,6 +1244,7 @@ export class Database {
         params.tags ?? null,
         params.filesTouched ?? null, params.toolsUsed ?? null,
         totalInput || null, totalOutput || null,
+        hasRemoteControl ? 1 : 0,
       )
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(
@@ -1223,8 +1261,8 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status, parent_uuid, is_compact_summary, is_sidechain, is_abandoned_branch)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status, parent_uuid, is_compact_summary, is_sidechain, is_abandoned_branch, frame_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -1245,6 +1283,7 @@ export class Database {
           m.attributionSkill, m.attributionPlugin, m.attributionMcpServer, m.attributionMcpTool, m.attributionAgent,
           m.systemSubtype, m.apiErrorStatus,
           m.parentUuid, m.isCompactSummary ? 1 : 0, m.isSidechain ? 1 : 0, m.isAbandonedBranch ? 1 : 0,
+          m.frameUrl,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
@@ -1262,51 +1301,27 @@ export class Database {
   // ── Messages ─���
 
   getMessages(sessionId: string): Message[] {
-    const rows = this.db.prepare(`
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count, m.has_image,
-             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-      WHERE m.session_id = ?
-      ORDER BY m.sequence
-    `).all(sessionId) as Array<MessageRow>
+    const rows = this.db.prepare(
+      `${MESSAGE_SELECT} WHERE m.session_id = ? ORDER BY m.sequence`,
+    ).all(sessionId) as Array<MessageRow>
 
     return rows.map(mapMessageRow)
   }
 
   /** 取得指定訊息及其前後 range 則訊息（搜尋結果上下文預覽） */
   getMessageContext(messageId: number, range = 2): MessageContext {
-    const msgSelect = `
-      SELECT m.id, m.session_id, m.type, m.role, m.content_text,
-             mc.content_json, m.has_tool_use, m.has_tool_result,
-             m.tool_names, m.timestamp, m.sequence,
-             m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
-             m.tool_error_count, m.has_image,
-             m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
-      FROM messages m
-      LEFT JOIN message_content mc ON mc.message_id = m.id
-    `
-
-    const target = this.db.prepare(`${msgSelect} WHERE m.id = ?`).get(messageId) as MessageRow | undefined
+    const target = this.db.prepare(`${MESSAGE_SELECT} WHERE m.id = ?`).get(messageId) as MessageRow | undefined
 
     if (!target) {
       return { target: null, before: [], after: [] }
     }
 
     const beforeRows = this.db.prepare(
-      `${msgSelect} WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ? ORDER BY m.sequence`,
+      `${MESSAGE_SELECT} WHERE m.session_id = ? AND m.sequence < ? AND m.sequence >= ? ORDER BY m.sequence`,
     ).all(target.session_id, target.sequence, target.sequence - range) as MessageRow[]
 
     const afterRows = this.db.prepare(
-      `${msgSelect} WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ? ORDER BY m.sequence`,
+      `${MESSAGE_SELECT} WHERE m.session_id = ? AND m.sequence > ? AND m.sequence <= ? ORDER BY m.sequence`,
     ).all(target.session_id, target.sequence, target.sequence + range) as MessageRow[]
 
     return {

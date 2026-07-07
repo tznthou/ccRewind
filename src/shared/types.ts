@@ -81,6 +81,8 @@ export interface SessionMeta {
   /** Token 彙總（Phase 2.5） */
   totalInputTokens: number | null
   totalOutputTokens: number | null
+  /** 是否曾出現 bridge-session type（remote-control 連線），indexer 推導（v23 引入） */
+  hasRemoteControl: boolean
   starred: boolean
 }
 
@@ -121,6 +123,8 @@ export interface Message {
   isSidechain: boolean
   /** indexer 推導：同一 parentUuid 有多個真人分岔、此支延伸深度遠短於最長分支（rewind 棄用分支，v22 引入） */
   isAbandonedBranch: boolean
+  /** frame-link type 的 frameUrl 欄位：claude.ai 上 Artifact 產出的連結（v23 引入） */
+  frameUrl: string | null
 }
 
 /** Session Token 統計（Context Budget 視覺化用） */
@@ -623,6 +627,8 @@ export interface ParsedLine {
   systemSubtype: string | null
   apiErrorStatus: number | null
   editedFilePath: string | null
+  /** frame-link type 的 frameUrl 欄位：claude.ai 上 Artifact 產出的連結 */
+  frameUrl: string | null
   /** JSONL 頂層 version（CC 版本字串，如 "2.1.201"）。多數 entry 皆有，少數 unknown-type entry 沒有——
    *  indexer 用鄰近 entry 的值回填後存進 message_archive，供除錯回答「這個 shape 是哪個版本引入的」 */
   version: string | null

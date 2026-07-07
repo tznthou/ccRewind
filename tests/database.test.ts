@@ -38,6 +38,7 @@ function msg(overrides: Partial<MessageInput> & { type: string; sequence: number
     isSidechain: false,
     isAbandonedBranch: false,
     version: null,
+    frameUrl: null,
     ...overrides,
   }
 }
@@ -181,6 +182,37 @@ describe('indexSession', () => {
     const messages = db.getMessages('sess-001')
     expect(messages).toHaveLength(1)
     expect(messages[0].contentText).toBe('New message')
+  })
+
+  it('session containing a bridge-session type message → hasRemoteControl true', () => {
+    db.indexSession({
+      sessionId: 'sess-remote', projectId: 'proj-1', projectDisplayName: '/Users/test/proj1',
+      title: 'Remote session', messageCount: 2, filePath: '/tmp/fake.jsonl', fileSize: 512,
+      fileMtime: '2024-06-01T10:00:00.000Z',
+      startedAt: '2024-06-01T10:00:00.000Z', endedAt: '2024-06-01T10:00:05.000Z',
+      messages: [
+        msg({ type: 'bridge-session', sequence: 0 }),
+        msg({ type: 'user', role: 'user', contentText: 'hi', sequence: 1 }),
+      ],
+    })
+
+    const sessions = db.getSessions('proj-1')
+    const session = sessions.find(s => s.id === 'sess-remote')
+    expect(session?.hasRemoteControl).toBe(true)
+  })
+
+  it('session without any bridge-session type message → hasRemoteControl false', () => {
+    db.indexSession({
+      sessionId: 'sess-local', projectId: 'proj-1', projectDisplayName: '/Users/test/proj1',
+      title: 'Local session', messageCount: 1, filePath: '/tmp/fake.jsonl', fileSize: 512,
+      fileMtime: '2024-06-01T10:00:00.000Z',
+      startedAt: '2024-06-01T10:00:00.000Z', endedAt: '2024-06-01T10:00:05.000Z',
+      messages: [msg({ type: 'user', role: 'user', contentText: 'hi', sequence: 0 })],
+    })
+
+    const sessions = db.getSessions('proj-1')
+    const session = sessions.find(s => s.id === 'sess-local')
+    expect(session?.hasRemoteControl).toBe(false)
   })
 })
 
@@ -601,6 +633,26 @@ describe('getMessageContext', () => {
     expect(ctx.target).toBeNull()
     expect(ctx.before).toHaveLength(0)
     expect(ctx.after).toHaveLength(0)
+  })
+
+  it('target/before/after all carry frameUrl (not undefined) when present', () => {
+    db.indexSession({
+      sessionId: 'ctx-frame', projectId: 'proj-ctx', projectDisplayName: '/test/ctx',
+      title: 'Frame context test', messageCount: 3, filePath: '/tmp/ctx-frame.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'before', sequence: 0 }),
+        msg({ type: 'frame-link', sequence: 1, frameUrl: 'https://claude.ai/code/artifact/abc' }),
+        msg({ type: 'user', role: 'user', contentText: 'after', sequence: 2 }),
+      ],
+    })
+    const allMsgs = db.getMessages('ctx-frame')
+    const targetId = allMsgs[1].id // frame-link entry, sequence 1
+
+    const ctx = db.getMessageContext(targetId, 1)
+    expect(ctx.target!.frameUrl).toBe('https://claude.ai/code/artifact/abc')
+    expect(ctx.before[0].frameUrl).toBeNull()
+    expect(ctx.after[0].frameUrl).toBeNull()
   })
 })
 

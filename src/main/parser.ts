@@ -39,6 +39,7 @@ const KNOWN_MESSAGE_TYPES = new Set([
   'queue-operation', 'last-prompt',
   'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
   'custom-title', 'ai-title', 'agent-name', 'pr-link',
+  'mode', 'agent-setting', 'frame-link', 'bridge-session',
 ])
 
 /** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
@@ -263,6 +264,13 @@ export function parseLine(line: string): ParsedLine | null {
     }
   }
 
+  // Frame-link: Artifact 產出紀錄
+  let frameUrl: string | null = null
+  if (type === 'frame-link') {
+    const rawUrl = typeof obj.frameUrl === 'string' ? obj.frameUrl : null
+    frameUrl = rawUrl && rawUrl.length <= 4096 ? rawUrl : null
+  }
+
   return {
     type,
     uuid,
@@ -293,6 +301,7 @@ export function parseLine(line: string): ParsedLine | null {
     systemSubtype,
     apiErrorStatus,
     editedFilePath,
+    frameUrl,
     version,
     isCompactSummary,
     isSidechain,
