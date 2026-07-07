@@ -24,12 +24,12 @@ jobs:
           # fetches it instead of source-building. node 20 has no prebuild, falls back to node-gyp,
           # and needs Visual Studio -- which broke when the runner moved to VS18. electron-rebuild
           # (postinstall/dist) uses the electron-v145 prebuild. Net: zero native compilation.
-          node-version: '22'
+          node-version: '22.23.1'
 
       - name: Setup Python (for node-gyp fallback path)
         uses: actions/setup-python@v6
         with:
-          python-version: '3.11'
+          python-version: '3.14.6'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
