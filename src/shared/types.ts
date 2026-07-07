@@ -119,7 +119,7 @@ export interface Message {
   isCompactSummary: boolean
   /** JSONL 頂層 isSidechain（v22 引入） */
   isSidechain: boolean
-  /** indexer 推導：同一 parentUuid 有多個真人分岔、此則無任何後續 entry（rewind 棄用分支，v22 引入） */
+  /** indexer 推導：同一 parentUuid 有多個真人分岔、此支延伸深度遠短於最長分支（rewind 棄用分支，v22 引入） */
   isAbandonedBranch: boolean
 }
 
