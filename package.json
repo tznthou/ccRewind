@@ -45,12 +45,5 @@
     "typescript-eslint": "^8.57.2",
     "vite": "^6.4.3",
     "vitest": "^3.2.6"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "esbuild"
-    ]
   }
 }
