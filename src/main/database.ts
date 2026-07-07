@@ -50,6 +50,8 @@ export interface MessageInput {
   isAbandonedBranch: boolean
   /** message_archive 專用：raw_json 所屬 CC 版本（鄰近值回填，見 indexer.ts resolveNearestVersions） */
   version: string | null
+  /** frame-link type 的 Artifact 連結 */
+  frameUrl: string | null
 }
 
 /** session_files 寫入用型別 */
@@ -586,6 +588,7 @@ interface MessageRow {
   is_compact_summary: number
   is_sidechain: number
   is_abandoned_branch: number
+  frame_url: string | null
 }
 
 /** MessageRow → Message 轉換 */
@@ -620,6 +623,7 @@ function mapMessageRow(r: MessageRow): Message {
     isCompactSummary: r.is_compact_summary === 1,
     isSidechain: r.is_sidechain === 1,
     isAbandonedBranch: r.is_abandoned_branch === 1,
+    frameUrl: r.frame_url,
   }
 }
 
@@ -1237,8 +1241,8 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status, parent_uuid, is_compact_summary, is_sidechain, is_abandoned_branch)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status, parent_uuid, is_compact_summary, is_sidechain, is_abandoned_branch, frame_url)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
@@ -1259,6 +1263,7 @@ export class Database {
           m.attributionSkill, m.attributionPlugin, m.attributionMcpServer, m.attributionMcpTool, m.attributionAgent,
           m.systemSubtype, m.apiErrorStatus,
           m.parentUuid, m.isCompactSummary ? 1 : 0, m.isSidechain ? 1 : 0, m.isAbandonedBranch ? 1 : 0,
+          m.frameUrl,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
@@ -1284,7 +1289,7 @@ export class Database {
              m.tool_error_count, m.has_image,
              m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
              m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
+             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
       WHERE m.session_id = ?

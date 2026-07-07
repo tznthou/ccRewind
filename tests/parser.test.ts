@@ -969,6 +969,48 @@ describe('parseLine — edited_text_file attachment', () => {
   })
 })
 
+describe('parseLine — frame-link (Artifact 產出紀錄)', () => {
+  it('known type (frame-link) → rawJson is null, extracts frameUrl', () => {
+    const line = JSON.stringify({
+      type: 'frame-link',
+      sessionId: 's1',
+      path: '/private/tmp/scratchpad/report.html',
+      frameUrl: 'https://claude.ai/code/artifact/6e44482e-7d7e-4a7e-ae6d-f74705627f75',
+      timestamp: '2026-07-07T06:41:34.777Z',
+    })
+    const result = parseLine(line)!
+    expect(result.rawJson).toBeNull()
+    expect(result.frameUrl).toBe('https://claude.ai/code/artifact/6e44482e-7d7e-4a7e-ae6d-f74705627f75')
+  })
+
+  it('missing frameUrl field → frameUrl null', () => {
+    const line = JSON.stringify({ type: 'frame-link', sessionId: 's1' })
+    const result = parseLine(line)!
+    expect(result.frameUrl).toBeNull()
+  })
+
+  it('non-string frameUrl → frameUrl null', () => {
+    const line = JSON.stringify({ type: 'frame-link', sessionId: 's1', frameUrl: 12345 })
+    const result = parseLine(line)!
+    expect(result.frameUrl).toBeNull()
+  })
+
+  it('frameUrl longer than 4096 chars → frameUrl null', () => {
+    const line = JSON.stringify({ type: 'frame-link', sessionId: 's1', frameUrl: 'https://claude.ai/' + 'a'.repeat(4090) })
+    const result = parseLine(line)!
+    expect(result.frameUrl).toBeNull()
+  })
+
+  it('other types do not populate frameUrl', () => {
+    const line = JSON.stringify({
+      type: 'user', uuid: 'u1', sessionId: 's1',
+      message: { role: 'user', content: 'hi' },
+    })
+    const result = parseLine(line)!
+    expect(result.frameUrl).toBeNull()
+  })
+})
+
 describe('parseLine — version/isCompactSummary/isSidechain (Task 12)', () => {
   it('extracts version from top-level field', () => {
     const line = JSON.stringify({

@@ -121,6 +121,7 @@ function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
     isSidechain: msg.isSidechain,
     isAbandonedBranch: msg.isAbandonedBranch ?? false,
     version: nearestVersions[idx],
+    frameUrl: msg.frameUrl,
   }))
 }
 
