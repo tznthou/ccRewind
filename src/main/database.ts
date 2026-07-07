@@ -1315,7 +1315,7 @@ export class Database {
              m.tool_error_count, m.has_image,
              m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
              m.system_subtype, m.api_error_status,
-             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
+             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch, m.frame_url
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
     `

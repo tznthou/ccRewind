@@ -634,6 +634,26 @@ describe('getMessageContext', () => {
     expect(ctx.before).toHaveLength(0)
     expect(ctx.after).toHaveLength(0)
   })
+
+  it('target/before/after all carry frameUrl (not undefined) when present', () => {
+    db.indexSession({
+      sessionId: 'ctx-frame', projectId: 'proj-ctx', projectDisplayName: '/test/ctx',
+      title: 'Frame context test', messageCount: 3, filePath: '/tmp/ctx-frame.jsonl', fileSize: 0,
+      fileMtime: '2024-01-01T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'before', sequence: 0 }),
+        msg({ type: 'frame-link', sequence: 1, frameUrl: 'https://claude.ai/code/artifact/abc' }),
+        msg({ type: 'user', role: 'user', contentText: 'after', sequence: 2 }),
+      ],
+    })
+    const allMsgs = db.getMessages('ctx-frame')
+    const targetId = allMsgs[1].id // frame-link entry, sequence 1
+
+    const ctx = db.getMessageContext(targetId, 1)
+    expect(ctx.target!.frameUrl).toBe('https://claude.ai/code/artifact/abc')
+    expect(ctx.before[0].frameUrl).toBeNull()
+    expect(ctx.after[0].frameUrl).toBeNull()
+  })
 })
 
 describe('sessions_fts (migration v6)', () => {
