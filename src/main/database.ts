@@ -539,6 +539,20 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 23,
+    description: 'add frame_url to messages, has_remote_control to sessions; whitelist mode/agent-setting/bridge-session/frame-link; force reindex',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN frame_url TEXT;
+        ALTER TABLE sessions ADD COLUMN has_remote_control INTEGER NOT NULL DEFAULT 0;
+      `)
+      db.exec(`
+        UPDATE sessions SET file_mtime = NULL;
+        UPDATE subagent_sessions SET file_mtime = NULL;
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */

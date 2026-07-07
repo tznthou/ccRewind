@@ -286,7 +286,7 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
         message: { role: 'assistant', content: 'ok, proceeding' },
       },
       // unknown type（不在 KNOWN_MESSAGE_TYPES）本身沒有 version 欄位，靠鄰近 entry 回填
-      { type: 'mode', sessionId: 'sess-fork', timestamp: '2026-07-07T10:00:02.000Z' },
+      { type: 'reasoning-trace', sessionId: 'sess-fork', timestamp: '2026-07-07T10:00:02.000Z' },
       {
         type: 'user', uuid: 'dead-end', parentUuid: 'a-root', timestamp: '2026-07-07T10:00:03.000Z', sessionId: 'sess-fork', version: '2.1.196',
         message: { role: 'user', content: '補上' },
@@ -313,9 +313,9 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
     expect(byContent.get('先不補，但我們有辦法修復這個問題嗎？')?.isAbandonedBranch).toBe(false)
     expect(byContent.get('compact summary text')?.isCompactSummary).toBe(true)
 
-    // unknown-type 'mode' entry：raw_json 存進 message_archive，version 用鄰近值（前一筆 a-root）回填
+    // unknown-type 'reasoning-trace' entry：raw_json 存進 message_archive，version 用鄰近值（前一筆 a-root）回填
     const archived = db.rawAll<{ version: string | null }>(
-      "SELECT ma.version AS version FROM message_archive ma JOIN messages m ON m.id = ma.message_id WHERE m.session_id = 'sess-fork' AND m.type = 'mode'",
+      "SELECT ma.version AS version FROM message_archive ma JOIN messages m ON m.id = ma.message_id WHERE m.session_id = 'sess-fork' AND m.type = 'reasoning-trace'",
     )
     expect(archived).toHaveLength(1)
     expect(archived[0].version).toBe('2.1.196')

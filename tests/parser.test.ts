@@ -461,6 +461,20 @@ describe('parseLine rawJson preservation (parseFailed fallback)', () => {
     expect(result!.rawJson).toBeNull()
   })
 
+  it('known type (mode) → rawJson is null', () => {
+    const line = JSON.stringify({ type: 'mode', mode: 'normal', sessionId: 's1' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBeNull()
+  })
+
+  it('known type (agent-setting) → rawJson is null', () => {
+    const line = JSON.stringify({ type: 'agent-setting', agentSetting: 'general-purpose', sessionId: 's1' })
+    const result = parseLine(line)
+    expect(result).not.toBeNull()
+    expect(result!.rawJson).toBeNull()
+  })
+
   it('unknown type → rawJson preserves entire original line (debug fallback)', () => {
     const line = JSON.stringify({
       type: 'reasoning-trace',
