@@ -7,6 +7,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.18.0] - 2026-07-07
+
+### Added
+
+- **JSONL tree structure integrity (migration v22)**. Fixes three gaps flagged by a dev.to reader's technical review (Skillselion, 2026-07-06):
+  - **parentUuid lands in the DB**. `parser.ts` already parsed it, but `indexer.ts` never copied it into `MessageInput`. `messages` now has a `parent_uuid` column + index. This is metadata for downstream fork detection — UI rendering order still uses the existing `sequence`, no tree-based reordering.
+  - **Compaction/sidechain subtype flags**. Parses top-level `isCompactSummary`/`isSidechain` from JSONL into new `messages` columns; ChatView renders a badge for each.
+  - **Same-file rewind abandoned-branch marking**. New `markAbandonedBranches`: identifies a fork (2+ real human-authored branches sharing a `parentUuid`) where one branch's reachable depth along the parentUuid chain is far shorter (< 10%) than the group's longest branch, and flags it `is_abandoned_branch`. ChatView renders it with a dashed border + an "Abandoned branch (rewind)" badge. The original "does it have any direct child" (1-hop) check missed real cases during verification against production data — an abandoned branch typically has exactly one trailing bookkeeping entry (e.g. an attachment) before it truly dies. Switched to comparing each branch's relative reach depth, which correctly caught real examples (e.g. a "continue" branch superseded after a rewind).
+  - **`message_archive` now stores `version`**. Unknown-type entries being archived often lack a top-level JSONL `version` field themselves (that entry type simply doesn't carry one); backfilled from the nearest entry in the same file (`resolveNearestVersions`) so archived rows can answer "which schema version introduced this shape."
+
+### Changed
+
+- Migration v22 forces a full reparse (`file_mtime` reset) so existing sessions backfill `parent_uuid`/`is_compact_summary`/`is_sidechain`/`is_abandoned_branch`/`message_archive.version`.
+
 ## [1.17.0] - 2026-06-28
 
 ### Added

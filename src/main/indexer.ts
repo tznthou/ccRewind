@@ -89,9 +89,11 @@ export function deduplicateTokensByRequestId(lines: ParsedLine[]): ParsedLine[] 
 
 /** ParsedLine[] → MessageInput[]（加上 sequence，去除 parser-only 欄位） */
 function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
+  const nearestVersions = resolveNearestVersions(lines)
   return lines.map((msg, idx) => ({
     type: msg.type,
     uuid: msg.uuid,
+    parentUuid: msg.parentUuid,
     role: msg.role,
     contentText: msg.contentText,
     contentJson: msg.contentJson,
@@ -115,7 +117,125 @@ function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
     attributionAgent: msg.attributionAgent,
     systemSubtype: msg.systemSubtype,
     apiErrorStatus: msg.apiErrorStatus,
+    isCompactSummary: msg.isCompactSummary,
+    isSidechain: msg.isSidechain,
+    isAbandonedBranch: msg.isAbandonedBranch ?? false,
+    version: nearestVersions[idx],
   }))
+}
+
+/**
+ * 每行往前找最近一個非 null 的 version；檔案開頭找不到前值時，往後找第一個非 null 值回填。
+ * 用途：message_archive 封存 unknown-type entry 時常缺 version 欄位（mode/last-prompt 等 type
+ * 本身不帶版本字串），但同檔案鄰近的 assistant/user entry 有——用鄰近值回填才能回答
+ * 「這個 shape 是哪個版本引入的」，逐行硬讀 obj.version 對這批目標資料會全部是 null。
+ */
+export function resolveNearestVersions(lines: ParsedLine[]): Array<string | null> {
+  const result = new Array<string | null>(lines.length).fill(null)
+  let lastSeen: string | null = null
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].version) lastSeen = lines[i].version
+    result[i] = lastSeen
+  }
+  let nextSeen: string | null = null
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].version) nextSeen = lines[i].version
+    if (result[i] == null) result[i] = nextSeen
+  }
+  return result
+}
+
+/** 是否為「真人輸入」的 user turn：排除 tool_result 回應、sidechain（subagent）、compact 摘要注入 */
+function isRealHumanTurn(line: ParsedLine): boolean {
+  return line.type === 'user' && line.role === 'user' &&
+    !line.hasToolResult && !line.isSidechain && !line.isCompactSummary
+}
+
+/**
+ * 計算每個 uuid 沿 parentUuid 鏈往下可推導到的最大陣列 index（含自身）。
+ * JSONL 為 append-only：child 的 index 必大於 parent，故由後往前單趟掃描，
+ * 處理到某 entry 時其所有 children 已計算完畢，不需遞迴。
+ * 用於比較 rewind 分岔各分支「實際走了多遠」，而非只看 1-hop 有無子節點——
+ * 真實棄用分支常帶 1 筆 bookkeeping entry（如 attachment）才真正斷鏈，只查 1-hop 會漏抓
+ * （2026-07-07 對真實 markdown-tool session 實測驗證：棄用分支「繼續」1-hop 有子節點但
+ * 整條鏈只多 1 筆即斷，勝出分支「git init...」則延續 77 筆）。
+ */
+function computeMaxReachableIndex(lines: ParsedLine[]): Map<string, number> {
+  const childIndexesByParentUuid = new Map<string, number[]>()
+  lines.forEach((line, idx) => {
+    if (!line.parentUuid) return
+    const arr = childIndexesByParentUuid.get(line.parentUuid)
+    if (arr) arr.push(idx)
+    else childIndexesByParentUuid.set(line.parentUuid, [idx])
+  })
+
+  const maxReachByUuid = new Map<string, number>()
+  for (let idx = lines.length - 1; idx >= 0; idx--) {
+    const line = lines[idx]
+    if (!line.uuid) continue
+    let best = idx
+    const childIndexes = childIndexesByParentUuid.get(line.uuid)
+    if (childIndexes) {
+      for (const childIdx of childIndexes) {
+        const childUuid = lines[childIdx].uuid
+        best = Math.max(best, childUuid ? maxReachByUuid.get(childUuid) ?? childIdx : childIdx)
+      }
+    }
+    maxReachByUuid.set(line.uuid, best)
+  }
+  return maxReachByUuid
+}
+
+/**
+ * 分支深度低於同組最長分支這個比例，才視為棄用（而非單純較短的平行對話）。
+ * 2026-07-07 子超裁決：真實案例 1/77（≈1.3%）與 5/563（≈0.9%）皆需標記，10% 兩者皆涵蓋。
+ */
+const ABANDONED_BRANCH_RATIO = 0.1
+
+/**
+ * 標記同檔案內 rewind 造成的棄用分支：同一個 parentUuid 下有 2 個以上「真人輸入」子節點，
+ * 其中分支深度（可推導到的最遠 index 距離）明顯短於同組最長分支（< 10%）的視為棄用分支。
+ * 只計入真人輸入子節點分組，排除 tool_use/tool_result 平行呼叫鏈結（同一 assistant turn
+ * 產生的多筆 entry 共享 parentUuid 是正常結構，並非對話分岔）；深度推導則走全部 entry（見
+ * computeMaxReachableIndex），因為分支延續的路徑本身含 assistant/attachment 等非真人節點。
+ * 2026-07-07 B2 驗證：真實 409 個 session 檔案中 ~30 個檔案命中此模式。
+ */
+export function markAbandonedBranches(lines: ParsedLine[]): ParsedLine[] {
+  const candidatesByParent = new Map<string, ParsedLine[]>()
+  for (const line of lines) {
+    if (!line.parentUuid || !isRealHumanTurn(line)) continue
+    const siblings = candidatesByParent.get(line.parentUuid)
+    if (siblings) siblings.push(line)
+    else candidatesByParent.set(line.parentUuid, [line])
+  }
+  const forkGroups = [...candidatesByParent.values()].filter(siblings => siblings.length >= 2)
+  if (forkGroups.length === 0) return lines
+
+  const indexByUuid = new Map<string, number>()
+  lines.forEach((line, idx) => { if (line.uuid) indexByUuid.set(line.uuid, idx) })
+  const maxReachByUuid = computeMaxReachableIndex(lines)
+
+  const abandonedUuids = new Set<string>()
+  for (const siblings of forkGroups) {
+    const depths: Array<{ uuid: string; depth: number }> = []
+    for (const s of siblings) {
+      const ownIdx = s.uuid ? indexByUuid.get(s.uuid) : undefined
+      if (s.uuid && ownIdx != null) {
+        depths.push({ uuid: s.uuid, depth: (maxReachByUuid.get(s.uuid) ?? ownIdx) - ownIdx })
+      }
+    }
+    if (depths.length < 2) continue
+    const maxDepth = Math.max(...depths.map(d => d.depth))
+    if (maxDepth === 0) continue // 全員即時死端，沒有「相對更短」的分支可比
+    for (const d of depths) {
+      if (d.depth < maxDepth * ABANDONED_BRANCH_RATIO) abandonedUuids.add(d.uuid)
+    }
+  }
+
+  if (abandonedUuids.size === 0) return lines
+  return lines.map(line =>
+    line.uuid && abandonedUuids.has(line.uuid) ? { ...line, isAbandonedBranch: true } : line,
+  )
 }
 
 /**
@@ -204,10 +324,15 @@ export async function runIndexer(
     // requestId token 去重：同一 API response 的多個 entries 只保留最後一個的 token
     const dedupedLines = deduplicateTokensByRequestId(parsed.messages)
 
+    // 標記同檔案內 rewind 棄用分支（parentUuid 多重真人分岔、其中一支延伸深度遠短於最長分支）。
+    // 必須在 UUID 去重「之前」跑：resumed session 會把先前 entries replay 進新檔案，
+    // 若先去重會抽掉分支鏈中的中繼 entry，讓真正延續的分支被誤判成深度驟降的棄用分支。
+    const markedLines = markAbandonedBranches(dedupedLines)
+
     // UUID 去重：過濾掉其他 session 已索引的 replay entries（排除自身，避免 re-index 時自己匹配自己）
-    const uuids = dedupedLines.filter(m => m.uuid).map(m => m.uuid!)
+    const uuids = markedLines.filter(m => m.uuid).map(m => m.uuid!)
     const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
-    const messages = dedupedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
+    const messages = markedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
     // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
     if (messages.length === 0 && parsed.messages.length > 0) continue

@@ -954,3 +954,68 @@ describe('parseLine — edited_text_file attachment', () => {
     expect(result.editedFilePath).toBeNull()
   })
 })
+
+describe('parseLine — version/isCompactSummary/isSidechain (Task 12)', () => {
+  it('extracts version from top-level field', () => {
+    const line = JSON.stringify({
+      type: 'assistant', uuid: 'a1', sessionId: 's1', version: '2.1.201',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    })
+    const result = parseLine(line)!
+    expect(result.version).toBe('2.1.201')
+  })
+
+  it('version null when field missing', () => {
+    const line = JSON.stringify({ type: 'mode', sessionId: 's1' })
+    const result = parseLine(line)!
+    expect(result.version).toBeNull()
+  })
+
+  it('version null when not a string', () => {
+    const line = JSON.stringify({ type: 'assistant', sessionId: 's1', version: 2.1 })
+    const result = parseLine(line)!
+    expect(result.version).toBeNull()
+  })
+
+  it('version null when exceeds length cap', () => {
+    const line = JSON.stringify({ type: 'assistant', sessionId: 's1', version: 'v'.repeat(33) })
+    const result = parseLine(line)!
+    expect(result.version).toBeNull()
+  })
+
+  it('isCompactSummary true when set on user entry', () => {
+    const line = JSON.stringify({
+      type: 'user', uuid: 'u1', sessionId: 's1', isCompactSummary: true,
+      message: { role: 'user', content: 'summary text' },
+    })
+    const result = parseLine(line)!
+    expect(result.isCompactSummary).toBe(true)
+  })
+
+  it('isCompactSummary false when missing', () => {
+    const line = JSON.stringify({
+      type: 'user', uuid: 'u1', sessionId: 's1',
+      message: { role: 'user', content: 'hello' },
+    })
+    const result = parseLine(line)!
+    expect(result.isCompactSummary).toBe(false)
+  })
+
+  it('isSidechain true when set', () => {
+    const line = JSON.stringify({
+      type: 'user', uuid: 'u1', sessionId: 's1', isSidechain: true,
+      message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] },
+    })
+    const result = parseLine(line)!
+    expect(result.isSidechain).toBe(true)
+  })
+
+  it('isSidechain false when missing', () => {
+    const line = JSON.stringify({
+      type: 'assistant', uuid: 'a1', sessionId: 's1',
+      message: { role: 'assistant', content: [{ type: 'text', text: 'hi' }] },
+    })
+    const result = parseLine(line)!
+    expect(result.isSidechain).toBe(false)
+  })
+})

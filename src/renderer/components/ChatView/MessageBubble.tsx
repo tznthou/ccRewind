@@ -54,6 +54,10 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = extractToolBlocks(message.contentJson)
+  const badges: Array<{ key: string; label: string }> = []
+  if (message.isCompactSummary) badges.push({ key: 'compact', label: t('chatView.message.compactSummary') })
+  if (message.isSidechain) badges.push({ key: 'sidechain', label: t('chatView.message.sidechain') })
+  if (message.isAbandonedBranch) badges.push({ key: 'abandoned', label: t('chatView.message.abandonedBranch') })
   const thinkingBlocks = useMemo(() => extractThinkingBlocks(message.contentJson), [message.contentJson])
   const heatProps = !isUser ? getHeatProps(heat) : undefined
 
@@ -76,11 +80,19 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} tabIndex={-1} style={heatProps?.style}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} data-abandoned={message.isAbandonedBranch || undefined} tabIndex={-1} style={heatProps?.style}>
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>
       </div>
+
+      {badges.length > 0 && (
+        <div className={styles.badgeRow}>
+          {badges.map(b => (
+            <span key={b.key} className={styles.badge} data-badge={b.key}>{b.label}</span>
+          ))}
+        </div>
+      )}
 
       {thinkingBlocks.map((block, i) => (
         <ThinkingBlock key={`thinking-${i}`} thinking={block.thinking} searchQuery={searchQuery} />

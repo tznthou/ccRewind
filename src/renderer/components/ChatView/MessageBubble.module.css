@@ -125,6 +125,35 @@
   font-weight: 600;
 }
 
+/* Task 12 badges: compact summary / sidechain / abandoned branch */
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+
+.badge {
+  font-size: var(--font-size-xs);
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.badge[data-badge="abandoned"] {
+  color: var(--color-error);
+  border-color: var(--color-error);
+}
+
+/* 棄用分支：整個氣泡淡化 + 虛線左框，暗示這支對話沒有後續 */
+.bubble[data-abandoned="true"] {
+  opacity: 0.7;
+  border-left: 3px dashed var(--color-error);
+}
+
 /* System message */
 .systemMessage {
   display: flex;

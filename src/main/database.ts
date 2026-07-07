@@ -42,6 +42,14 @@ export interface MessageInput {
   attributionAgent: string | null
   systemSubtype: string | null
   apiErrorStatus: number | null
+  /** JSONL 頂層 parentUuid（同檔案樹狀關係中繼資料） */
+  parentUuid: string | null
+  isCompactSummary: boolean
+  isSidechain: boolean
+  /** indexer 推導：rewind 造成的棄用分支 */
+  isAbandonedBranch: boolean
+  /** message_archive 專用：raw_json 所屬 CC 版本（鄰近值回填，見 indexer.ts resolveNearestVersions） */
+  version: string | null
 }
 
 /** session_files 寫入用型別 */
@@ -513,6 +521,24 @@ const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 22,
+    description: 'add parent_uuid/is_compact_summary/is_sidechain/is_abandoned_branch to messages, version to message_archive; force reindex',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE messages ADD COLUMN parent_uuid TEXT;
+        ALTER TABLE messages ADD COLUMN is_compact_summary INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE messages ADD COLUMN is_sidechain INTEGER NOT NULL DEFAULT 0;
+        ALTER TABLE messages ADD COLUMN is_abandoned_branch INTEGER NOT NULL DEFAULT 0;
+        CREATE INDEX idx_messages_parent_uuid ON messages(parent_uuid);
+        ALTER TABLE message_archive ADD COLUMN version TEXT;
+      `)
+      db.exec(`
+        UPDATE sessions SET file_mtime = NULL;
+        UPDATE subagent_sessions SET file_mtime = NULL;
+      `)
+    },
+  },
 ]
 
 /** DB SELECT messages 的原始行型別 */
@@ -542,6 +568,10 @@ interface MessageRow {
   attribution_agent: string | null
   system_subtype: string | null
   api_error_status: number | null
+  parent_uuid: string | null
+  is_compact_summary: number
+  is_sidechain: number
+  is_abandoned_branch: number
 }
 
 /** MessageRow → Message 轉換 */
@@ -572,6 +602,10 @@ function mapMessageRow(r: MessageRow): Message {
     attributionAgent: r.attribution_agent,
     systemSubtype: r.system_subtype,
     apiErrorStatus: r.api_error_status,
+    parentUuid: r.parent_uuid,
+    isCompactSummary: r.is_compact_summary === 1,
+    isSidechain: r.is_sidechain === 1,
+    isAbandonedBranch: r.is_abandoned_branch === 1,
   }
 }
 
@@ -1189,14 +1223,14 @@ export class Database {
         }
       }
       const insertMsg = this.db.prepare(`
-        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO messages (session_id, type, role, content_text, has_tool_use, has_tool_result, tool_names, timestamp, sequence, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens, model, uuid, tool_error_count, has_image, attribution_skill, attribution_plugin, attribution_mcp_server, attribution_mcp_tool, attribution_agent, system_subtype, api_error_status, parent_uuid, is_compact_summary, is_sidechain, is_abandoned_branch)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `)
       const insertContent = this.db.prepare(
         'INSERT INTO message_content (message_id, content_json) VALUES (?, ?)',
       )
       const insertArchive = this.db.prepare(
-        'INSERT INTO message_archive (message_id, raw_json) VALUES (?, ?)',
+        'INSERT INTO message_archive (message_id, raw_json, version) VALUES (?, ?, ?)',
       )
       for (const m of params.messages) {
         const result = insertMsg.run(
@@ -1210,13 +1244,14 @@ export class Database {
           m.hasImage ? 1 : 0,
           m.attributionSkill, m.attributionPlugin, m.attributionMcpServer, m.attributionMcpTool, m.attributionAgent,
           m.systemSubtype, m.apiErrorStatus,
+          m.parentUuid, m.isCompactSummary ? 1 : 0, m.isSidechain ? 1 : 0, m.isAbandonedBranch ? 1 : 0,
         )
         const msgId = result.lastInsertRowid
         if (m.contentJson != null) {
           insertContent.run(msgId, m.contentJson)
         }
         if (m.rawJson != null) {
-          insertArchive.run(msgId, m.rawJson)
+          insertArchive.run(msgId, m.rawJson, m.version)
         }
       }
     })
@@ -1234,7 +1269,8 @@ export class Database {
              m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
              m.tool_error_count, m.has_image,
              m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status
+             m.system_subtype, m.api_error_status,
+             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
       WHERE m.session_id = ?
@@ -1253,7 +1289,8 @@ export class Database {
              m.input_tokens, m.output_tokens, m.cache_read_tokens, m.cache_creation_tokens, m.model,
              m.tool_error_count, m.has_image,
              m.attribution_skill, m.attribution_plugin, m.attribution_mcp_server, m.attribution_mcp_tool, m.attribution_agent,
-             m.system_subtype, m.api_error_status
+             m.system_subtype, m.api_error_status,
+             m.parent_uuid, m.is_compact_summary, m.is_sidechain, m.is_abandoned_branch
       FROM messages m
       LEFT JOIN message_content mc ON mc.message_id = m.id
     `

@@ -33,6 +33,11 @@ function msg(overrides: Partial<MessageInput> & { type: string; sequence: number
     attributionAgent: null,
     systemSubtype: null,
     apiErrorStatus: null,
+    parentUuid: null,
+    isCompactSummary: false,
+    isSidechain: false,
+    isAbandonedBranch: false,
+    version: null,
     ...overrides,
   }
 }
@@ -1847,5 +1852,79 @@ describe('migration v21: image/attribution/system_subtype/api_error columns', ()
     const msgs = db.getMessages('err-sess')
     expect(msgs[0].systemSubtype).toBe('api_error')
     expect(msgs[0].apiErrorStatus).toBe(529)
+  })
+})
+
+describe('migration v22: parent_uuid/is_compact_summary/is_sidechain/is_abandoned_branch + message_archive.version', () => {
+  it('schema version is at least 22', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(22)
+  })
+
+  it('new columns exist on messages and message_archive tables', () => {
+    const msgCols = db.rawAll<{ name: string }>("PRAGMA table_info(messages)").map(c => c.name)
+    expect(msgCols).toContain('parent_uuid')
+    expect(msgCols).toContain('is_compact_summary')
+    expect(msgCols).toContain('is_sidechain')
+    expect(msgCols).toContain('is_abandoned_branch')
+
+    const archiveCols = db.rawAll<{ name: string }>("PRAGMA table_info(message_archive)").map(c => c.name)
+    expect(archiveCols).toContain('version')
+  })
+
+  it('stores and retrieves parentUuid/isCompactSummary/isSidechain/isAbandonedBranch', () => {
+    db.upsertProject('p1', 'Project')
+    db.indexSession({
+      sessionId: 'fork-sess', projectId: 'p1', projectDisplayName: 'Project',
+      title: 'Fork test', messageCount: 2, filePath: '/tmp/f.jsonl', fileSize: 1,
+      fileMtime: '2026-07-07T00:00:00Z', startedAt: '2026-07-07T00:00:00Z', endedAt: null,
+      messages: [
+        msg({ type: 'user', sequence: 0, uuid: 'root', contentText: 'root msg' }),
+        msg({
+          type: 'user', sequence: 1, uuid: 'dead-end', parentUuid: 'root',
+          contentText: 'abandoned', isAbandonedBranch: true,
+        }),
+        msg({
+          type: 'user', sequence: 2, uuid: 'compact-1', parentUuid: 'root',
+          contentText: 'compact summary', isCompactSummary: true,
+        }),
+        msg({
+          type: 'user', sequence: 3, uuid: 'sub-1', parentUuid: 'root',
+          contentText: 'subagent line', isSidechain: true,
+        }),
+      ],
+    })
+    const msgs = db.getMessages('fork-sess')
+    const byContent = new Map(msgs.map(m => [m.contentText, m]))
+    expect(byContent.get('abandoned')?.parentUuid).toBe('root')
+    expect(byContent.get('abandoned')?.isAbandonedBranch).toBe(true)
+    expect(byContent.get('compact summary')?.isCompactSummary).toBe(true)
+    expect(byContent.get('subagent line')?.isSidechain).toBe(true)
+    expect(byContent.get('root msg')?.parentUuid).toBeNull()
+    expect(byContent.get('root msg')?.isAbandonedBranch).toBe(false)
+  })
+
+  it('stores version alongside archived raw_json for unknown-type entries', () => {
+    db.upsertProject('p1', 'Project')
+    db.indexSession({
+      sessionId: 'archive-sess', projectId: 'p1', projectDisplayName: 'Project',
+      title: 'Archive version test', messageCount: 1, filePath: '/tmp/g.jsonl', fileSize: 1,
+      fileMtime: '2026-07-07T00:00:00Z', startedAt: '2026-07-07T00:00:00Z', endedAt: null,
+      messages: [
+        msg({
+          type: 'mode', sequence: 0, rawJson: '{"type":"mode"}', version: '2.1.196',
+        }),
+      ],
+    })
+    const rows = db.rawAll<{ version: string | null; raw_json: string }>(
+      "SELECT ma.version AS version, ma.raw_json AS raw_json FROM message_archive ma JOIN messages m ON m.id = ma.message_id WHERE m.session_id = 'archive-sess'",
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].version).toBe('2.1.196')
+    expect(rows[0].raw_json).toBe('{"type":"mode"}')
+  })
+
+  it('parent_uuid index exists for efficient parent-child lookups', () => {
+    const indexes = db.rawAll<{ name: string }>("PRAGMA index_list(messages)").map(i => i.name)
+    expect(indexes).toContain('idx_messages_parent_uuid')
   })
 })
