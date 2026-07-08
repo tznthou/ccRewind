@@ -185,7 +185,7 @@ graph TB
 | better-sqlite3 12 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖、甜甜圈圖（Context Budget + Dashboard） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
-| Vitest 3 | 測試框架 | 534 個測試，透過 Electron 執行 |
+| Vitest 3 | 測試框架 | 545 個測試，透過 Electron 執行 |
 
 ---
 
@@ -280,7 +280,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext（語言／主題／字級皆 localStorage 持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（534 個）
+├── tests/                     # Vitest 測試（545 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

@@ -7,6 +7,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.0] - 2026-07-08
+
+### Added
+
+- **JSONL whitelist completion + remote-control detection (migration v23)**:
+  - **4 new whitelisted types**: `mode`, `agent-setting`, `bridge-session`, `frame-link`. The first two carry no extractable content (`mode` is always "normal" in real data, `agent-setting` only ever "general-purpose"); the signals of the latter two are captured by the new columns below. None of them dump `raw_json` into `message_archive` as unknown types anymore
+  - **frame-link Artifact URLs land in the DB**: the `frameUrl` of a `frame-link` attachment is parsed into `messages.frame_url` (≤4096 char guard, matching the `editedFilePath` precedent)
+  - **Remote-control session flag**: new `sessions.has_remote_control`. `bridge-session` is Claude Code's remote-control session bridge marker; verified against real sessions, it spans the whole session lifecycle rather than appearing per turn, so it is derived as a session-level existence check instead of per-message tracking
+
+### Changed
+
+- Migration v23 forces a full reparse (`file_mtime` reset); existing sessions get `frame_url` and `has_remote_control` backfilled
+- Package manager upgraded pnpm 10.x → 11.8.0 (includes security fixes; build-script approval migrated to `allowBuilds` in `pnpm-workspace.yaml`); GitHub Actions dependencies updated
+
 ## [1.18.0] - 2026-07-07
 
 ### Added
