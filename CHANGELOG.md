@@ -6,6 +6,20 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.19.0] - 2026-07-08
+
+### Added
+
+- **JSONL 白名單補完 + remote-control 偵測（migration v23）**：
+  - **白名單新增 4 個 type**：`mode`、`agent-setting`、`bridge-session`、`frame-link`。前兩者無可抽取內容（`mode` 真實資料中恆為 "normal"、`agent-setting` 只出現過 "general-purpose"），後兩者的訊號由下述新欄位承接；四者不再以 unknown type 把 `raw_json` 塞進 `message_archive`
+  - **frame-link Artifact URL 落地**：解析 `frame-link` attachment 的 `frameUrl` 存入 `messages.frame_url`（≤4096 字元 guard，對齊 `editedFilePath` 先例）
+  - **remote-control session 旗標**：新增 `sessions.has_remote_control`。`bridge-session` 是 Claude Code remote-control（遠端遙控）的 session 橋接標記，以真實 session 驗證出它貫穿整個 session 生命週期而非逐輪出現，故採 session 層級存在性判定，不做逐訊息標記
+
+### Changed
+
+- 隨 migration v23 強制全量 reparse（`file_mtime` 重置），既有 session 補填 `frame_url` 與 `has_remote_control`
+- 套件管理器升級 pnpm 10.x → 11.8.0（含 security 修補；build-script 核准制遷移至 `pnpm-workspace.yaml` 的 `allowBuilds`）；GitHub Actions 依賴更新
+
 ## [1.18.0] - 2026-07-07
 
 ### Added

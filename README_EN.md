@@ -184,7 +184,7 @@ graph TB
 | better-sqlite3 12 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
-| Vitest 3 | Test framework | 534 tests, run through Electron |
+| Vitest 3 | Test framework | 545 tests, run through Electron |
 
 ---
 
@@ -279,7 +279,7 @@ ccRewind/
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (534)
+├── tests/                     # Vitest tests (545)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json

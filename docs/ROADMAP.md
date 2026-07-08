@@ -1,6 +1,6 @@
 # ccRewind — 功能演進路線圖
 
-> 最後更新：2026-06-08
+> 最後更新：2026-07-08
 > 狀態標示：✅ 已交付 / 📋 遠期規劃 / 💤 Backlog
 
 ---
@@ -29,6 +29,9 @@
 | 9 | v1.14.0 | ✅ | Tool-error 偵測基建 + Session ID chip + Renovate + 搜尋日期 header |
 | 10 | v1.15.0 | ✅ | Session 星號標記 + ★ filter |
 | 11 | v1.16.0 | ✅ | JSONL schema v21：Attribution + image + api_error + edited_text_file |
+| 12 | v1.17.0 | ✅ | Thinking blocks 渲染：對話檢視摺疊顯示推理過程 |
+| 13 | v1.18.0 | ✅ | JSONL 樹狀結構完整性：parent_uuid + compaction/sidechain 徽章 + rewind 棄用分支 |
+| 14 | v1.19.0 | ✅ | JSONL 白名單補完 + remote-control 偵測 |
 | — | — | 📋 | 資料壓縮功能（保留可還原） |
 | — | — | 📋 | In-App 自動更新（待 Apple Developer ID code signing） |
 | — | — | 💤 | 其餘見 Backlog |
@@ -456,6 +459,41 @@
 
 - Migration v21 加 8 欄位到 messages 表，invalidate file_mtime 強制 reindex
 - `SUMMARY_VERSION` 3 → 4，第一次 Sync 會 reparse 所有 sessions 填入新欄位
+
+---
+
+## Phase 12 ✅ Thinking blocks 渲染（v1.17.0）
+
+**目標**：讓 assistant 的推理過程（thinking）在對話檢視中可見——資料一直完整保留在 `content_json`，只差 UI。
+
+- `extractThinkingBlocks` 寬容解析 + `ThinkingBlock` 折疊元件（複用 `MarkdownRenderer`）
+- 預設收合且 lazy mount（單則 thinking 可達數萬字，收合時不掛載解析）；`contentJson` extraction memoized，搜尋 re-render 不重複解析
+- 不動 parser 與 schema，不需 re-index；i18n 繁中 + 英文
+- 起源：一次跨 session 幻覺考古發現幻覺發病在 thinking，而 thinking 三層可見性中 JSONL 有、hook 無、呈現層無——此版補上呈現層
+
+---
+
+## Phase 13 ✅ JSONL 樹狀結構完整性（v1.18.0）
+
+**目標**：回應 dev.to 讀者技術審查指出的三個缺口，讓 rewind / compaction / sidechain 這些「對話樹」層級的結構在考古時可見。
+
+- **parentUuid 落地**：parser 早已解析但從未進 DB，`messages` 加 `parent_uuid` 欄位 + index；UI 渲染順序仍用既有 `sequence`，不做樹狀重排
+- **compaction / sidechain 徽章**：解析頂層 `isCompactSummary` / `isSidechain`，ChatView 依欄位顯示徽章
+- **rewind 棄用分支標記**：`markAbandonedBranches` 以分支延伸深度比例（< 10%）判定被 rewind 取代的分支，虛線邊框 + 徽章呈現；原「1-hop 有無直接子節點」判定法被真實資料推翻後改為深度比例
+- **message_archive 補 version**：unknown-type entry 用同檔案鄰近 entry 回填版本字串（`resolveNearestVersions`），可回答「這個 shape 是哪個版本引入的」
+- Migration v22 + 全量 reparse
+
+---
+
+## Phase 14 ✅ JSONL 白名單補完 + remote-control 偵測（v1.19.0）
+
+**目標**：清掉 2026-07-06 schema 盤點抓到的白名單外 type，並把其中 `bridge-session` 的真實語義（remote-control 橋接標記）轉成可查詢的 session 旗標。
+
+- **白名單新增 4 個 type**：`mode` / `agent-setting` / `bridge-session` / `frame-link`，不再以 unknown type 進 `message_archive`
+- **frame-link Artifact URL**：解析存入 `messages.frame_url`（≤4096 字元 guard，對齊 `editedFilePath` 先例）
+- **remote-control 旗標**：`sessions.has_remote_control`，由 `bridge-session` 存在性衍生——真實資料驗證出它貫穿 session 生命週期而非逐輪出現，故採 session 層級判定
+- 白名單決策依據 real-data first：曾考慮改為 content-based parseFailed 判斷，被 55 萬筆真實資料推翻（47% 已知型別本來就設計成無內容）
+- Migration v23 + 全量 reparse
 
 ---
 
