@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.1] - 2026-07-20
+
+### Changed
+
+- Dependency updates: eslint 10.7.0, typescript-eslint 8.64.0, globals 17.7.0, pnpm 11.13.1, Node.js 22.23.1, @tanstack/react-virtual 3.14.6, and other patch fixes
+
 ## [1.19.0] - 2026-07-08
 
 ### Added
