@@ -89,11 +89,6 @@ jobs:
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-electron-
 
-      - name: Setup Python (for node-gyp fallback path)
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.6'
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -157,11 +152,6 @@ jobs:
           path: ~\AppData\Local\electron\Cache
           key: ${{ runner.os }}-electron-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-electron-
-
-      - name: Setup Python (for node-gyp fallback path)
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.14.6'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
