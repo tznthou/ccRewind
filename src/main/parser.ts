@@ -37,7 +37,7 @@ export function hasCommandWrapper(raw: string): boolean {
 const KNOWN_MESSAGE_TYPES = new Set([
   'user', 'assistant', 'system',
   'queue-operation', 'last-prompt',
-  'progress', 'attachment', 'file-history-snapshot', 'permission-mode',
+  'progress', 'attachment', 'file-history-snapshot', 'file-history-delta', 'permission-mode',
   'custom-title', 'ai-title', 'agent-name', 'pr-link',
   'mode', 'agent-setting', 'frame-link', 'bridge-session',
 ])

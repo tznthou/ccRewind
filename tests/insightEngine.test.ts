@@ -211,6 +211,16 @@ describe('insightEngine', () => {
       const limit = insights.find(i => i.id.startsWith('ctx-limit'))
       expect(limit).toBeUndefined()
     })
+
+    // Regression: Fable 5 (1M model) at 167K was incorrectly shown as "200K 上限的 84%"
+    it('1M inferred from model: Fable 5 at 167K → no limit insight', () => {
+      const turns = [
+        makeTurn({ sequence: 1, inputTokens: 167_000, contextTotal: 167_000, model: 'claude-fable-5' }),
+      ]
+      const insights = generateInsights(makeStats(turns))
+      const limit = insights.find(i => i.id.startsWith('ctx-limit'))
+      expect(limit).toBeUndefined()
+    })
   })
 
   describe('detectContextPlan', () => {
@@ -233,6 +243,41 @@ describe('insightEngine', () => {
 
     it('returns 200k for empty turns', () => {
       expect(detectContextPlan([])).toBe('200k')
+    })
+
+    it('returns 1m for Claude 4+ model even when tokens are low', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000, model: 'claude-opus-4-6' }),
+      ]
+      expect(detectContextPlan(turns)).toBe('1m')
+    })
+
+    it('returns 1m for Claude Fable 5', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 50_000, model: 'claude-fable-5' }),
+      ]
+      expect(detectContextPlan(turns)).toBe('1m')
+    })
+
+    it('returns 200k for Claude 3.x model', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000, model: 'claude-3-5-sonnet-20241022' }),
+      ]
+      expect(detectContextPlan(turns)).toBe('200k')
+    })
+
+    it('returns 200k for Haiku 4.5 (200K-only model)', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000, model: 'claude-haiku-4-5-20251001' }),
+      ]
+      expect(detectContextPlan(turns)).toBe('200k')
+    })
+
+    it('returns 200k when model is null (no model info)', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000 }),
+      ]
+      expect(detectContextPlan(turns)).toBe('200k')
     })
   })
 

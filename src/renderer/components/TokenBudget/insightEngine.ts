@@ -67,19 +67,15 @@ function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
 
 // ── Rule 2: Context Limit Warning ──
 
-// Detect plan window from observed context size: any turn exceeding 200K is
-// physical proof the session ran on a 1M-context model (200K models reject
-// > 200K requests). Otherwise assume the standard 200K plan.
-//
-// Pre-condition: assumes a session stays on one plan class throughout.
-// Holds in practice because (a) sub-agent turns live in separate JSONL files
-// and never enter this array, and (b) cross-plan /model switches mid-session
-// are rare. If a session does switch from a 1M to a 200K model after exceeding
-// 200K, a near-limit later turn (e.g. 195K) is suppressed instead of warned.
+// Detect plan window: (1) any turn >200K is physical proof of 1M context,
+// (2) model family — Claude 3.x was 200K-only; Claude 4+/5+ default to 1M,
+// (3) fallback to 200K when no model info is available.
 export function detectContextPlan(turns: SessionTokenStats['turns']): '200k' | '1m' {
   for (const t of turns) {
     if (t.contextTotal > 200_000) return '1m'
   }
+  const model = turns.find(t => t.model)?.model
+  if (model && !model.startsWith('claude-3') && !model.includes('haiku')) return '1m'
   return '200k'
 }
 

@@ -7,6 +7,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.19.2] - 2026-07-22
+
+### Fixed
+
+- **Token Budget context plan misdetection**: `detectContextPlan()` previously relied solely on whether any turn exceeded 200K to infer the context window size. Claude 4+/5+ models with 1M context were misclassified as 200K plan when token usage stayed below 200K (showing "84% of 200K limit"). Added model-based inference: Claude 3.x / Haiku → 200K, Claude 4+/5+ → 1M
+- **JSONL whitelist: add `file-history-delta`**: new file undo tracking type from CC v2.1.215+, no longer stored as unknown type with `raw_json`
+
 ## [1.19.1] - 2026-07-20
 
 ### Changed
