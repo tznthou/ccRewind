@@ -6,6 +6,13 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.19.2] - 2026-07-22
+
+### Fixed
+
+- **Token Budget context plan 誤判**：`detectContextPlan()` 原本只靠「是否有 turn 超過 200K」推斷 context window 大小，Claude 4+/5+ 的 1M model 在 token 量未超 200K 時被誤判為 200K plan（顯示「200K 上限的 84%」）。新增 model-based 推斷：Claude 3.x / Haiku → 200K，Claude 4+/5+ → 1M
+- **JSONL 白名單補 `file-history-delta`**：CC v2.1.215+ 新增的 file undo 追蹤 type，不再以 unknown type 存 `raw_json`
+
 ## [1.19.1] - 2026-07-20
 
 ### Changed
