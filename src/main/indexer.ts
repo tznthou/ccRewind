@@ -254,6 +254,7 @@ export async function runIndexer(
   db: Database,
   onProgress?: ProgressCallback,
   baseDir?: string,
+  tasksBaseDir: string = DEFAULT_TASKS_BASE_DIR,
 ): Promise<void> {
   // 解析失敗而沒進 DB 的項目數。累計後隨 progress 一路帶到 UI——
   // 這條路徑上的每個 continue 都是在丟資料，不能只有我們自己（甚至我們也不）知道。
@@ -468,7 +469,7 @@ export async function runIndexer(
   //    這層獨立於 session JSONL：task 可能單獨變動（TaskUpdate rewrite），
   //    session JSONL 未變也要重新 parse。每個 task 檔 per-file mtime 比對。
   //    只對 main session 跑（subagent 工具集沒有 TaskCreate/Update，不會寫 task）。
-  skipped += await runTaskScanning(db, projects)
+  skipped += await runTaskScanning(db, projects, tasksBaseDir)
 
   // 6. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
   for (const project of projects) {
@@ -494,6 +495,7 @@ const MAX_TASK_FILE_BYTES = 1 * 1024 * 1024
 async function runTaskScanning(
   db: Database,
   projects: Awaited<ReturnType<typeof scanProjects>>,
+  tasksBaseDir: string,
 ): Promise<number> {
   let skipped = 0
   const existingTaskMtimes = db.getAllTaskMtimes()
@@ -510,7 +512,7 @@ async function runTaskScanning(
 
       let scanned: ScannedTask[]
       try {
-        scanned = await scanTasks(DEFAULT_TASKS_BASE_DIR, session.sessionId)
+        scanned = await scanTasks(tasksBaseDir, session.sessionId)
       } catch (err) {
         skipped++
         console.warn(`[indexer] tasks of session ${session.sessionId} not scanned`, err)

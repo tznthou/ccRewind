@@ -13,13 +13,27 @@ export function decodeProjectPath(encoded: string): string {
   return encoded.replace(/-/g, '/')
 }
 
+/**
+ * 掃描層的失敗記錄。ENOENT 靜音：多數 session 沒有 subagents/ 或 tasks/ 目錄，
+ * 而 readdir 之後檔案被 Claude Code 刪掉也是日常，逐次 warn 只會蓋掉真正的訊號。
+ *
+ * 其餘錯誤（權限、I/O、掛載點消失）必須出聲：掃不到的東西不會進 DB，
+ * 而掃描層是把錯誤轉成空陣列的地方 —— indexer 的 catch 永遠等不到它們，
+ * skipped 計數也就數不到。這裡不出聲，那條路徑上的資料遺失就沒有任何人知道。
+ */
+function warnUnlessMissing(context: string, err: unknown): void {
+  if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return
+  console.warn(`[scanner] ${context}`, err)
+}
+
 /** 掃描 ~/.claude/projects/，回傳所有專案及其 JSONL 檔案 */
 export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<ScannedProject[]> {
   let entries: string[]
   try {
     entries = await readdir(baseDir)
-  } catch {
+  } catch (err) {
     // 目錄不存在或不可讀 → 回傳空陣列
+    warnUnlessMissing(`cannot read projects dir: ${baseDir}`, err)
     return []
   }
 
@@ -35,7 +49,8 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     let dirStat
     try {
       dirStat = await stat(projectDir)
-    } catch {
+    } catch (err) {
+      warnUnlessMissing(`cannot stat project dir: ${projectDir}`, err)
       continue
     }
     if (!dirStat.isDirectory()) continue
@@ -44,7 +59,8 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     let files: string[]
     try {
       files = await readdir(projectDir)
-    } catch {
+    } catch (err) {
+      warnUnlessMissing(`cannot list project dir: ${projectDir}`, err)
       continue
     }
 
@@ -56,7 +72,8 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
       let fileStat
       try {
         fileStat = await stat(filePath)
-      } catch {
+      } catch (err) {
+        warnUnlessMissing(`cannot stat session file: ${filePath}`, err)
         continue
       }
       if (!fileStat.isFile()) continue
@@ -86,7 +103,8 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
   let entries: string[]
   try {
     entries = await readdir(subagentsDir)
-  } catch {
+  } catch (err) {
+    warnUnlessMissing(`cannot list subagents dir: ${subagentsDir}`, err)
     return []
   }
 
@@ -99,7 +117,8 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
     let fileStat
     try {
       fileStat = await stat(filePath)
-    } catch {
+    } catch (err) {
+      warnUnlessMissing(`cannot stat subagent file: ${filePath}`, err)
       continue
     }
     if (!fileStat.isFile()) continue
@@ -116,8 +135,9 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
       if (typeof meta.agentType === 'string') {
         agentType = meta.agentType
       }
-    } catch {
-      // meta.json 不存在或 JSON 格式錯誤 → agentType 為 null
+    } catch (err) {
+      // meta.json 不存在是常態（不是每個 subagent 都有）；JSON 壞掉才需要知道
+      warnUnlessMissing(`cannot read subagent meta: ${metaPath}`, err)
     }
 
     results.push({
@@ -149,7 +169,8 @@ export async function scanTasks(
   let entries: string[]
   try {
     entries = await readdir(sessionTasksDir)
-  } catch {
+  } catch (err) {
+    warnUnlessMissing(`cannot list tasks dir: ${sessionTasksDir}`, err)
     return []
   }
 
@@ -163,7 +184,8 @@ export async function scanTasks(
     let fileStat
     try {
       fileStat = await stat(filePath)
-    } catch {
+    } catch (err) {
+      warnUnlessMissing(`cannot stat task file: ${filePath}`, err)
       continue
     }
     if (!fileStat.isFile()) continue

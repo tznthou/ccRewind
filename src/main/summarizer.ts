@@ -14,19 +14,30 @@ const MAX_FILES = 30
 // ── Content JSON ──
 
 /**
- * 解析訊息的 contentJson。壞掉就回 null，讓 caller 跳過該則訊息。
+ * 解析訊息的 contentJson 成 block 陣列。壞掉就回 null，讓 caller 跳過該則訊息。
+ *
+ * 必須連「解析出來不是陣列」都擋下來：`{}`、數字這類合法 JSON 過得了 JSON.parse，
+ * 但 caller 的 `for...of` 會直接 TypeError 拋出 summarizeSession，讓整個索引在
+ * 發出 done 之前中斷 —— 一筆髒資料就足以讓所有 session 都索引不了。
+ * 這正是寬容 parser 哲學要防的事。
  *
  * 這裡的失敗不會丟資料（訊息本身已在 DB），丟的是從中推斷的訊號 ——
  * outcome 判定與 file events 會少算而沒有人知道。實測目前不觸發，
  * 所以逐筆 warn 不會刷屏；真刷屏了，那個量本身就是要調查的訊號。
  */
-function parseContentBlocks(contentJson: string, context: string): unknown[] | null {
+export function parseContentBlocks(contentJson: string, context: string): unknown[] | null {
+  let parsed: unknown
   try {
-    return JSON.parse(contentJson) as unknown[]
+    parsed = JSON.parse(contentJson)
   } catch (err) {
     console.warn(`[summarizer] ${context}: unparsable contentJson, signals from this message are skipped:`, err)
     return null
   }
+  if (!Array.isArray(parsed)) {
+    console.warn(`[summarizer] ${context}: contentJson is ${parsed === null ? 'null' : typeof parsed}, expected an array of blocks; signals from this message are skipped`)
+    return null
+  }
+  return parsed
 }
 
 // ── Noise Filter ──

@@ -7,9 +7,11 @@ import { Database } from '../src/main/database'
 import { runIndexer } from '../src/main/indexer'
 
 let tmpDir: string
+let tasksDir: string
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ccrewind-subagent-'))
+  tasksDir = path.join(tmpDir, 'tasks') // 不落到真實 ~/.claude/tasks
 })
 
 afterEach(async () => {
@@ -293,7 +295,7 @@ describe('subagent indexer integration', () => {
       JSON.stringify({ agentType: 'file-reader' }),
     )
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     // 驗證 main session 被索引
     const sessions = db.getSessions('-Users-test-proj')
@@ -337,11 +339,11 @@ describe('subagent indexer integration', () => {
     )
 
     // 第一次索引
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getSubagentSessions('sess-001')).toHaveLength(1)
 
     // 第二次索引（未修改）不應出錯
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getSubagentSessions('sess-001')).toHaveLength(1)
   })
 })

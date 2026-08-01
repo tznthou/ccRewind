@@ -7,6 +7,7 @@ import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesEx
 import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
 
 let tmpDir: string
+let tasksDir: string
 let dbPath: string
 let db: Database
 
@@ -26,6 +27,9 @@ async function createProject(baseDir: string, projectId: string, sessions: Recor
 
 beforeEach(async () => {
   tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ccrewind-idx-'))
+  // 每個測試自己的 tasks 目錄。不傳就會落到真實的 ~/.claude/tasks，
+  // 讓斷言依賴開發者本機的資料 —— 測試不碰生產資料是硬規則。
+  tasksDir = path.join(tmpDir, 'tasks')
   dbPath = path.join(tmpDir, 'test.db')
   db = new Database(dbPath)
 })
@@ -93,7 +97,7 @@ describe('runIndexer', () => {
     const statuses: IndexerProgress[] = []
     const onProgress: ProgressCallback = (s) => statuses.push({ ...s })
 
-    await runIndexer(db, onProgress, baseDir)
+    await runIndexer(db, onProgress, baseDir, tasksDir)
 
     // 驗證 projects
     const projects = db.getProjects()
@@ -140,7 +144,7 @@ describe('runIndexer', () => {
     await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
 
     // 第一次索引
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-001')).toHaveLength(2)
 
     // 新增一個 session
@@ -154,7 +158,7 @@ describe('runIndexer', () => {
 
     // 第二次索引，追蹤 progress
     const statuses: IndexerProgress[] = []
-    await runIndexer(db, (s) => statuses.push({ ...s }), baseDir)
+    await runIndexer(db, (s) => statuses.push({ ...s }), baseDir, tasksDir)
 
     // 新 session 應被索引
     expect(db.getMessages('sess-003')).toHaveLength(1)
@@ -175,7 +179,7 @@ describe('runIndexer', () => {
     // 只建目錄，不放 JSONL
     await mkdir(path.join(baseDir, '-Users-test-empty'), { recursive: true })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     const projects = db.getProjects()
     expect(projects).toHaveLength(1)
@@ -188,7 +192,7 @@ describe('runIndexer', () => {
     await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
 
     const progresses: IndexerProgress[] = []
-    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir)
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
 
     expect(progresses.every(s => s.skipped === 0)).toBe(true)
   })
@@ -213,7 +217,7 @@ describe('runIndexer', () => {
 
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const progresses: IndexerProgress[] = []
-    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir)
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
     // mockRestore 會一併清掉 calls，順序不能反過來
     const logged = warn.mock.calls.map(c => c.join(' ')).join('\n')
     warn.mockRestore()
@@ -235,7 +239,7 @@ describe('runIndexer', () => {
     await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
 
     const phases: string[] = []
-    await runIndexer(db, (s) => phases.push(s.phase), baseDir)
+    await runIndexer(db, (s) => phases.push(s.phase), baseDir, tasksDir)
 
     // scanning 出現在 indexing 之前
     const scanIdx = phases.indexOf('scanning')
@@ -255,7 +259,7 @@ describe('runIndexer', () => {
 
   it('nonexistent baseDir → no error, no projects', async () => {
     const fakeDir = path.join(tmpDir, 'does-not-exist')
-    await runIndexer(db, undefined, fakeDir)
+    await runIndexer(db, undefined, fakeDir, tasksDir)
 
     expect(db.getProjects()).toEqual([])
   })
@@ -297,7 +301,7 @@ describe('runIndexer', () => {
 
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-sum', { 'sum-001': sessionWithTools })
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     const sessions = db.getSessions('-Users-test-sum')
     expect(sessions).toHaveLength(1)
@@ -349,7 +353,7 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
     ]
     await createProject(baseDir, '-Users-test-fork', { 'sess-fork': forkSession })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     // Message（renderer 讀取型別）不外露 uuid，改用 contentText 定位（見 shared/types.ts）
     const messages = db.getMessages('sess-fork')
@@ -384,7 +388,7 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
       ]),
     )
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     // subagentId 由 indexer 組成 `${parentSessionId}/${bareId}`（見 scanner.ts scanSubagents）
     const subMessages = db.getMessages('sess-side/agent-a1')
@@ -419,7 +423,7 @@ describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/
     ]
     await createProject(baseDir, '-Users-test-resume-fork', { 'sess-old': olderSession, 'sess-new': resumedSession })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
 
     const newMessages = db.getMessages('sess-new')
     const byContent = new Map(newMessages.map(m => [m.contentText, m]))
@@ -899,7 +903,7 @@ describe('runIndexer exclusion rules', () => {
     await createProject(baseDir, '-Users-test-excl', { 'sess-excl-1': sampleSession1 })
 
     // 初次索引 → sess-excl-1 存在
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-excl-1')).toHaveLength(2)
 
     // 透過 applyExclusion 硬刪 + 留下規則
@@ -907,7 +911,7 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getMessages('sess-excl-1')).toEqual([])
 
     // 磁碟 JSONL 還在，但 rule 應阻止 re-index 重建
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-excl-1')).toEqual([])
   })
 
@@ -915,17 +919,17 @@ describe('runIndexer exclusion rules', () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-excl2', { 'sess-excl-2': sampleSession1 })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     const { rule } = db.applyExclusion({ projectId: '-Users-test-excl2', dateFrom: null, dateTo: null })
     expect(db.getMessages('sess-excl-2')).toEqual([])
 
     // rule 還在 → 不重建
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-excl-2')).toEqual([])
 
     // 移除 rule → 重建
     db.removeExclusionRule(rule.id)
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-excl-2')).toHaveLength(2)
   })
 
@@ -939,7 +943,7 @@ describe('runIndexer exclusion rules', () => {
       }],
     })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-old')).toHaveLength(2)
     expect(db.getMessages('sess-new')).toHaveLength(1)
 
@@ -949,7 +953,7 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getMessages('sess-new')).toHaveLength(1)
 
     // re-index：sess-old 不重建，sess-new 保留
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-old')).toEqual([])
     expect(db.getMessages('sess-new')).toHaveLength(1)
   })
@@ -969,7 +973,7 @@ describe('runIndexer exclusion rules', () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-cross', { 'sess-cross': crossDay })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-cross')).toHaveLength(2)
 
     // 只涵蓋 2024-06-30 單日：以 first timestamp 歸屬應命中
@@ -977,7 +981,7 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getMessages('sess-cross')).toEqual([])
 
     // re-index：readFirstTimestamp 取第一行 → 日期 2024-06-30 → rule 命中 skip
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-cross')).toEqual([])
   })
 
@@ -986,11 +990,11 @@ describe('runIndexer exclusion rules', () => {
     await createProject(baseDir, '-Users-multi-A', { 'sess-A': sampleSession1 })
     await createProject(baseDir, '-Users-multi-B', { 'sess-B': sampleSession1 })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     db.applyExclusion({ projectId: '-Users-multi-A', dateFrom: null, dateTo: null })
     db.applyExclusion({ projectId: '-Users-multi-B', dateFrom: null, dateTo: null })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-A')).toEqual([])
     expect(db.getMessages('sess-B')).toEqual([])
   })
@@ -999,7 +1003,7 @@ describe('runIndexer exclusion rules', () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-none', { 'sess-plain': sampleSession1 })
 
-    await runIndexer(db, undefined, baseDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getExclusionRules()).toEqual([])
     expect(db.getMessages('sess-plain')).toHaveLength(2)
   })

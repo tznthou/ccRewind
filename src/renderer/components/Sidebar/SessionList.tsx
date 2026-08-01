@@ -106,13 +106,13 @@ export default function SessionList() {
           className={`${styles.sortButton} ${sortKey === 'time' ? styles.sortActive : ''}`}
           onClick={() => setSortKey('time')}
         >
-          Time
+          {t('sidebar.sessionList.sort.time')}
         </button>
         <button
           className={`${styles.sortButton} ${sortKey === 'tokens' ? styles.sortActive : ''}`}
           onClick={() => setSortKey('tokens')}
         >
-          Tokens
+          {t('sidebar.sessionList.sort.tokens')}
         </button>
         <button
           className={`${styles.sortButton} ${showStarredOnly ? styles.sortActive : ''}`}
@@ -216,7 +216,7 @@ export default function SessionList() {
                     const count = session.filesTouched!.split(',').length
                     return (
                       <span className={styles.fileCount}>
-                        {count}{count >= 30 ? '+' : ''} files
+                        {t('sidebar.sessionList.fileCount', { count: `${count}${count >= 30 ? '+' : ''}` })}
                       </span>
                     )
                   })()}
