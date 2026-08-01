@@ -40,6 +40,39 @@ export function parseContentBlocks(contentJson: string, context: string): unknow
   return parsed
 }
 
+interface ToolUseBlock {
+  /** JSONL 未必有這個欄位；讀不到時是 undefined，交給呼叫端的查表／比對自然落空。 */
+  name: string
+  input: Record<string, unknown> | undefined
+}
+
+/**
+ * 逐一取出一則訊息裡的 tool_use block。
+ *
+ * 這裡收攏 unknown → Record 的窄化：三個掃描點都要走同一套判斷，
+ * 散在各處只會讓下一個掃描點再抄一次，抄漏一行就是靜默少算訊號。
+ * 解析失敗（parseContentBlocks 回 null）在此化為空迭代，caller 不必再處理 null。
+ */
+function* iterToolUses(contentJson: string, context: string): Generator<ToolUseBlock> {
+  for (const block of parseContentBlocks(contentJson, context) ?? []) {
+    if (typeof block !== 'object' || block === null) continue
+    const b = block as Record<string, unknown>
+    if (b.type !== 'tool_use') continue
+    yield { name: b.name as string, input: b.input as Record<string, unknown> | undefined }
+  }
+}
+
+/** 逐一取出這批訊息裡的 Bash 指令字串——inferOutcome 的兩趟掃描都只關心指令內容。 */
+function* iterBashCommands(messages: ParsedLine[], context: string): Generator<string> {
+  for (const msg of messages) {
+    if (!msg.hasToolUse || !msg.contentJson) continue
+    for (const { name, input } of iterToolUses(msg.contentJson, context)) {
+      if (name !== 'Bash') continue
+      yield (input?.command as string) ?? ''
+    }
+  }
+}
+
 // ── Noise Filter ──
 
 /** 排除的路徑模式（反向索引噪音過濾） */
@@ -165,24 +198,12 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
   }
 
   // 掃描 Bash tool 的 input 內容尋找 git commit / test 指令（先掃再判 quick-qa）
-  for (const msg of messages) {
-    if (!msg.hasToolUse || !msg.contentJson) continue
-    const content = parseContentBlocks(msg.contentJson, 'inferOutcome/bash-scan')
-    if (!content) continue
-    for (const block of content) {
-      if (typeof block !== 'object' || block === null) continue
-      const b = block as Record<string, unknown>
-      if (b.type !== 'tool_use') continue
-      const name = b.name as string
-      if (name !== 'Bash') continue
-      const input = b.input as Record<string, unknown> | undefined
-      const command = (input?.command as string) ?? ''
-      if (GIT_COMMIT_RE.test(command)) {
-        signals.gitCommitInvoked = true
-      }
-      if (TEST_COMMAND_RE.test(command)) {
-        signals.testCommandRan = true
-      }
+  for (const command of iterBashCommands(messages, 'inferOutcome/bash-scan')) {
+    if (GIT_COMMIT_RE.test(command)) {
+      signals.gitCommitInvoked = true
+    }
+    if (TEST_COMMAND_RE.test(command)) {
+      signals.testCommandRan = true
     }
   }
 
@@ -196,21 +217,11 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
 
   // 最後 5 個 tool turn 中的 Bash 若含 active-work 指令（typecheck/lint/git status 等），也視為 in-progress
   if (!signals.endedWithEdits) {
-    for (const msg of lastToolTurns) {
-      if (!msg.hasToolUse || !msg.contentJson) continue
-      const content = parseContentBlocks(msg.contentJson, 'inferOutcome/active-work-scan')
-      if (!content) continue
-      for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
-        const b = block as Record<string, unknown>
-        if (b.type !== 'tool_use' || b.name !== 'Bash') continue
-        const command = ((b.input as Record<string, unknown> | undefined)?.command as string) ?? ''
-        if (ACTIVE_WORK_RE.test(command)) {
-          signals.endedWithEdits = true
-          break
-        }
+    for (const command of iterBashCommands(lastToolTurns, 'inferOutcome/active-work-scan')) {
+      if (ACTIVE_WORK_RE.test(command)) {
+        signals.endedWithEdits = true
+        break
       }
-      if (signals.endedWithEdits) break
     }
   }
 
@@ -341,17 +352,11 @@ function extractFileEvents(messages: ParsedLine[]): FileEvent[] {
   const events: FileEvent[] = []
   for (let seq = 0; seq < messages.length; seq++) {
     const msg = messages[seq]
-    // tool_use blocks
+    // tool_use blocks — 解析失敗只讓這段空跑，下面的 attachment 路徑照走
     if (msg.hasToolUse && msg.contentJson) {
-      // 解析失敗回 null → 跳過 tool_use blocks，但下面的 attachment 路徑照跑
-      for (const block of parseContentBlocks(msg.contentJson, 'extractFileEvents') ?? []) {
-        if (typeof block !== 'object' || block === null) continue
-        const b = block as Record<string, unknown>
-        if (b.type !== 'tool_use') continue
-        const name = b.name as string
+      for (const { name, input } of iterToolUses(msg.contentJson, 'extractFileEvents')) {
         const pathKey = FILE_PATH_KEYS[name]
         if (!pathKey) continue
-        const input = b.input as Record<string, unknown> | undefined
         const filePath = input?.[pathKey]
         if (typeof filePath !== 'string' || !filePath) continue
         if (isNoisePath(filePath)) continue

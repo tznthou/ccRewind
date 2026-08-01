@@ -30,7 +30,10 @@ export async function readFirstTimestamp(
   } catch (err) {
     // 讀不到檔案 → exclusion rule 的日期比對會保守地不匹配，session 因此被留下來。
     // 結果不算錯，但「為什麼這個 session 沒被排除」需要有跡可循。
-    console.warn(`[indexer] cannot read first timestamp: ${filePath}`, err)
+    // ENOENT 例外：檔案在掃描後被刪是 race 不是故障，與 scanner 的判準保持一致。
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn(`[indexer] cannot read first timestamp: ${filePath}`, err)
+    }
     return null
   }
   for (const line of content.split('\n')) {

@@ -45,7 +45,7 @@ const EXPR_STRING = /(?<![=\w}\])'"])'([^'\\\n]{2,80})'/g
 const PROP_LITERAL = /\b(?:title|aria-label|placeholder|alt|aria-description|aria-roledescription)\s*=\s*"([^"\n]{2,80})"/g
 
 /** 這個字串看起來像給人看的文案嗎？ */
-export function looksLikeProse(s: string): boolean {
+function looksLikeProse(s: string): boolean {
   if (!/[A-Za-z]/.test(s)) return false
   if (/^[a-z0-9_$.\-/[\]:]+$/.test(s)) return false // i18n key / class / path / 小寫 type literal
   if (/^[A-Za-z]+([A-Z][a-z0-9]*)+$/.test(s)) return false // camelCase 識別字
@@ -57,17 +57,17 @@ export function looksLikeProse(s: string): boolean {
 }
 
 /** 給開發者看的字串（console、throw）不必翻譯，也不該逼開發者為它們開 catalog key。 */
-export function isDeveloperFacing(line: string): boolean {
+function isDeveloperFacing(line: string): boolean {
   return /\bconsole\.(log|warn|error|info|debug)\b/.test(line) || /\bthrow new \w*Error\b/.test(line)
 }
 
-export interface Hit {
+interface Hit {
   line: number
   text: string
 }
 
-/** 掃一份 .tsx 原始碼。export 出來讓測試能直接餵 fixture 驗掃描器本身。 */
-export function scanSource(src: string): Hit[] {
+/** 掃一份 .tsx 原始碼。下面的 fixture 測試直接餵字串進來驗掃描器本身。 */
+function scanSource(src: string): Hit[] {
   const lines = src.split('\n')
   const hits: Hit[] = []
 
