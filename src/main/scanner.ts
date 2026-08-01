@@ -27,6 +27,22 @@ function warnUnlessMissing(action: string, target: string, err: unknown): void {
   console.warn(`[scanner] ${action}: ${logSafe(target)} - ${logSafeError(err)}`)
 }
 
+/**
+ * sessionId 會被當成路徑片段拼進 ~/.claude/tasks/<sessionId>/，所以它必須擋得住
+ * 路徑語意。sessionId 來自檔名（`file.replace(/\.jsonl$/, '')`）——一個叫
+ * `...jsonl` 的檔案就會產生 `..`，讓 tasks 掃描跳到 ~/.claude/ 本身並讀取
+ * 那裡的 *.json（settings.json 就在那裡）。這是唯讀工具，但「讀什麼」同樣有邊界。
+ *
+ * 只要求「不帶路徑語意」而不硬綁 UUID 格式：Claude Code 換命名規則時，
+ * 過嚴的規則會讓整個索引安靜地掉光。
+ */
+export function isPathSafeSegment(id: string): boolean {
+  if (!id || id === '.' || id === '..') return false
+  if (id.includes('/') || id.includes('\\')) return false
+  if (id.includes('\0')) return false
+  return !path.isAbsolute(id)
+}
+
 /** 掃描 ~/.claude/projects/，回傳所有專案及其 JSONL 檔案 */
 export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<ScannedProject[]> {
   let entries: string[]
@@ -79,11 +95,19 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
       }
       if (!fileStat.isFile()) continue
 
+      // 第二道：不讓帶路徑語意的 id 進入系統。下游把它當路徑片段用（tasks 掃描），
+      // 也當 DB primary key 用，擋在 ingestion boundary 比逐個下游補防呆可靠。
+      const sessionId = file.replace(/\.jsonl$/, '')
+      if (!isPathSafeSegment(sessionId)) {
+        console.warn(`[scanner] skipping session file with unsafe id: ${logSafe(filePath)}`)
+        continue
+      }
+
       sessions.push({
         filePath,
         fileSize: fileStat.size,
         fileMtime: fileStat.mtime.toISOString(),
-        sessionId: file.replace(/\.jsonl$/, ''),
+        sessionId,
       })
     }
 
@@ -165,6 +189,12 @@ export async function scanTasks(
   tasksBaseDir: string,
   sessionId: string,
 ): Promise<ScannedTask[]> {
+  // 這裡是 sessionId 變成路徑的地方，也就是必須自己把關的地方
+  if (!isPathSafeSegment(sessionId)) {
+    console.warn(`[scanner] refusing to scan tasks for unsafe session id: ${logSafe(sessionId)}`)
+    return []
+  }
+
   const sessionTasksDir = path.join(tasksBaseDir, sessionId)
 
   let entries: string[]

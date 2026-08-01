@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
-import { decodeProjectPath, scanProjects, scanTasks } from '../src/main/scanner'
+import { decodeProjectPath, scanProjects, scanTasks, isPathSafeSegment } from '../src/main/scanner'
 
 let tmpDir: string
 
@@ -167,5 +167,45 @@ describe('scanTasks', () => {
     const result = await scanTasks(tmpDir, sessionId)
     expect(result).toHaveLength(1)
     expect(result[0].taskId).toBe('1')
+  })
+})
+
+describe('sessionId 路徑穿越防護', () => {
+  it('isPathSafeSegment 擋掉能跳出 base dir 的片段', () => {
+    for (const bad of ['..', '.', '', 'a/b', 'a\\b', '../etc', '/abs/path']) {
+      expect(isPathSafeSegment(bad), bad).toBe(false)
+    }
+    for (const ok of ['9f3c1a2e-4b5d-6789-abcd-ef0123456789', 'sess-001', 'a.b.c']) {
+      expect(isPathSafeSegment(ok), ok).toBe(true)
+    }
+  })
+
+  it('檔名 "...jsonl" 不會產生 sessionId ".."', async () => {
+    // 這個檔名經 file.replace(/\.jsonl$/, "") 正好得到 ".."，
+    // 下游 path.join(tasksBaseDir, "..") 就跳到 ~/.claude/ 本身
+    const projectDir = path.join(tmpDir, '-Users-x-y')
+    await mkdir(projectDir, { recursive: true })
+    await writeFile(path.join(projectDir, '...jsonl'), '{}')
+    await writeFile(path.join(projectDir, 'sess-ok.jsonl'), '{}')
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const projects = await scanProjects(tmpDir)
+    warn.mockRestore()
+
+    const ids = projects[0].sessions.map(s => s.sessionId)
+    expect(ids).toEqual(['sess-ok'])
+  })
+
+  it('scanTasks 拿到 ".." 也不會讀到上一層的 json', async () => {
+    // 模擬 ~/.claude/：settings.json 在 tasks/ 的上一層
+    const claudeHome = path.join(tmpDir, 'dot-claude')
+    await mkdir(path.join(claudeHome, 'tasks'), { recursive: true })
+    await writeFile(path.join(claudeHome, 'settings.json'), '{"secret":"do-not-read"}')
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const scanned = await scanTasks(path.join(claudeHome, 'tasks'), '..')
+    warn.mockRestore()
+
+    expect(scanned).toEqual([])
   })
 })
