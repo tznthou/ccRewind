@@ -258,6 +258,7 @@ ccRewind/
 │   │   ├── task-parser.ts     # Tasks JSON 解析器（~/.claude/tasks/）
 │   │   ├── exporter.ts        # Markdown 匯出
 │   │   ├── updater.ts         # GitHub Release 更新偵測
+│   │   ├── logSafe.ts         # 記錄檔逃逸（檔名可含換行與終端控制序列）
 │   │   └── ipc-handlers.ts    # IPC 通訊處理
 │   ├── preload/               # contextBridge 安全橋接
 │   │   └── index.ts
@@ -273,14 +274,15 @@ ccRewind/
 │   │   │   ├── ThemeSwitcher/ # 三主題切換按鈕
 │   │   │   ├── FontScaleSwitcher/ # 三檔字級縮放（含 ARIA radio 鍵盤模式）
 │   │   │   ├── LiveRegion/    # 全域 aria-live 通知（搜尋結果、sync 狀態）
+│   │   │   ├── ErrorBoundary/ # 兩層錯誤邊界：應用程式外殼 + 每則訊息
 │   │   │   └── UpdateBanner/  # 更新通知橫幅
-│   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav
+│   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav（狀態機純函式在 listboxKeyNav.ts）
 │   │   ├── i18n/              # LanguageSwitcher + 訊息目錄 + useI18n（zh-TW + en）
 │   │   ├── utils/             # formatTokens, formatTime, formatDuration, pathDisplay, renderSnippet
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext（語言／主題／字級皆 localStorage 持久化）
 │   └── shared/
 │       └── types.ts           # 主程序與渲染程序共用型別
-├── tests/                     # Vitest 測試（545 個）
+├── tests/                     # Vitest 測試（641 個）
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -320,7 +322,7 @@ ccRewind 刻意不做這些事：
 
 - **不做 Context Injection**：不干預未來的對話，只回顧過去的
 - **不做雲端同步**：所有資料來自本地 `~/.claude/`，不上傳任何東西
-- **不修改任何檔案**：純唯讀應用，連 `~/.claude/` 的 mtime 都不會動
+- **不修改任何檔案**：純唯讀應用，連 `~/.claude/` 的 mtime 都不會動。唯讀不等於什麼都可以讀——索引的範圍就是 `projects/` 底下的對話紀錄與對應的 tasks，同一層的設定檔不在裡面
 - **不做即時監控**：不是 tail -f，是考古學
 - **不引入 LLM 路線**：ccFamily 三件套堅持 rule-based + zero API cost；需要 ADR 推理層的場景由規劃中的 ccReason plugin 承接
 

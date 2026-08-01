@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents, scanTasks, DEFAULT_TASKS_BASE_DIR } from './scanner'
+import { logSafe, logSafeError } from './logSafe'
 import { parseSession } from './parser'
 import { parseTaskFile } from './task-parser'
 import { summarizeSession, SUMMARY_VERSION } from './summarizer'
@@ -27,7 +28,13 @@ export async function readFirstTimestamp(
     const { size } = await stat(filePath)
     if (size > maxBytes) return null
     content = await readFile(filePath, 'utf-8')
-  } catch {
+  } catch (err) {
+    // 讀不到檔案 → exclusion rule 的日期比對會保守地不匹配，session 因此被留下來。
+    // 結果不算錯，但「為什麼這個 session 沒被排除」需要有跡可循。
+    // ENOENT 例外：檔案在掃描後被刪是 race 不是故障，與 scanner 的判準保持一致。
+    if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+      console.warn(`[indexer] cannot read first timestamp: ${logSafe(filePath)} - ${logSafeError(err)}`)
+    }
     return null
   }
   for (const line of content.split('\n')) {
@@ -36,7 +43,10 @@ export async function readFirstTimestamp(
       const obj = JSON.parse(line) as { timestamp?: unknown }
       if (typeof obj.timestamp === 'string') return obj.timestamp
     } catch {
-      // 該行非合法 JSON → 跳過繼續找
+      // 該行非合法 JSON → 跳過繼續找。
+      // 這裡刻意不 log：寬容 parser 下壞行是預期輸入，且這是 per-line 迴圈，
+      // 逐行 warn 會把真正的失敗訊號淹掉。整檔都沒有合法 timestamp 才是問題，
+      // 那由下面的 return null 交給 caller 判斷。
     }
   }
   return null
@@ -248,9 +258,14 @@ export async function runIndexer(
   db: Database,
   onProgress?: ProgressCallback,
   baseDir?: string,
+  tasksBaseDir: string = DEFAULT_TASKS_BASE_DIR,
 ): Promise<void> {
+  // 解析失敗而沒進 DB 的項目數。累計後隨 progress 一路帶到 UI——
+  // 這條路徑上的每個 continue 都是在丟資料，不能只有我們自己（甚至我們也不）知道。
+  let skipped = 0
+
   // 1. SCANNING
-  onProgress?.({ phase: 'scanning', progress: 0, total: 0, current: 0 })
+  onProgress?.({ phase: 'scanning', progress: 0, total: 0, current: 0, skipped })
   const projects = await scanProjects(baseDir)
 
   // 確保所有 project 都寫入 DB（含空 project）
@@ -310,6 +325,7 @@ export async function runIndexer(
       progress: Math.round((i / total) * 100),
       total,
       current: i,
+      skipped,
     })
 
     const s = sessionsToIndex[i]
@@ -318,7 +334,9 @@ export async function runIndexer(
     let parsed: ParsedSession
     try {
       parsed = await parseSession(s.filePath, s.sessionId)
-    } catch {
+    } catch (err) {
+      skipped++
+      console.warn(`[indexer] session ${logSafe(s.sessionId)} not indexed (parse failed): ${logSafe(s.filePath)} - ${logSafeError(err)}`)
       continue
     }
 
@@ -388,7 +406,9 @@ export async function runIndexer(
       let subagents
       try {
         subagents = await scanSubagents(sessionDir, session.sessionId)
-      } catch {
+      } catch (err) {
+        skipped++
+        console.warn(`[indexer] subagents of session ${logSafe(session.sessionId)} not scanned: ${logSafe(sessionDir)} - ${logSafeError(err)}`)
         continue
       }
       if (subagents.length === 0) continue
@@ -411,7 +431,9 @@ export async function runIndexer(
         let parsed: ParsedSession
         try {
           parsed = await parseSession(sub.filePath, sub.subagentId)
-        } catch {
+        } catch (err) {
+          skipped++
+          console.warn(`[indexer] subagent ${logSafe(sub.subagentId)} not indexed (parse failed): ${logSafe(sub.filePath)} - ${logSafeError(err)}`)
           continue
         }
 
@@ -451,14 +473,17 @@ export async function runIndexer(
   //    這層獨立於 session JSONL：task 可能單獨變動（TaskUpdate rewrite），
   //    session JSONL 未變也要重新 parse。每個 task 檔 per-file mtime 比對。
   //    只對 main session 跑（subagent 工具集沒有 TaskCreate/Update，不會寫 task）。
-  await runTaskScanning(db, projects)
+  skipped += await runTaskScanning(db, projects, tasksBaseDir)
 
   // 6. FINALIZE — 更新所有 project 統計（stale cleanup 可能影響任何 project）
   for (const project of projects) {
     db.updateProjectStats(project.projectId)
   }
 
-  onProgress?.({ phase: 'done', progress: 100, total, current: total })
+  if (skipped > 0) {
+    console.warn(`[indexer] run finished with ${skipped} item(s) skipped — see warnings above for which`)
+  }
+  onProgress?.({ phase: 'done', progress: 100, total, current: total, skipped })
 }
 
 /**
@@ -474,7 +499,9 @@ const MAX_TASK_FILE_BYTES = 1 * 1024 * 1024
 async function runTaskScanning(
   db: Database,
   projects: Awaited<ReturnType<typeof scanProjects>>,
-): Promise<void> {
+  tasksBaseDir: string,
+): Promise<number> {
+  let skipped = 0
   const existingTaskMtimes = db.getAllTaskMtimes()
 
   for (const project of projects) {
@@ -489,8 +516,10 @@ async function runTaskScanning(
 
       let scanned: ScannedTask[]
       try {
-        scanned = await scanTasks(DEFAULT_TASKS_BASE_DIR, session.sessionId)
-      } catch {
+        scanned = await scanTasks(tasksBaseDir, session.sessionId)
+      } catch (err) {
+        skipped++
+        console.warn(`[indexer] tasks of session ${logSafe(session.sessionId)} not scanned - ${logSafeError(err)}`)
         continue
       }
       if (scanned.length === 0) continue
@@ -502,10 +531,18 @@ async function runTaskScanning(
         if (existingMtime && existingMtime === task.fileMtime) continue
 
         // 異常大的 task 檔（symlink 攻擊、誤寫等）→ 跳過避免 OOM
-        if (task.fileSize > MAX_TASK_FILE_BYTES) continue
+        if (task.fileSize > MAX_TASK_FILE_BYTES) {
+          skipped++
+          console.warn(`[indexer] task ${logSafe(key)} not indexed (${task.fileSize} bytes exceeds ${MAX_TASK_FILE_BYTES}): ${logSafe(task.filePath)}`)
+          continue
+        }
 
         const content = await parseTaskFile(task.filePath)
-        if (!content) continue
+        if (!content) {
+          skipped++
+          console.warn(`[indexer] task ${logSafe(key)} not indexed (unparsable): ${logSafe(task.filePath)}`)
+          continue
+        }
 
         toUpsert.push({ scanned: task, content })
       }
@@ -531,6 +568,8 @@ async function runTaskScanning(
       })
     }
   }
+
+  return skipped
 }
 
 // ── Indexer runner（in-flight 合併 + lastIndexedAt 追蹤） ──

@@ -49,7 +49,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   return (
     <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} data-abandoned={message.isAbandonedBranch || undefined} tabIndex={-1} style={heatProps?.style}>
       <div className={styles.header}>
-        <span className={styles.role}>{isUser ? 'User' : 'Assistant'}</span>
+        <span className={styles.role}>{isUser ? t('chatView.message.role.user') : t('chatView.message.role.assistant')}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>
       </div>
 

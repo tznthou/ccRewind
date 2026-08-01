@@ -1,6 +1,7 @@
 node_modules/
 out/
 dist/
+coverage/
 *.db
 *.tsbuildinfo
 .DS_Store

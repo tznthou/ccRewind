@@ -7,6 +7,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.0] - 2026-08-01
+
+### Added
+
+- **Skipped items are now reported in the sidebar**: when a session, subagent or task file failed to parse, indexing moved on without a word. That data never reached the database, the user had no idea, and neither did we. For a tool whose pitch is that not one byte is touched, quietly losing a whole session is the wrong kind of quiet. Every skip now records which item it was, and the count appears next to the sync status in the error colour rather than something softer. Covers session parsing, subagent scanning and parsing, task scanning, oversized task files and unparsable ones
+
+### Fixed
+
+- **One malformed message could abort the entire indexing run**: the summarizer checked that `contentJson` was valid JSON but not that it parsed into an array. Values like `{}` or a bare number pass the parse and then throw a `TypeError` on iteration, taking down the whole run before it finished — not just that message, but every session still queued behind it
+- **Colliding list option ids**: sanitizing ids for the DOM replaced every illegal character with an underscore, so `a b`, `a#b` and `a_b` all collapsed into the same id. `aria-activedescendant` could then point at the wrong row, leaving screen readers announcing something other than the actual selection. The encoding is now injective — distinct inputs always produce distinct ids
+- **Keyboard navigation had no lower bound on its index**: `setActiveIndex` is public API, and a negative value made the item lookup return `undefined`, which threw as soon as anything asked for its id
+- **Scanner failures are no longer invisible**: the file scanner converted `readdir` and `stat` errors into empty arrays internally, so permission problems, disappearing mounts and unreadable files never surfaced — the error handling above it was waiting for exceptions that could not arrive. Everything except the routine "directory does not exist" case is now logged
+- **Untranslated strings in the interface**: the role labels on message bubbles (`User` / `Assistant`), the sort buttons and file count in the session list (`Time` / `Tokens`), and the empty state on the project ranking all stayed English when the UI was switched to Chinese. A scan now runs as part of the test suite, so a string that skips the message catalogue fails the build
+
+### Security
+
+- **Log injection**: indexing logs interpolated filenames and paths directly, and a filename on macOS or Linux may legally contain newlines and terminal escape sequences. Anything able to write into the user's home directory could use that to forge a log line attributed to the program — plausibly one claiming nothing was skipped — or to emit control sequences at the terminal, which has escalated to remote code execution on vulnerable emulators. Filesystem-derived values are now escaped before they reach a log
+- **Path traversal**: a session id is the filename minus its extension, so a file called `...jsonl` yields exactly `..`, and task scanning joined that straight onto a path. Anything able to drop a file into `~/.claude/projects/` could therefore redirect the indexer to read `~/.claude/*.json` — where `settings.json` lives — and copy it into the index database. The app still writes nothing under `~/.claude/`; what changed is the boundary on what it is willing to read
+
+### Changed
+
+- **Test infrastructure**: the keyboard navigation state machine was extracted into pure functions and given tests, which is how the two defects above surfaced; coverage reporting was enabled (currently 46.33% overall, 87.18% for the main process); and indexing tests now use isolated temporary directories instead of reading the real `~/.claude/tasks/`. The suite grew from 583 tests to 641
+
 ## [1.20.0] - 2026-08-01
 
 ### Added

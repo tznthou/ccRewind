@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { summarizeSession, SUMMARY_VERSION, computeActiveTime } from '../src/main/summarizer'
+import { describe, it, expect, vi } from 'vitest'
+import { summarizeSession, SUMMARY_VERSION, computeActiveTime, parseContentBlocks } from '../src/main/summarizer'
 import type { ParsedLine } from '../src/shared/types'
 
 /** 建立測試用 ParsedLine，預設值皆為空 */
@@ -924,5 +924,51 @@ describe('editedFilePath → session_files integration', () => {
       line({ type: 'attachment', editedFilePath: '/src/utils.ts' }),
     ])
     expect(summary.filesTouched).toContain('/src/utils.ts')
+  })
+})
+
+describe('parseContentBlocks — 非陣列 contentJson 不得讓索引崩潰', () => {
+  // JSON.parse 成功不代表拿得到 block 陣列。`{}` 與數字都是合法 JSON，
+  // 直接丟進 for...of 會 TypeError 拋出 summarizeSession，一筆髒資料
+  // 就讓整輪索引在發出 done 之前中斷。
+  const nonArrayPayloads = ['{}', 'null', '123', '"a string"', 'true', '{"type":"tool_use"}']
+
+  it.each(nonArrayPayloads)('%s → 回 null 而不是拋錯', (payload) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(parseContentBlocks(payload, 'test')).toBeNull()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('合法的 block 陣列照常回傳', () => {
+    const blocks = parseContentBlocks('[{"type":"tool_use","name":"Bash"}]', 'test')
+    expect(blocks).toHaveLength(1)
+  })
+
+  it.each(nonArrayPayloads)('summarizeSession 吃到 %s 仍然完成，不中斷整輪索引', (payload) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const messages = [
+      line({ role: 'user', contentText: 'Fix the bug' }),
+      line({ role: 'assistant', hasToolUse: true, toolNames: ['Bash'], contentJson: payload }),
+    ]
+    expect(() => summarizeSession(messages)).not.toThrow()
+    warn.mockRestore()
+  })
+
+  it('壞掉的那則不影響同一 session 其他訊息的訊號', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const messages = [
+      line({ role: 'user', contentText: 'Ship it' }),
+      line({ role: 'assistant', hasToolUse: true, toolNames: ['Bash'], contentJson: '{}' }),
+      line({
+        role: 'assistant',
+        hasToolUse: true,
+        toolNames: ['Bash'],
+        contentJson: toolUseContent([{ name: 'Bash', input: { command: 'git commit -m "done"' } }]),
+      }),
+    ]
+    const { summary } = summarizeSession(messages)
+    expect(summary.outcomeSignals.gitCommitInvoked).toBe(true)
+    warn.mockRestore()
   })
 })
