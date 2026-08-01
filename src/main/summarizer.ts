@@ -1,5 +1,6 @@
 import type { ParsedLine, SessionSummary, OutcomeSignals, OutcomeStatus, FileOperation } from '../shared/types'
 import type { SessionFileInput } from './database'
+import { logSafeError } from './logSafe'
 
 /** 摘要引擎版本（每次規則改動時遞增，讓 backfill 可追蹤） */
 // v3 (2026-05-18): parser 抽 is_error → messages.tool_error_count (Task 10 Phase C / migration v19)。
@@ -30,7 +31,7 @@ export function parseContentBlocks(contentJson: string, context: string): unknow
   try {
     parsed = JSON.parse(contentJson)
   } catch (err) {
-    console.warn(`[summarizer] ${context}: unparsable contentJson, signals from this message are skipped:`, err)
+    console.warn(`[summarizer] ${context}: unparsable contentJson, signals from this message are skipped - ${logSafeError(err)}`)
     return null
   }
   if (!Array.isArray(parsed)) {

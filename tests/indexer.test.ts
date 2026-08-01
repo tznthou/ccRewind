@@ -234,6 +234,41 @@ describe('runIndexer', () => {
     expect(db.getMessages('sess-bad')).toHaveLength(0)
   })
 
+  it('惡意檔名無法從 log 偽造出一行假訊息', async (ctx) => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
+
+    // 檔名在 macOS / Linux 可以合法含換行。沒逃逸的話，這個檔名會讓 log 多印一行
+    // 看起來像 indexer 自己說的話 —— 而它說的正好是「什麼都沒漏」。
+    const evilId = 'evil\n[indexer] run finished with 0 item(s) skipped'
+    const evilPath = path.join(baseDir, '-Users-test-proj1', `${evilId}.jsonl`)
+    try {
+      await writeFile(evilPath, makeJsonl(sampleSession1))
+      await chmod(evilPath, 0o000)
+    } catch {
+      ctx.skip() // Windows 不接受這種檔名，這條攻擊面在該平台不存在
+    }
+    const stillReadable = await readFile(evilPath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(evilPath, 0o644)
+      ctx.skip()
+    }
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    const calls = warn.mock.calls.map(c => c.map(String).join(' '))
+    warn.mockRestore()
+    await chmod(evilPath, 0o644)
+
+    expect(calls.length).toBeGreaterThan(0)
+    // 每一筆 log 都必須是單獨一行，檔名不能把自己撐成第二行
+    for (const call of calls) {
+      expect(call).not.toContain('\n')
+    }
+    // 逃逸後的形式仍看得出是哪個檔案
+    expect(calls.join(' ')).toContain('evil')
+  })
+
   it('progressCallback → emits scanning → indexing → done in order', async () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })

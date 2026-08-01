@@ -3,6 +3,7 @@ import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents, scanTasks, DEFAULT_TASKS_BASE_DIR } from './scanner'
+import { logSafe, logSafeError } from './logSafe'
 import { parseSession } from './parser'
 import { parseTaskFile } from './task-parser'
 import { summarizeSession, SUMMARY_VERSION } from './summarizer'
@@ -32,7 +33,7 @@ export async function readFirstTimestamp(
     // 結果不算錯，但「為什麼這個 session 沒被排除」需要有跡可循。
     // ENOENT 例外：檔案在掃描後被刪是 race 不是故障，與 scanner 的判準保持一致。
     if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
-      console.warn(`[indexer] cannot read first timestamp: ${filePath}`, err)
+      console.warn(`[indexer] cannot read first timestamp: ${logSafe(filePath)} - ${logSafeError(err)}`)
     }
     return null
   }
@@ -335,7 +336,7 @@ export async function runIndexer(
       parsed = await parseSession(s.filePath, s.sessionId)
     } catch (err) {
       skipped++
-      console.warn(`[indexer] session ${s.sessionId} not indexed (parse failed): ${s.filePath}`, err)
+      console.warn(`[indexer] session ${logSafe(s.sessionId)} not indexed (parse failed): ${logSafe(s.filePath)} - ${logSafeError(err)}`)
       continue
     }
 
@@ -407,7 +408,7 @@ export async function runIndexer(
         subagents = await scanSubagents(sessionDir, session.sessionId)
       } catch (err) {
         skipped++
-        console.warn(`[indexer] subagents of session ${session.sessionId} not scanned: ${sessionDir}`, err)
+        console.warn(`[indexer] subagents of session ${logSafe(session.sessionId)} not scanned: ${logSafe(sessionDir)} - ${logSafeError(err)}`)
         continue
       }
       if (subagents.length === 0) continue
@@ -432,7 +433,7 @@ export async function runIndexer(
           parsed = await parseSession(sub.filePath, sub.subagentId)
         } catch (err) {
           skipped++
-          console.warn(`[indexer] subagent ${sub.subagentId} not indexed (parse failed): ${sub.filePath}`, err)
+          console.warn(`[indexer] subagent ${logSafe(sub.subagentId)} not indexed (parse failed): ${logSafe(sub.filePath)} - ${logSafeError(err)}`)
           continue
         }
 
@@ -518,7 +519,7 @@ async function runTaskScanning(
         scanned = await scanTasks(tasksBaseDir, session.sessionId)
       } catch (err) {
         skipped++
-        console.warn(`[indexer] tasks of session ${session.sessionId} not scanned`, err)
+        console.warn(`[indexer] tasks of session ${logSafe(session.sessionId)} not scanned - ${logSafeError(err)}`)
         continue
       }
       if (scanned.length === 0) continue
@@ -532,14 +533,14 @@ async function runTaskScanning(
         // 異常大的 task 檔（symlink 攻擊、誤寫等）→ 跳過避免 OOM
         if (task.fileSize > MAX_TASK_FILE_BYTES) {
           skipped++
-          console.warn(`[indexer] task ${key} not indexed (${task.fileSize} bytes exceeds ${MAX_TASK_FILE_BYTES}): ${task.filePath}`)
+          console.warn(`[indexer] task ${logSafe(key)} not indexed (${task.fileSize} bytes exceeds ${MAX_TASK_FILE_BYTES}): ${logSafe(task.filePath)}`)
           continue
         }
 
         const content = await parseTaskFile(task.filePath)
         if (!content) {
           skipped++
-          console.warn(`[indexer] task ${key} not indexed (unparsable): ${task.filePath}`)
+          console.warn(`[indexer] task ${logSafe(key)} not indexed (unparsable): ${logSafe(task.filePath)}`)
           continue
         }
 

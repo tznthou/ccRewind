@@ -2,6 +2,7 @@ import { readdir, stat, readFile } from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import type { ScannedProject, ScannedSession, ScannedSubagent, ScannedTask } from '../shared/types'
+import { logSafe, logSafeError } from './logSafe'
 
 const DEFAULT_BASE_DIR = path.join(os.homedir(), '.claude', 'projects')
 
@@ -21,9 +22,9 @@ export function decodeProjectPath(encoded: string): string {
  * 而掃描層是把錯誤轉成空陣列的地方 —— indexer 的 catch 永遠等不到它們，
  * skipped 計數也就數不到。這裡不出聲，那條路徑上的資料遺失就沒有任何人知道。
  */
-function warnUnlessMissing(context: string, err: unknown): void {
+function warnUnlessMissing(action: string, target: string, err: unknown): void {
   if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return
-  console.warn(`[scanner] ${context}`, err)
+  console.warn(`[scanner] ${action}: ${logSafe(target)} - ${logSafeError(err)}`)
 }
 
 /** 掃描 ~/.claude/projects/，回傳所有專案及其 JSONL 檔案 */
@@ -33,7 +34,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     entries = await readdir(baseDir)
   } catch (err) {
     // 目錄不存在或不可讀 → 回傳空陣列
-    warnUnlessMissing(`cannot read projects dir: ${baseDir}`, err)
+    warnUnlessMissing('cannot read projects dir', baseDir, err)
     return []
   }
 
@@ -50,7 +51,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     try {
       dirStat = await stat(projectDir)
     } catch (err) {
-      warnUnlessMissing(`cannot stat project dir: ${projectDir}`, err)
+      warnUnlessMissing('cannot stat project dir', projectDir, err)
       continue
     }
     if (!dirStat.isDirectory()) continue
@@ -60,7 +61,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     try {
       files = await readdir(projectDir)
     } catch (err) {
-      warnUnlessMissing(`cannot list project dir: ${projectDir}`, err)
+      warnUnlessMissing('cannot list project dir', projectDir, err)
       continue
     }
 
@@ -73,7 +74,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
       try {
         fileStat = await stat(filePath)
       } catch (err) {
-        warnUnlessMissing(`cannot stat session file: ${filePath}`, err)
+        warnUnlessMissing('cannot stat session file', filePath, err)
         continue
       }
       if (!fileStat.isFile()) continue
@@ -104,7 +105,7 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
   try {
     entries = await readdir(subagentsDir)
   } catch (err) {
-    warnUnlessMissing(`cannot list subagents dir: ${subagentsDir}`, err)
+    warnUnlessMissing('cannot list subagents dir', subagentsDir, err)
     return []
   }
 
@@ -118,7 +119,7 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
     try {
       fileStat = await stat(filePath)
     } catch (err) {
-      warnUnlessMissing(`cannot stat subagent file: ${filePath}`, err)
+      warnUnlessMissing('cannot stat subagent file', filePath, err)
       continue
     }
     if (!fileStat.isFile()) continue
@@ -137,7 +138,7 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
       }
     } catch (err) {
       // meta.json 不存在是常態（不是每個 subagent 都有）；JSON 壞掉才需要知道
-      warnUnlessMissing(`cannot read subagent meta: ${metaPath}`, err)
+      warnUnlessMissing('cannot read subagent meta', metaPath, err)
     }
 
     results.push({
@@ -170,7 +171,7 @@ export async function scanTasks(
   try {
     entries = await readdir(sessionTasksDir)
   } catch (err) {
-    warnUnlessMissing(`cannot list tasks dir: ${sessionTasksDir}`, err)
+    warnUnlessMissing('cannot list tasks dir', sessionTasksDir, err)
     return []
   }
 
@@ -185,7 +186,7 @@ export async function scanTasks(
     try {
       fileStat = await stat(filePath)
     } catch (err) {
-      warnUnlessMissing(`cannot stat task file: ${filePath}`, err)
+      warnUnlessMissing('cannot stat task file', filePath, err)
       continue
     }
     if (!fileStat.isFile()) continue
