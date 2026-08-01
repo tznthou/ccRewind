@@ -257,6 +257,7 @@ ccRewind/
 │   │   ├── task-parser.ts     # Tasks JSON parser (~/.claude/tasks/)
 │   │   ├── exporter.ts        # Markdown export
 │   │   ├── updater.ts         # GitHub Release update checker
+│   │   ├── logSafe.ts         # Log escaping (filenames may carry newlines and terminal escapes)
 │   │   └── ipc-handlers.ts    # IPC communication handlers
 │   ├── preload/               # contextBridge security bridge
 │   │   └── index.ts
@@ -272,14 +273,15 @@ ccRewind/
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
 │   │   │   ├── FontScaleSwitcher/ # Three-tier font zoom with ARIA radio keyboard pattern
 │   │   │   ├── LiveRegion/    # Global aria-live announcements (search results, sync status)
+│   │   │   ├── ErrorBoundary/ # Two layers: app shell and every individual message
 │   │   │   └── UpdateBanner/  # Update notification banner
-│   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav
+│   │   ├── hooks/             # useSession, useSessions, useProjects, useIndexerStatus, useListboxKeyNav (state machine lives in listboxKeyNav.ts)
 │   │   ├── i18n/              # LanguageSwitcher + message catalog + useI18n (zh-TW + en)
 │   │   ├── utils/             # formatTokens, formatTime, formatDuration, pathDisplay, renderSnippet
 │   │   └── context/           # AppContext + ThemeContext + FontScaleContext (locale / theme / font scale all persisted to localStorage)
 │   └── shared/
 │       └── types.ts           # Shared types between main and renderer
-├── tests/                     # Vitest tests (545)
+├── tests/                     # Vitest tests (641)
 ├── docs/                      # PRD / SPEC / PLAN
 ├── electron-builder.yml
 └── package.json
@@ -319,7 +321,7 @@ ccRewind deliberately does not:
 
 - **No context injection**: We don't interfere with future conversations, only look back at past ones
 - **No cloud sync**: All data comes from local `~/.claude/`, nothing gets uploaded
-- **No file modification**: Pure read-only app; we don't even touch the mtime of `~/.claude/`
+- **No file modification**: Pure read-only app; we don't even touch the mtime of `~/.claude/`. Read-only is not the same as reading anything it likes — indexing covers the conversation logs under `projects/` and their matching tasks, and stops there. Config files sitting alongside them are out of scope
 - **No live monitoring**: This isn't `tail -f`, it's archaeology
 - **No LLM track**: The ccFamily trio sticks to rule-based + zero API cost; deeper ADR-inference scenarios are handled by the planned ccReason plugin
 
