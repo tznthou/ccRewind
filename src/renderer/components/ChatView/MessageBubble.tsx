@@ -20,7 +20,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   const { t } = useI18n()
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
-  const toolBlocks = extractToolBlocks(message.contentJson)
+  const toolBlocks = useMemo(() => extractToolBlocks(message.contentJson), [message.contentJson])
   const badges: Array<{ key: string; label: string }> = []
   if (message.isCompactSummary) badges.push({ key: 'compact', label: t('chatView.message.compactSummary') })
   if (message.isSidechain) badges.push({ key: 'sidechain', label: t('chatView.message.sidechain') })

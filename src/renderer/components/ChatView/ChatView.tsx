@@ -50,8 +50,10 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   // 虛擬列表前面還有 panel / toolbar / fileChips，需要告訴 virtualizer 列表起點偏移
   const [scrollMargin, setScrollMargin] = useState(0)
 
-  // 必須是穩定 reference：virtual-core 把 getItemKey 放進 getMeasurementOptions 的
-  // memo 依賴，inline 函式會讓整份 measurement 每次 render 重算（O(count)）
+  // 用 message.id 而非預設的 index 當 key：換 session 不會 remount ChatView，
+  // 沿用 index 的話新 session 會直接吃到舊 session 在同一位置量到的高度。
+  // 另外它必須是穩定 reference——virtual-core 把 getItemKey 列在 getMeasurementOptions
+  // 的 memo 依賴裡，inline 函式會讓整份 measurement 每次 render 重算（O(count)）。
   const getItemKey = useCallback(
     (index: number) => displayMessages[index]?.id ?? index,
     [displayMessages],
@@ -184,8 +186,11 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     observer.observe(container)
     observer.observe(scroller)
     return () => observer.disconnect()
-    // loading / 訊息數也要進 dep：切 session 時這個 effect 會在 listRef 還沒掛載前先跑一次，
-    // 那次 measure() 什麼也量不到；若新舊 session 的外框尺寸剛好相同，ResizeObserver 也不會補觸發
+    // loading 必須進 dep：切 session 時這個 effect 會在 listRef 掛載前先跑一次，那次什麼也量不到。
+    // 而 .chatView 是 min-height:100% 的 flex column，內容塞得進 viewport 的短 session
+    // 從 loading 到載入完成外框高度「必然」不變，ResizeObserver 系統性不會補觸發——不是巧合。
+    // displayMessages.length 目前必然跟著 loading 一起翻（useSession 的 reducer 只有
+    // RESET / SUCCESS / ERROR 三種 transition），留著是為了日後若改成漸進載入仍能觸發。
   }, [getScrollElement, sessionId, loading, displayMessages.length])
 
   const handleExport = useCallback(async () => {
@@ -222,6 +227,8 @@ export default function ChatView({ sessionId }: ChatViewProps) {
         <div className={styles.status}>{t('chatView.loading')}</div>
       ) : error ? (
         <div className={styles.error}>{t('common.error', { message: error })}</div>
+      // 刻意用 messages 而非 displayMessages：整個 session 的訊息全不可顯示時（實測全庫 ≤3 個），
+      // 仍保留 toolbar 讓使用者能匯出與複製 session id，而不是換成「沒有訊息」的空狀態
       ) : messages.length === 0 ? (
         <div className={styles.status}>{t('chatView.empty')}</div>
       ) : (
