@@ -489,6 +489,10 @@ export interface IndexerProgress {
   progress: number
   total: number
   current: number
+  /** 本輪解析失敗而未進 DB 的項目數（session / subagent / task 檔）。
+   *  對「一個位元組都不會丟」的承諾來說，靜默跳過是品牌違約——
+   *  數字必須浮上 UI，只寫 log 等於使用者永遠不知道。 */
+  skipped: number
 }
 
 /** IPC 對外索引狀態（含 lastIndexedAt）。

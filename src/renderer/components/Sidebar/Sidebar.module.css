@@ -309,6 +309,15 @@
   transition: width 0.3s ease;
 }
 
+/* 有項目沒進 DB 時的警示。刻意用 error 色而非柔和的警告色：
+   對「一個位元組都不會丟」的產品，跳過任何一項都不是可以低調帶過的事。 */
+.indexerSkipped {
+  display: block;
+  margin-top: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-error);
+}
+
 /* Sync row — phase=done 時顯示「last indexed + sync now」*/
 .syncRow {
   display: flex;

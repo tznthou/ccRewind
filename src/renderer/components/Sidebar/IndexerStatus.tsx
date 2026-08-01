@@ -102,6 +102,17 @@ export default function IndexerStatus() {
           {t('sidebar.indexer.syncNow')}
         </button>
       </div>
+      {/* role="status" 讓它出現時自動被朗讀——不走 handleSync 手動 announce，
+          因為 skipped 是靠 IPC push 回來的，await reindex() 當下閉包裡的 status 還是舊值。 */}
+      {status.skipped > 0 && (
+        <span
+          className={styles.indexerSkipped}
+          role="status"
+          title={t('sidebar.indexer.skipped.hint')}
+        >
+          {t('sidebar.indexer.skipped', { count: status.skipped })}
+        </span>
+      )}
     </div>
   )
 }

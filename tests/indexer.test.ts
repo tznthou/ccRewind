@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import path from 'node:path'
 import os from 'node:os'
-import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir, writeFile, chmod, readFile } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
-import type { ExclusionRule, IndexerStatus, ParsedLine } from '../src/shared/types'
+import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
 
 let tmpDir: string
 let dbPath: string
@@ -90,7 +90,7 @@ describe('runIndexer', () => {
     await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
     await createProject(baseDir, '-Users-test-proj2', { 'sess-002': sampleSession2 })
 
-    const statuses: IndexerStatus[] = []
+    const statuses: IndexerProgress[] = []
     const onProgress: ProgressCallback = (s) => statuses.push({ ...s })
 
     await runIndexer(db, onProgress, baseDir)
@@ -153,7 +153,7 @@ describe('runIndexer', () => {
     )
 
     // 第二次索引，追蹤 progress
-    const statuses: IndexerStatus[] = []
+    const statuses: IndexerProgress[] = []
     await runIndexer(db, (s) => statuses.push({ ...s }), baseDir)
 
     // 新 session 應被索引
@@ -181,6 +181,53 @@ describe('runIndexer', () => {
     expect(projects).toHaveLength(1)
     expect(projects[0].id).toBe('-Users-test-empty')
     expect(projects[0].sessionCount).toBe(0)
+  })
+
+  it('一切正常時 skipped 為 0', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-proj1', { 'sess-001': sampleSession1 })
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir)
+
+    expect(progresses.every(s => s.skipped === 0)).toBe(true)
+  })
+
+  it('parse 失敗的 session 計入 skipped 並留下 log，不靜默吞掉', async (ctx) => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-proj1', {
+      'sess-001': sampleSession1,
+      'sess-bad': sampleSession1,
+    })
+    // 讀不到的檔案是真實會發生的情境（權限、掛載點消失）。走真的 I/O 失敗而非 mock，
+    // 才驗得到 parseSession → catch → skipped 這整條路徑。
+    const badPath = path.join(baseDir, '-Users-test-proj1', 'sess-bad.jsonl')
+    await chmod(badPath, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readFile(badPath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badPath, 0o644)
+      ctx.skip()
+    }
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir)
+    // mockRestore 會一併清掉 calls，順序不能反過來
+    const logged = warn.mock.calls.map(c => c.join(' ')).join('\n')
+    warn.mockRestore()
+    await chmod(badPath, 0o644)
+
+    const done = progresses.find(s => s.phase === 'done')
+    expect(done?.skipped).toBe(1)
+
+    // 賣點是「一個位元組都不會丟」，跳過必須有跡可循 —— log 要指得出是哪一個
+    expect(logged).toContain('sess-bad')
+
+    // 壞的那個不該拖累其他 session
+    expect(db.getMessages('sess-001')).toHaveLength(2)
+    expect(db.getMessages('sess-bad')).toHaveLength(0)
   })
 
   it('progressCallback → emits scanning → indexing → done in order', async () => {

@@ -11,6 +11,24 @@ const MAX_SUMMARY_LEN = 300
 const MAX_ACTIVITY_LEN = 80
 const MAX_FILES = 30
 
+// ── Content JSON ──
+
+/**
+ * 解析訊息的 contentJson。壞掉就回 null，讓 caller 跳過該則訊息。
+ *
+ * 這裡的失敗不會丟資料（訊息本身已在 DB），丟的是從中推斷的訊號 ——
+ * outcome 判定與 file events 會少算而沒有人知道。實測目前不觸發，
+ * 所以逐筆 warn 不會刷屏；真刷屏了，那個量本身就是要調查的訊號。
+ */
+function parseContentBlocks(contentJson: string, context: string): unknown[] | null {
+  try {
+    return JSON.parse(contentJson) as unknown[]
+  } catch (err) {
+    console.warn(`[summarizer] ${context}: unparsable contentJson, signals from this message are skipped:`, err)
+    return null
+  }
+}
+
 // ── Noise Filter ──
 
 /** 排除的路徑模式（反向索引噪音過濾） */
@@ -138,24 +156,23 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
   // 掃描 Bash tool 的 input 內容尋找 git commit / test 指令（先掃再判 quick-qa）
   for (const msg of messages) {
     if (!msg.hasToolUse || !msg.contentJson) continue
-    try {
-      const content = JSON.parse(msg.contentJson) as unknown[]
-      for (const block of content) {
-        if (typeof block !== 'object' || block === null) continue
-        const b = block as Record<string, unknown>
-        if (b.type !== 'tool_use') continue
-        const name = b.name as string
-        if (name !== 'Bash') continue
-        const input = b.input as Record<string, unknown> | undefined
-        const command = (input?.command as string) ?? ''
-        if (GIT_COMMIT_RE.test(command)) {
-          signals.gitCommitInvoked = true
-        }
-        if (TEST_COMMAND_RE.test(command)) {
-          signals.testCommandRan = true
-        }
+    const content = parseContentBlocks(msg.contentJson, 'inferOutcome/bash-scan')
+    if (!content) continue
+    for (const block of content) {
+      if (typeof block !== 'object' || block === null) continue
+      const b = block as Record<string, unknown>
+      if (b.type !== 'tool_use') continue
+      const name = b.name as string
+      if (name !== 'Bash') continue
+      const input = b.input as Record<string, unknown> | undefined
+      const command = (input?.command as string) ?? ''
+      if (GIT_COMMIT_RE.test(command)) {
+        signals.gitCommitInvoked = true
       }
-    } catch { /* malformed contentJson */ }
+      if (TEST_COMMAND_RE.test(command)) {
+        signals.testCommandRan = true
+      }
+    }
   }
 
   // 最後 5 個有 tool_use 的 turn — 不是 message-slice，因為 session 結尾常是
@@ -170,20 +187,19 @@ function inferOutcome(messages: ParsedLine[]): { status: OutcomeStatus; signals:
   if (!signals.endedWithEdits) {
     for (const msg of lastToolTurns) {
       if (!msg.hasToolUse || !msg.contentJson) continue
-      try {
-        const content = JSON.parse(msg.contentJson) as unknown[]
-        for (const block of content) {
-          if (typeof block !== 'object' || block === null) continue
-          const b = block as Record<string, unknown>
-          if (b.type !== 'tool_use' || b.name !== 'Bash') continue
-          const command = ((b.input as Record<string, unknown> | undefined)?.command as string) ?? ''
-          if (ACTIVE_WORK_RE.test(command)) {
-            signals.endedWithEdits = true
-            break
-          }
+      const content = parseContentBlocks(msg.contentJson, 'inferOutcome/active-work-scan')
+      if (!content) continue
+      for (const block of content) {
+        if (typeof block !== 'object' || block === null) continue
+        const b = block as Record<string, unknown>
+        if (b.type !== 'tool_use' || b.name !== 'Bash') continue
+        const command = ((b.input as Record<string, unknown> | undefined)?.command as string) ?? ''
+        if (ACTIVE_WORK_RE.test(command)) {
+          signals.endedWithEdits = true
+          break
         }
-        if (signals.endedWithEdits) break
-      } catch { /* malformed contentJson */ }
+      }
+      if (signals.endedWithEdits) break
     }
   }
 
@@ -316,23 +332,21 @@ function extractFileEvents(messages: ParsedLine[]): FileEvent[] {
     const msg = messages[seq]
     // tool_use blocks
     if (msg.hasToolUse && msg.contentJson) {
-      try {
-        const content = JSON.parse(msg.contentJson) as unknown[]
-        for (const block of content) {
-          if (typeof block !== 'object' || block === null) continue
-          const b = block as Record<string, unknown>
-          if (b.type !== 'tool_use') continue
-          const name = b.name as string
-          const pathKey = FILE_PATH_KEYS[name]
-          if (!pathKey) continue
-          const input = b.input as Record<string, unknown> | undefined
-          const filePath = input?.[pathKey]
-          if (typeof filePath !== 'string' || !filePath) continue
-          if (isNoisePath(filePath)) continue
-          const operation = TOOL_OPERATION_MAP[name] ?? 'discovery'
-          events.push({ filePath, operation, sequence: seq })
-        }
-      } catch { /* malformed contentJson */ }
+      // 解析失敗回 null → 跳過 tool_use blocks，但下面的 attachment 路徑照跑
+      for (const block of parseContentBlocks(msg.contentJson, 'extractFileEvents') ?? []) {
+        if (typeof block !== 'object' || block === null) continue
+        const b = block as Record<string, unknown>
+        if (b.type !== 'tool_use') continue
+        const name = b.name as string
+        const pathKey = FILE_PATH_KEYS[name]
+        if (!pathKey) continue
+        const input = b.input as Record<string, unknown> | undefined
+        const filePath = input?.[pathKey]
+        if (typeof filePath !== 'string' || !filePath) continue
+        if (isNoisePath(filePath)) continue
+        const operation = TOOL_OPERATION_MAP[name] ?? 'discovery'
+        events.push({ filePath, operation, sequence: seq })
+      }
     }
 
     // edited_text_file attachment（CC v2.1.168+）
