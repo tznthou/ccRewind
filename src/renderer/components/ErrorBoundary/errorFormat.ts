@@ -14,10 +14,18 @@ export interface FormattedError {
 export const MAX_MESSAGE_LENGTH = 500
 
 function truncate(text: string): string {
-  // 用展開運算子逐 code point 切，避免把代理對切成落單代理
-  const points = [...text]
-  if (points.length <= MAX_MESSAGE_LENGTH) return text
-  return points.slice(0, MAX_MESSAGE_LENGTH).join('') + '…'
+  // 快速路徑：UTF-16 長度不超過上限時，code point 數必然也不超過
+  if (text.length <= MAX_MESSAGE_LENGTH) return text
+  // 逐 code point 累加，最多看 MAX_MESSAGE_LENGTH + 1 個字元就停，
+  // 不把整個字串展開成陣列（錯誤訊息可能很長）
+  let count = 0
+  let end = 0
+  for (const ch of text) {
+    if (count === MAX_MESSAGE_LENGTH) return text.slice(0, end) + '…'
+    count += 1
+    end += ch.length
+  }
+  return text
 }
 
 function stringify(value: unknown): string {
@@ -26,18 +34,25 @@ function stringify(value: unknown): string {
   if (typeof value === 'object') {
     try {
       // 一般物件用 JSON 才看得出內容，String() 只會得到 [object Object]
-      return JSON.stringify(value) ?? String(value)
+      return JSON.stringify(value) ?? ''
     } catch {
-      // 循環參照等無法序列化的情況，退回 String()
-      return String(value)
+      // 循環參照、會拋錯的 getter 等：往下退回 String()
     }
   }
-  return String(value)
+  try {
+    return String(value)
+  } catch {
+    // String() 也可能拋錯——無原型物件（無 toString）、toString 自己拋錯、Symbol 都是。
+    // 這裡已經在錯誤處理路徑上，再拋就會讓 boundary 自己壞掉、fallback 顯示不出來，
+    // 所以放棄取得細節，只留下 name。
+    return ''
+  }
 }
 
 export function formatError(error: unknown): FormattedError {
   if (error instanceof Error) {
-    return { name: error.name, message: truncate(error.message) }
+    // name 可被賦值成任意字串，比照 message 設限
+    return { name: truncate(error.name), message: truncate(error.message) }
   }
   return { name: 'Error', message: truncate(stringify(error)) }
 }

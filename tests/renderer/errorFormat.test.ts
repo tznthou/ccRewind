@@ -39,6 +39,22 @@ describe('formatError', () => {
     expect(result.message).toBe('[object Object]')
   })
 
+  it('JSON.stringify 與 String() 都會拋錯的值，formatError 本身不得拋錯', () => {
+    // 無原型 + 循環參照：JSON.stringify 因循環而拋，String() 因無 toString 而拋
+    const hostile: Record<string, unknown> = Object.create(null)
+    hostile.self = hostile
+    expect(() => formatError(hostile)).not.toThrow()
+    expect(formatError(hostile).name).toBe('Error')
+  })
+
+  it('toString 會拋錯的物件不讓 formatError 拋錯', () => {
+    const hostile = {
+      toString() { throw new Error('toString 爆炸') },
+      get value() { throw new Error('getter 爆炸') },
+    }
+    expect(() => formatError(hostile)).not.toThrow()
+  })
+
   it('null 與 undefined 回傳空 message，不顯示字面 null', () => {
     expect(formatError(null)).toEqual({ name: 'Error', message: '' })
     expect(formatError(undefined)).toEqual({ name: 'Error', message: '' })

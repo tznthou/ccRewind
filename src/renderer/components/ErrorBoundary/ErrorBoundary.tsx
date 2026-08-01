@@ -19,6 +19,11 @@ interface ErrorBoundaryState {
 /**
  * 攔截子樹的 render 錯誤，避免單一元件拋錯就整個 app 白屏。
  *
+ * 必須是 class component：React 至今只有 `getDerivedStateFromError` /
+ * `componentDidCatch` 這組 class 生命週期能攔截子樹錯誤，沒有等價的 hook。
+ * 要用函式元件寫法只能引入 react-error-boundary 之類的外部套件，為了一個
+ * 40 行的元件多一個 runtime 依賴不划算。
+ *
  * 沒有內建重置機制——要在特定 prop 變化時重來，由呼叫端給 `key`（React 會重建元件）。
  */
 export default class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
