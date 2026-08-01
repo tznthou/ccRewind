@@ -373,3 +373,18 @@
   padding: 0 4px;
   border-radius: 2px;
 }
+
+/* 虛擬化訊息列表：容器撐出總高度，每列絕對定位 */
+.messageList {
+  position: relative;
+  width: 100%;
+  /* .chatView 是 flex column，預設 flex-shrink: 1 會把 virtualizer 撐出的總高度壓扁 */
+  flex-shrink: 0;
+}
+
+.messageRow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
