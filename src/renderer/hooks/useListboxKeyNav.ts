@@ -1,11 +1,5 @@
 import { useCallback, useId, useState, type KeyboardEvent } from 'react'
-
-/** 把 caller 提供的 itemId 消毒成合法 HTML id 字元集，防 CSS selector / querySelector 注入。
- *  React 會 escape attribute value 不會 XSS，但若未來有 code 用此 id 走 selector 路徑（如 #foo.bar）
- *  特殊字元（. # [ ] 等）會破壞 selector 語意。projectId / sessionId 從掃磁碟得來，內部信任但 cheap defense。 */
-function sanitizeId(s: string): string {
-  return s.replace(/[^a-zA-Z0-9\-_:.]/g, '_')
-}
+import { buildOptionId, clampActiveIndex, resolveKeyAction } from './listboxKeyNav'
 
 interface Options<T> {
   items: T[]
@@ -73,37 +67,32 @@ export function useListboxKeyNav<T>({
     if (activeIndex !== 0) setActiveIndex(0)
   }
 
-  const safeActiveIndex = items.length === 0 ? 0 : Math.min(activeIndex, items.length - 1)
+  const safeActiveIndex = clampActiveIndex(activeIndex, items.length)
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (items.length === 0) return
+    const { preventDefault, effect } = resolveKeyAction({
+      key: e.key,
+      activeIndex: safeActiveIndex,
+      itemCount: items.length,
+      dispatchOnArrow,
+    })
+    if (preventDefault) e.preventDefault()
 
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      const next = Math.min(safeActiveIndex + 1, items.length - 1)
-      if (next === safeActiveIndex) return
-      setActiveIndex(next)
-      onActiveChange?.(next)
-      if (dispatchOnArrow) onActivate(items[next], next)
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      const next = Math.max(safeActiveIndex - 1, 0)
-      if (next === safeActiveIndex) return
-      setActiveIndex(next)
-      onActiveChange?.(next)
-      if (dispatchOnArrow) onActivate(items[next], next)
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault()
-      onActivate(items[safeActiveIndex], safeActiveIndex)
+    if (effect.type === 'move') {
+      setActiveIndex(effect.index)
+      onActiveChange?.(effect.index)
+      if (effect.activate) onActivate(items[effect.index], effect.index)
+    } else if (effect.type === 'activate') {
+      onActivate(items[effect.index], effect.index)
     }
   }, [items, safeActiveIndex, dispatchOnArrow, onActivate, onActiveChange])
 
   const activeDescendant = items.length > 0
-    ? `${listboxId}-${sanitizeId(getItemId(items[safeActiveIndex]))}`
+    ? buildOptionId(listboxId, getItemId(items[safeActiveIndex]))
     : undefined
 
   const getOptionProps = useCallback((item: T): OptionProps => ({
-    id: `${listboxId}-${sanitizeId(getItemId(item))}`,
+    id: buildOptionId(listboxId, getItemId(item)),
     role: 'option',
     tabIndex: -1,
   }), [listboxId, getItemId])
