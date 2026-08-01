@@ -397,8 +397,9 @@ export async function runIndexer(
     })
   }
 
-  // 4. SUBAGENT SCANNING — 對有變動的 session，掃描 subagents/
+  // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
   const existingSubMtimes = db.getAllSubagentMtimes()
+  const scannedSubagentIds = new Set<string>()
   for (const project of projects) {
     for (const session of project.sessions) {
       // session 目錄：<project>/<sessionId>/
@@ -413,19 +414,13 @@ export async function runIndexer(
       }
       if (subagents.length === 0) continue
 
-      // 清理磁碟已刪除的 stale subagents
-      const scannedSubIds = new Set(subagents.map(s => s.subagentId))
-      const storedSubIds = db.getSubagentSessionIds(session.sessionId)
-      for (const storedId of storedSubIds) {
-        if (!scannedSubIds.has(storedId)) {
-          db.deleteSubagentSession(storedId)
-        }
-      }
-
       for (const sub of subagents) {
-        // 增量比對：mtime 沒變就跳過
-        const existingMtime = existingSubMtimes.get(sub.subagentId)
-        if (existingMtime && existingMtime === sub.fileMtime) continue
+        scannedSubagentIds.add(sub.subagentId)
+        // 增量比對：mtime 沒變「且未封存」才跳過。archived 條件讓 archive 可逆——
+        // 還原檔案時 mtime 可能一模一樣（rsync -a、Time Machine 都保留 mtime），
+        // 少了它就會在這裡 continue 掉，archived 標記永遠解不開。
+        const existing = existingSubMtimes.get(sub.subagentId)
+        if (existing && existing.mtime === sub.fileMtime && !existing.archived) continue
 
         // 解析 subagent JSONL
         let parsed: ParsedSession
@@ -467,6 +462,19 @@ export async function runIndexer(
         })
       }
     }
+  }
+
+  // 磁碟上已消失的 subagent 標記為 archived（不刪 —— 理由見 archiveStaleSubagents）。
+  // 守衛：掃描層把讀取失敗轉成空陣列（scanner.ts 三處 return []），indexer 分不出
+  // 「使用者刪光了」與「整個掃描失敗」。全空時照樣 archive，一次權限錯誤就會把所有
+  // subagent 標成已封存——寧可少做也不要誤傷。
+  if (scannedSubagentIds.size > 0) {
+    const archivedSubagents = db.archiveStaleSubagents(scannedSubagentIds)
+    if (archivedSubagents > 0) {
+      console.warn(`[indexer] archived ${archivedSubagents} subagent session(s) no longer on disk`)
+    }
+  } else if (existingSubMtimes.size > 0) {
+    console.warn(`[indexer] skipped subagent archiving: scan found none but ${existingSubMtimes.size} indexed (treating as a failed scan, not deletions)`)
   }
 
   // 5. TASK SCANNING — 掃 ~/.claude/tasks/{sessionId}/*.json
