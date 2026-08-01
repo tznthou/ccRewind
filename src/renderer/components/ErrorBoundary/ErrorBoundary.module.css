@@ -1,0 +1,58 @@
+.appFallback {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 100%;
+  padding: 32px;
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.appTitle {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.appHint {
+  max-width: 46ch;
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.messageFallback {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 10px 14px;
+  border: 1px dashed var(--color-error);
+  border-radius: 6px;
+  background: var(--color-bubble-system);
+}
+
+.messageLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-error);
+}
+
+.detail {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: var(--color-code-bg);
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  color: var(--color-code-text);
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

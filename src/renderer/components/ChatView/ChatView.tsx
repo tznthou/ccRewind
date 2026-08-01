@@ -10,6 +10,8 @@ import RelatedSessionsPanel from '../Archaeology/RelatedSessionsPanel'
 import SubagentPanel from './SubagentPanel'
 import TasksPanel from './TasksPanel'
 import { useTokenHeat } from './TokenHeatGutter'
+import ErrorBoundary from '../ErrorBoundary/ErrorBoundary'
+import { MessageErrorFallback } from '../ErrorBoundary/ErrorFallback'
 import styles from './ChatView.module.css'
 
 interface ChatViewProps {
@@ -167,7 +169,13 @@ export default function ChatView({ sessionId }: ChatViewProps) {
             </div>
           )}
           {messages.map((msg) => (
-            <MessageBubble key={msg.id} message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
+            <ErrorBoundary
+              key={msg.id}
+              label={`message:${msg.id}`}
+              fallback={error => <MessageErrorFallback error={error} />}
+            >
+              <MessageBubble message={msg} searchQuery={searchQuery} heat={heatMap.get(msg.id)} />
+            </ErrorBoundary>
           ))}
           <RelatedSessionsPanel sessionId={sessionId} />
         </>

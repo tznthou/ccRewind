@@ -11,6 +11,8 @@ import FileHistoryDrawer from './components/Archaeology/FileHistoryDrawer'
 import ThemeSwitcher from './components/ThemeSwitcher/ThemeSwitcher'
 import FontScaleSwitcher from './components/FontScaleSwitcher/FontScaleSwitcher'
 import LiveRegion from './components/LiveRegion/LiveRegion'
+import ErrorBoundary from './components/ErrorBoundary/ErrorBoundary'
+import { AppErrorFallback } from './components/ErrorBoundary/ErrorFallback'
 import styles from './App.module.css'
 
 function AppContent() {
@@ -92,7 +94,9 @@ export default function App() {
       <ThemeProvider>
         <FontScaleProvider>
           <AppProvider>
-            <AppContent />
+            <ErrorBoundary label="app" fallback={error => <AppErrorFallback error={error} />}>
+              <AppContent />
+            </ErrorBoundary>
           </AppProvider>
         </FontScaleProvider>
       </ThemeProvider>
