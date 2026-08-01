@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useSession } from '../../hooks/useSession'
@@ -11,6 +11,7 @@ import RelatedSessionsPanel from '../Archaeology/RelatedSessionsPanel'
 import SubagentPanel from './SubagentPanel'
 import TasksPanel from './TasksPanel'
 import { useTokenHeat } from './TokenHeatGutter'
+import { isDisplayableMessage } from './contentBlocks'
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary'
 import { MessageErrorFallback } from '../ErrorBoundary/ErrorFallback'
 import styles from './ChatView.module.css'
@@ -42,20 +43,29 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   // 捲動容器是 ChatView 的父層（App.module.css 的 .main），ChatView 自己沒有 overflow
   const getScrollElement = useCallback(() => containerRef.current?.parentElement ?? null, [])
 
+  // 只有會渲染出東西的訊息才進虛擬列表。不渲染的訊息（last-prompt、純 bookkeeping）
+  // 若留在 count 裡，在被量到 0 之前都佔著 estimateSize，捲軸會虛胖、捲動反覆修正。
+  const displayMessages = useMemo(() => messages.filter(isDisplayableMessage), [messages])
+
   // 虛擬列表前面還有 panel / toolbar / fileChips，需要告訴 virtualizer 列表起點偏移
   const [scrollMargin, setScrollMargin] = useState(0)
 
+  // 必須是穩定 reference：virtual-core 把 getItemKey 放進 getMeasurementOptions 的
+  // memo 依賴，inline 函式會讓整份 measurement 每次 render 重算（O(count)）
+  const getItemKey = useCallback(
+    (index: number) => displayMessages[index]?.id ?? index,
+    [displayMessages],
+  )
+
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual 的 useVirtualizer 跟 React Compiler memoization 不相容（third-party API design 限制）
   const virtualizer = useVirtualizer({
-    count: messages.length,
+    count: displayMessages.length,
     getScrollElement,
     // 實測本機資料：訊息高度中位數與 p90 都是 96px（最小 71、最大 2714）
     estimateSize: () => 96,
     overscan: 8,
     scrollMargin,
-    // 換 session 不會 remount ChatView，若用預設的 index 當 key，
-    // 新 session 會沿用舊 session 在同一 index 量到的高度
-    getItemKey: index => messages[index]?.id ?? index,
+    getItemKey,
   })
 
   // 換 session 時若無搜尋目標就 scroll to top；用 ref 追蹤前一個 sessionId 避免 targetMessageId 變化時誤觸（會蓋掉 search scroll）
@@ -82,7 +92,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   // 虛擬化後目標訊息不一定在 DOM 裡，必須先 scrollToIndex 把它帶進可視範圍再操作。
   useEffect(() => {
     if (!targetMessageId || loading) return
-    const index = messages.findIndex(m => m.id === targetMessageId)
+    const index = displayMessages.findIndex(m => m.id === targetMessageId)
     if (index < 0) return
     dispatch({ type: 'CLEAR_TARGET_MESSAGE' })
 
@@ -139,7 +149,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
       settleTimer = window.setTimeout(refocus, SCROLL_SETTLE_MS)
     }
     requestAnimationFrame(locate)
-  }, [targetMessageId, loading, dispatch, messages, virtualizer, getScrollElement])
+  }, [targetMessageId, loading, dispatch, displayMessages, virtualizer, getScrollElement])
 
   const [exporting, setExporting] = useState(false)
   const [sessionFiles, setSessionFiles] = useState<SessionFile[]>([])
@@ -174,7 +184,9 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     observer.observe(container)
     observer.observe(scroller)
     return () => observer.disconnect()
-  }, [getScrollElement, sessionId])
+    // loading / 訊息數也要進 dep：切 session 時這個 effect 會在 listRef 還沒掛載前先跑一次，
+    // 那次 measure() 什麼也量不到；若新舊 session 的外框尺寸剛好相同，ResizeObserver 也不會補觸發
+  }, [getScrollElement, sessionId, loading, displayMessages.length])
 
   const handleExport = useCallback(async () => {
     setExporting(true)
@@ -260,7 +272,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
           )}
           <div ref={listRef} className={styles.messageList} style={{ height: virtualizer.getTotalSize() }}>
             {virtualizer.getVirtualItems().map((virtualItem) => {
-              const msg = messages[virtualItem.index]
+              const msg = displayMessages[virtualItem.index]
               return (
                 <div
                   key={msg.id}
