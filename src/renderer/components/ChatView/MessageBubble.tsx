@@ -3,7 +3,7 @@ import type { Message } from '../../../shared/types'
 import MarkdownRenderer from './MarkdownRenderer'
 import ToolBlock from './ToolBlock'
 import ThinkingBlock from './ThinkingBlock'
-import { extractThinkingBlocks } from './contentBlocks'
+import { extractThinkingBlocks, extractToolBlocks } from './contentBlocks'
 import { formatTime } from '../../utils/formatTime'
 import { highlightText } from '../../utils/highlightText'
 import { useI18n } from '../../i18n/useI18n'
@@ -16,44 +16,11 @@ interface MessageBubbleProps {
   heat?: HeatInfo
 }
 
-interface ToolUseBlock {
-  type: 'tool_use'
-  name: string
-  input: unknown
-}
-
-interface ToolResultBlock {
-  type: 'tool_result'
-  tool_use_id: string
-  content: unknown
-}
-
-type ContentBlock = ToolUseBlock | ToolResultBlock
-
-function extractToolBlocks(contentJson: string | null): ContentBlock[] {
-  if (!contentJson) return []
-  try {
-    const parsed = JSON.parse(contentJson)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter(
-      (block: unknown): block is ContentBlock => {
-        if (block == null || typeof block !== 'object') return false
-        const b = block as Record<string, unknown>
-        if (b.type === 'tool_use') return typeof b.name === 'string'
-        if (b.type === 'tool_result') return typeof b.tool_use_id === 'string'
-        return false
-      },
-    )
-  } catch {
-    return []
-  }
-}
-
 export default memo(function MessageBubble({ message, searchQuery = '', heat }: MessageBubbleProps) {
   const { t } = useI18n()
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
-  const toolBlocks = extractToolBlocks(message.contentJson)
+  const toolBlocks = useMemo(() => extractToolBlocks(message.contentJson), [message.contentJson])
   const badges: Array<{ key: string; label: string }> = []
   if (message.isCompactSummary) badges.push({ key: 'compact', label: t('chatView.message.compactSummary') })
   if (message.isSidechain) badges.push({ key: 'sidechain', label: t('chatView.message.sidechain') })

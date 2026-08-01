@@ -6,6 +6,19 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.20.0] - 2026-08-01
+
+### Added
+
+- **錯誤邊界（Error Boundary）**：新增兩層防護，一層包住應用程式外殼、一層包住每一則訊息。此前只要有元件在 render 期間拋錯，React 就會卸載整棵樹、畫面全白。由於 parser 刻意採寬容模式收下未知結構的 JSONL，髒資料必然會流到畫面層（本機索引庫實測有 5,646 筆 unknown-type 訊息，且每一筆都同時存在於 `messages` 表、會被實際渲染）。現在單一則訊息渲染失敗只會就地顯示一則提示，同一 session 的其他訊息照常閱讀，錯誤詳情同時寫入 console 供回報
+
+### Changed
+
+- **ChatView 訊息列表改為虛擬化渲染**：原本不論訊息多寡都會一次渲染全部，且 `searchQuery` 一變動就讓每一則訊息重跑一次 markdown AST 解析。實測本機最大的 session 有 36,533 則訊息，429 個 session（15.8%）超過 500 則。改為只渲染可視範圍後，該 session 的渲染列數從全量降到數十列
+  - 不會渲染的訊息（`last-prompt` 與純 bookkeeping 記錄）不再佔用列表空間。這類訊息在最大的 session 中佔 65%，先前會各自佔著一份高度估計值，導致捲軸長度虛胖、捲動時反覆修正位置
+  - 搜尋跳轉一併改寫：原本以 `querySelector` 定位目標訊息，虛擬化後目標未必存在於 DOM，改為先捲動到對應索引、等待渲染完成後再高亮與聚焦
+- **訊息氣泡的工具區塊解析加上快取**，與相鄰的思考區塊解析行為一致
+
 ## [1.19.2] - 2026-07-22
 
 ### Fixed

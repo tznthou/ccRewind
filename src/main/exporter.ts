@@ -12,7 +12,10 @@ export interface ExportSessionData {
   messages: Message[]
 }
 
-// ── Tool block extraction（與 MessageBubble 同邏輯，main process 獨立實作）──
+// ── Tool block extraction ──
+// 與 renderer 的 components/ChatView/contentBlocks.ts 同邏輯，main process 獨立實作一份。
+// 不共用是因為 src/shared/ 目前純放 type、沒有任何 runtime export，為一個 20 行函式
+// 開 shared runtime module 的代價高於這份重複。**改任一邊都要同步另一邊。**
 
 interface ToolUseBlock {
   type: 'tool_use'
