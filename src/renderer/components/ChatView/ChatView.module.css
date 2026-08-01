@@ -387,4 +387,8 @@
   top: 0;
   left: 0;
   width: 100%;
+  /* MessageBubble 靠 align-self 決定左右對齊（user 靠左 / assistant 靠右 / system 置中），
+     wrapper 必須是 flex container，否則 align-self 失效、全部擠到左邊 */
+  display: flex;
+  flex-direction: column;
 }

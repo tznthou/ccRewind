@@ -19,6 +19,17 @@ interface ChatViewProps {
   sessionId: string
 }
 
+/**
+ * 目標訊息 render 出來前最多等多久。
+ *
+ * 實測正常情況只要 1-2 幀：scrollToIndex 帶動的 re-render 一到位就找得到。
+ * 這個上限是保險——動態高度下 virtual-core 會逐幀重算落點直到穩定（見其
+ * reconcileScroll，同樣以 5000ms 為界），落點若需要多輪收斂，這裡不該比它早放棄。
+ */
+const MAX_LOCATE_MS = 5000
+/** 捲動安定的兜底時間；沒有實際捲動時 scrollend 不會發生 */
+const SCROLL_SETTLE_MS = 800
+
 export default function ChatView({ sessionId }: ChatViewProps) {
   const { messages, loading, error } = useSession(sessionId)
   const { targetMessageId, searchQuery } = useAppState()
@@ -31,8 +42,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
   // 捲動容器是 ChatView 的父層（App.module.css 的 .main），ChatView 自己沒有 overflow
   const getScrollElement = useCallback(() => containerRef.current?.parentElement ?? null, [])
 
-  // 虛擬列表前面還有 panel / toolbar / fileChips，需要告訴 virtualizer 列表起點偏移。
-  // 這些前置內容是條件渲染且可摺疊，所以每次相關狀態變動都要重算。
+  // 虛擬列表前面還有 panel / toolbar / fileChips，需要告訴 virtualizer 列表起點偏移
   const [scrollMargin, setScrollMargin] = useState(0)
 
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual 的 useVirtualizer 跟 React Compiler memoization 不相容（third-party API design 限制）
@@ -43,6 +53,9 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     estimateSize: () => 96,
     overscan: 8,
     scrollMargin,
+    // 換 session 不會 remount ChatView，若用預設的 index 當 key，
+    // 新 session 會沿用舊 session 在同一 index 量到的高度
+    getItemKey: index => messages[index]?.id ?? index,
   })
 
   // 換 session 時若無搜尋目標就 scroll to top；用 ref 追蹤前一個 sessionId 避免 targetMessageId 變化時誤觸（會蓋掉 search scroll）
@@ -51,9 +64,19 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     const sessionChanged = prevSessionIdRef.current !== sessionId
     prevSessionIdRef.current = sessionId
     if (sessionChanged && !targetMessageId) {
-      containerRef.current?.parentElement?.scrollTo(0, 0)
+      getScrollElement()?.scrollTo(0, 0)
     }
-  }, [sessionId, targetMessageId])
+  }, [sessionId, targetMessageId, getScrollElement])
+
+  // 跳轉流程的生命週期用 token 控制，不用 effect cleanup。
+  // 原因：effect 一開頭就得 dispatch CLEAR_TARGET_MESSAGE（否則同一則訊息無法重複跳轉），
+  // 而 targetMessageId 正是本 effect 的 dep——dispatch 會立刻讓 effect 重跑並執行 cleanup。
+  // 取消若綁在 cleanup 上，後面每個非同步步驟都會被自己取消掉（實測 highlight 從未觸發、焦點留在 body）。
+  const navTokenRef = useRef(0)
+  useEffect(() => {
+    // 換 session 作廢進行中的跳轉
+    navTokenRef.current += 1
+  }, [sessionId])
 
   // 搜尋跳轉：targetMessageId 設定後（含同 session 重複點擊），loading 結束時跳轉。
   // 虛擬化後目標訊息不一定在 DOM 裡，必須先 scrollToIndex 把它帶進可視範圍再操作。
@@ -63,19 +86,18 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     if (index < 0) return
     dispatch({ type: 'CLEAR_TARGET_MESSAGE' })
 
+    const token = ++navTokenRef.current
+    const alive = () => navTokenRef.current === token
+
+    // 長列表刻意用預設的瞬間捲動：跨越數萬 px 的 smooth 捲動既慢又會讓量測反覆修正
     virtualizer.scrollToIndex(index, { align: 'center' })
 
-    let cancelled = false
-    let rafId = 0
-    let attempts = 0
-    let teardown: (() => void) | undefined
-
+    const startedAt = performance.now()
     const locate = () => {
-      if (cancelled) return
+      if (!alive()) return
       const el = containerRef.current?.querySelector(`[data-message-id="${targetMessageId}"]`)
       if (!(el instanceof HTMLElement)) {
-        // 高度是量出來的不是算出來的，scrollToIndex 可能要多輪修正才把目標帶到定位
-        if (attempts++ < 60) rafId = requestAnimationFrame(locate)
+        if (performance.now() - startedAt < MAX_LOCATE_MS) requestAnimationFrame(locate)
         return
       }
 
@@ -88,46 +110,35 @@ export default function ChatView({ sessionId }: ChatViewProps) {
       el.addEventListener('animationend', onEnd)
 
       // 再捲到第一個關鍵字 mark；若所在 <details> 摺疊則先展開
-      let innerRafId = 0
-      const outerRafId = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (!alive()) return
         const mark = el.querySelector<HTMLElement>('mark[data-search-match="true"]')
         if (!mark) return
         const details = mark.closest('details')
         if (details && !details.open) details.open = true
-        innerRafId = requestAnimationFrame(() => mark.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+        requestAnimationFrame(() => {
+          if (alive()) mark.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        })
       })
 
       // 捲動會讓 virtualizer 重新渲染、目標元素 remount，先前的 focus 會被吃掉。
-      // 等捲動真正停下來再補一次 focus，並重新查詢元素（原本的 node 可能已不在）。
+      // 等捲動停下來再補一次，並重新查詢元素（原本的 node 可能已不在）。
       const scroller = getScrollElement()
       let settleTimer = 0
       const refocus = () => {
         clearTimeout(settleTimer)
         scroller?.removeEventListener('scrollend', refocus)
-        if (cancelled) return
+        if (!alive()) return
+        // 使用者可能已經把焦點移去搜尋框繼續打字，別硬搶回來
+        const active = document.activeElement
+        if (active && active !== document.body && !containerRef.current?.contains(active)) return
         const current = containerRef.current?.querySelector(`[data-message-id="${targetMessageId}"]`)
         if (current instanceof HTMLElement) current.focus({ preventScroll: true })
       }
       scroller?.addEventListener('scrollend', refocus)
-      // 沒有實際捲動時 scrollend 不會發生，用 timeout 兜底
-      settleTimer = window.setTimeout(refocus, 800)
-
-      teardown = () => {
-        cancelAnimationFrame(outerRafId)
-        cancelAnimationFrame(innerRafId)
-        clearTimeout(settleTimer)
-        scroller?.removeEventListener('scrollend', refocus)
-        el.classList.remove(styles.highlightTarget)
-        el.removeEventListener('animationend', onEnd)
-      }
+      settleTimer = window.setTimeout(refocus, SCROLL_SETTLE_MS)
     }
-    rafId = requestAnimationFrame(locate)
-
-    return () => {
-      cancelled = true
-      cancelAnimationFrame(rafId)
-      teardown?.()
-    }
+    requestAnimationFrame(locate)
   }, [targetMessageId, loading, dispatch, messages, virtualizer, getScrollElement])
 
   const [exporting, setExporting] = useState(false)
@@ -145,15 +156,25 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     return () => { cancelled = true }
   }, [sessionId])
 
-  // 前置內容（panel / toolbar / fileChips）都是條件渲染，高度不是常數，
-  // 每次可能影響列表起點的狀態變動後都重新量一次
+  // 列表上方的 SubagentPanel / TasksPanel / TokenBudgetPanel 會非同步長出內容、也能展開收合，
+  // 這些都不經過 ChatView 的 state，靠列舉 dep 追不到（實測展開 TokenBudget 會讓起點位移 609px）。
+  // 改用 ResizeObserver 直接看尺寸變化。
   useLayoutEffect(() => {
     const scroller = getScrollElement()
-    const list = listRef.current
-    if (!scroller || !list) return
-    const offset = list.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
-    setScrollMargin(prev => (Math.abs(prev - offset) > 1 ? offset : prev))
-  }, [getScrollElement, messages.length, loading, showFiles, sessionFiles.length, sessionId])
+    const container = containerRef.current
+    if (!scroller || !container) return
+    const measure = () => {
+      const list = listRef.current
+      if (!list) return
+      const offset = list.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop
+      setScrollMargin(prev => (Math.abs(prev - offset) > 1 ? offset : prev))
+    }
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(container)
+    observer.observe(scroller)
+    return () => observer.disconnect()
+  }, [getScrollElement, sessionId])
 
   const handleExport = useCallback(async () => {
     setExporting(true)
