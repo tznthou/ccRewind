@@ -7,6 +7,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.20.0] - 2026-08-01
+
+### Added
+
+- **Error boundaries**: two layers, one around the app shell and one around every individual message. Previously any component throwing during render unmounted the whole tree and left a blank window. The parser deliberately accepts JSONL of unknown shape, so malformed data does reach the view layer — the local index holds 5,646 unknown-type messages, every one of which is also present in the `messages` table and therefore actually rendered. A single message that fails to render now shows an inline notice in place, the rest of the session stays readable, and the error details go to the console for reporting
+
+### Changed
+
+- **The ChatView message list is now virtualized**: it previously rendered every message regardless of count, and any change to `searchQuery` re-ran a full markdown AST parse for each one. The largest session measured locally holds 36,533 messages, and 429 sessions (15.8%) exceed 500. Only the visible range is rendered now, taking that session from a full render down to a few dozen rows
+  - Messages that render nothing (`last-prompt` and pure bookkeeping records) no longer occupy space in the list. They account for 65% of that largest session, and each was holding a size estimate — inflating the scrollbar and forcing repeated position corrections while scrolling
+  - Search-to-message was rewritten alongside it: it used to locate its target with `querySelector`, which cannot work once the target may not be in the DOM. It now scrolls to the target's index and waits for the row to render before highlighting and focusing it
+- **Tool block parsing in message bubbles is now memoized**, matching the neighbouring thinking block parsing
+
 ## [1.19.2] - 2026-07-22
 
 ### Fixed
