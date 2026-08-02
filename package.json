@@ -19,11 +19,11 @@
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {
-    "@tanstack/react-virtual": "^3.14.8",
+    "@tanstack/react-virtual": "^3.14.9",
     "better-sqlite3": "^12.10.0",
     "highlight.js": "^11.11.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.10.0",
+    "recharts": "^3.10.1",
     "rehype-highlight": "^7.0.2",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1"
