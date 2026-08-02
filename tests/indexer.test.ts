@@ -1061,6 +1061,78 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getExclusionRules()).toEqual([])
     expect(db.getMessages('sess-plain')).toHaveLength(2)
   })
+
+  it('索引跑到一半才被排除的 session，不會從補寫 parent 那條路復活', async () => {
+    // phase 2 的 excludedSessionIds 蓋不到這個情境：快照當下 session 還在表裡，走的是
+    // existing 分支，從來沒進過那個集合。等 phase 3 期間使用者按下排除、phase 4 又發現
+    // parent 不在表裡，補寫 metadata parent 就會把剛刪掉的東西接回來。
+    const baseDir = path.join(tmpDir, 'projects')
+    const line = (sessionId: string, uuid: string) => [{
+      type: 'user', uuid, timestamp: '2024-06-01T10:00:00.000Z', sessionId,
+      message: { role: 'user', content: 'hi' },
+    }]
+    await createProject(baseDir, '-Users-mid-excl', {
+      'sess-quiet': line('sess-quiet', 'quiet-u1'),  // 有 subagent，本輪不會重新索引
+      'sess-busy': line('sess-busy', 'busy-u1'),     // 本輪會被索引，用來把流程推進 phase 3
+    })
+    await addSubagent(baseDir, '-Users-mid-excl', 'sess-quiet', 'agent-q')
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-quiet/agent-q')).toHaveLength(1)
+
+    // 只動 sess-busy 的 mtime，sess-quiet 這輪不進 sessionsToIndex（否則 phase 3 自己就重建了，測不到 phase 4）
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-mid-excl', 'sess-busy.jsonl'), t, t)
+
+    let fired = false
+    const excludeMidRun: ProgressCallback = (p) => {
+      if (p.phase === 'indexing' && !fired) {
+        fired = true
+        db.applyExclusion({ projectId: '-Users-mid-excl', dateFrom: null, dateTo: null })
+      }
+    }
+    await runIndexer(db, excludeMidRun, baseDir, tasksDir)
+
+    expect(fired).toBe(true)
+    // 使用者主動排除的決定要贏過「補寫 metadata parent 救 subagent」
+    expect(db.getMessages('sess-quiet')).toEqual([])
+    expect(db.getMessages('sess-quiet/agent-q')).toEqual([])
+  })
+
+  it('summary_version 為 null 的 provisional parent 仍要重評 exclusion rule', async () => {
+    // 補寫進去的 metadata-only parent 下一輪就成了 existing。若 exclusion 只看 !existing，
+    // 它等於拿到永久豁免——parent 恢復可讀後整段被索引回來，使用者設的日期範圍形同虛設。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-prov', { 'sess-prov': sampleSession1 })
+    const filePath = path.join(baseDir, '-Users-prov', 'sess-prov.jsonl')
+    const st = await stat(filePath)
+
+    // 直接造出 provisional 狀態：有 row、沒訊息、summary_version 為 null，mtime 與磁碟一致
+    // （mtime 相同才能確定重新索引是 summaryStale 觸發的，而不是 mtime 變動）
+    db.indexSession({
+      sessionId: 'sess-prov',
+      projectId: '-Users-prov',
+      projectDisplayName: 'prov',
+      title: null,
+      messageCount: 0,
+      filePath,
+      fileSize: st.size,
+      fileMtime: st.mtime.toISOString(),
+      startedAt: null,
+      endedAt: null,
+      summaryVersion: null,
+      messages: [],
+    })
+    expect(db.getMessages('sess-prov')).toEqual([])
+
+    // 規則涵蓋這個 session 的日期（sampleSession1 是 2024-06-01）
+    db.applyExclusion({ projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-30' })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 被規則涵蓋 → 不該趁 summaryStale 重新索引把內容補齊
+    expect(db.getMessages('sess-prov')).toEqual([])
+  })
 })
 
 describe('runIndexer — stale subagent handling', () => {

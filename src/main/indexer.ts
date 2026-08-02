@@ -322,7 +322,12 @@ export async function runIndexer(
       // 重新索引條件：新 session、mtime 變更、archived session 重新出現、或 summary engine 升版
       const summaryStale = existing && (existing.summaryVersion === null || existing.summaryVersion < SUMMARY_VERSION)
       if (!existing || existing.mtime !== session.fileMtime || existing.archived || summaryStale) {
-        if (exclusionRules.length > 0 && !existing) {
+        // summary_version 為 null 的也要重評：那是「還沒真正索引完成」的狀態（parse
+        // 失敗，或 phase 4 為了接住 subagent 補寫的 metadata-only parent），語義上更
+        // 接近新 session 而不是已索引。少了這一半，一個在 parent 暫時讀不到時補寫的
+        // metadata parent 會因為下一輪「已 existing」而永久豁免 date rule——等權限恢復
+        // 就整段索引回來，使用者設的排除範圍等於沒設。
+        if (exclusionRules.length > 0 && (!existing || existing.summaryVersion === null)) {
           const firstTs = await readFirstTimestamp(session.filePath)
           const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))
           if (excluded) {
@@ -467,6 +472,10 @@ export async function runIndexer(
   const existingSubMtimes = db.getAllSubagentMtimes()
   const scannedSubagentIds = new Set<string>()
   let subagentScanFailed = false
+  // 重讀而非沿用 phase 2 的 exclusionRules：大庫跑完 phase 3 是分鐘級的事，這中間
+  // 使用者可能新增了規則、或按下 applyExclusion 把某個 parent 硬刪掉。下面補寫
+  // metadata parent 時要用得到當下的規則，拿舊快照判斷等於看著過期的意圖做事。
+  const freshExclusionRules = db.getExclusionRules()
   for (const project of projects) {
     for (const session of project.sessions) {
       // 使用者用 exclusion rule 主動排除掉的 session，連它的 subagent 都不該進 DB，
@@ -503,6 +512,18 @@ export async function runIndexer(
       // 因為那份快照取於 phase 2，大庫跑完 phase 3 是分鐘級的事，這中間 applyExclusion
       // 可能已經把 row 刪掉了——照快照判斷會略過補寫，然後撞上這段要防的 FK 中斷。
       if (!db.hasSession(session.sessionId)) {
+        // hasSession 為 false 有兩種來源，處置相反：parent 從沒進過表（replay 被去重
+        // 成空、主檔 parse 失敗）是該救的；parent 剛被 applyExclusion 硬刪掉則是使用者
+        // 主動要它消失，補寫等於把刪掉的東西接回來。phase 2 的 excludedSessionIds 蓋不到
+        // 後者——那時 session 還在表裡，走的是 existing 分支，從來沒進過那個集合。
+        // 所以這裡就地重評一次規則，讓「使用者不要」贏過「補寫救資料」。
+        if (freshExclusionRules.length > 0) {
+          const firstTs = await readFirstTimestamp(session.filePath)
+          if (freshExclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))) {
+            console.warn(`[indexer] session ${logSafe(session.sessionId)} matches an exclusion rule; not restoring it as a metadata-only parent (its ${subagents.length} subagent(s) stay out too)`)
+            continue
+          }
+        }
         db.indexSession({
           sessionId: session.sessionId,
           projectId: project.projectId,
