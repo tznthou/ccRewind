@@ -32,7 +32,7 @@ Claude Code 把每段對話存成 `~/.claude/projects/<專案>/<sessionId>.jsonl
 
 subagent（透過 Task／Agent 工具啟動的子代理）不是寫在主對話檔裡的某個欄位，而是各自獨立的檔案：
 
-```
+```text
 ~/.claude/projects/<專案>/
 ├── <sessionId>.jsonl              ← 主對話
 └── <sessionId>/
@@ -48,7 +48,7 @@ ccRewind 是唯讀的觀察者，每次啟動掃描 `~/.claude/`，比對磁碟�
 
 **主對話走集合減法**
 
-```
+```text
 archiveStaleSessionsExcept(這次掃到的所有 session id)
 ```
 
@@ -56,7 +56,7 @@ archiveStaleSessionsExcept(這次掃到的所有 session id)
 
 **subagent 走巢狀迴圈**
 
-```
+```text
 for (掃描到的每個 project)
   for (掃描到的每個 session)          ← 問題在這一層
     掃描這個 session 的 subagents/
@@ -97,7 +97,7 @@ SELECT s.project_id, COUNT(*) AS session_count, ...
 FROM sessions s ... WHERE s.archived = 0
 ```
 
-實測同一份索引庫，修正前算出 **1,759** 筆活躍記錄，修正後是 **389** 筆——**其中 78% 是指向已消失檔案的幽靈記錄**。
+實測同一份索引庫，修正後活躍記錄是 **389** 筆。修正前那 1,369 筆幽靈記錄全部計入同一個數字——**灌進去的量是真實數字的 3.5 倍**。
 
 **但每日趨勢圖不受影響。** 這一點值得單獨說明，因為它解釋了問題為何能潛伏這麼久。趨勢圖的查詢帶有 30 天時間視窗：
 
@@ -124,11 +124,11 @@ ccRewind 對 `~/.claude/` 是純唯讀的觀察者。當那邊的檔案被保留
 
 ## 這會發生在誰身上
 
-只要同時滿足兩個條件：
+在 **v1.21.0 及之前的版本**，只要同時滿足兩個條件：
 
 1. 使用 ccRewind 索引超過 30 天
 2. 這段期間用過 subagent
 
 就**必然**會累積孤兒記錄。這不是機率問題，是時間到了就會發生。規模與使用強度成正比。
 
-換句話說，這不是邊緣案例，而是每一位長期使用者都會遇到的必然狀況。
+換句話說，這不是邊緣案例，而是每一位長期使用者都會遇到的必然狀況——這也是為什麼它值得一篇說明，而不只是一行 changelog。修正合併之後，既有的孤兒記錄會在下一次索引時被補正為封存狀態，不需要重建索引庫。
