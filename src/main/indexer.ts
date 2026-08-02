@@ -76,6 +76,23 @@ export function matchesExclusionRule(
 }
 
 /**
+ * 這個 session 有沒有被任何一條規則涵蓋。
+ *
+ * 空規則清單直接回 false 而不碰磁碟——絕大多數使用者一條規則都沒設，這個短路
+ * 省掉的是「每個 session 一次 readFirstTimestamp」。短路必須留在這裡而不是各
+ * call site，否則兩邊又要各自記得寫一次。
+ */
+async function isExcludedByRules(
+  rules: ExclusionRule[],
+  projectId: string,
+  filePath: string,
+): Promise<boolean> {
+  if (rules.length === 0) return false
+  const firstTs = await readFirstTimestamp(filePath)
+  return rules.some(r => matchesExclusionRule(projectId, firstTs, r))
+}
+
+/**
  * 同一 requestId 的 assistant entries 只保留最後一個的 token 值，其他清零為 null。
  * 修正 Claude Code JSONL 將單次 API response 拆成多個 entries 造成的 token 重複計算。
  */
@@ -327,13 +344,10 @@ export async function runIndexer(
         // 接近新 session 而不是已索引。少了這一半，一個在 parent 暫時讀不到時補寫的
         // metadata parent 會因為下一輪「已 existing」而永久豁免 date rule——等權限恢復
         // 就整段索引回來，使用者設的排除範圍等於沒設。
-        if (exclusionRules.length > 0 && (!existing || existing.summaryVersion === null)) {
-          const firstTs = await readFirstTimestamp(session.filePath)
-          const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))
-          if (excluded) {
-            excludedSessionIds.add(session.sessionId)
-            continue
-          }
+        if ((!existing || existing.summaryVersion === null)
+          && await isExcludedByRules(exclusionRules, project.projectId, session.filePath)) {
+          excludedSessionIds.add(session.sessionId)
+          continue
         }
         sessionsToIndex.push({
           ...session,
@@ -349,18 +363,18 @@ export async function runIndexer(
   // 時 ~/.claude/projects 本來就還不存在），所以 scanFailed 分不出這一組，只能自己確認
   // root 還在不在。真的被清空就該封存——擋著不做的話，下一輪掃描結果一樣是空的，
   // 狀態永遠停在「全部活躍」，那些 row 再也沒有機會被更正。
-  const rootMissing = scannedSessionIds.size === 0
+  const emptyScanFromMissingRoot = scannedSessionIds.size === 0
     && existingMtimes.size > 0
     && !(await dirExists(baseDir))
 
   // 標記 DB 中存在但掃描不到的 session 為 archived。
-  // 守衛與下方 subagent 那套同源（完整推理見 archiveStaleSubagents 前的註解）：掃描層
+  // 守衛與下方 subagent 那套同源（完整推理見下方 subagent 封存守衛前的註解）：掃描層
   // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
   // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
   // 一個 scanFailed 就涵蓋，不需要第二個旗標。
   if (scanFailed) {
     console.warn(`[indexer] skipped session archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
-  } else if (rootMissing) {
+  } else if (emptyScanFromMissingRoot) {
     console.warn(`[indexer] skipped session archiving: ${existingMtimes.size} indexed but the projects dir is gone (treating as an unmounted path, not deletions)`)
   } else {
     const archivedSessions = db.archiveStaleSessionsExcept(scannedSessionIds)
@@ -374,7 +388,7 @@ export async function runIndexer(
   const total = sessionsToIndex.length
 
   // 內容已完整存在於別的 session、因而整個被去重掉的 session 數。
-  let replayOnlySessions = 0
+  let replayOnlySessionCount = 0
   // 主檔讀不到、因此沒進 sessions 表的 session。subagent 階段補 parent row 時要靠它
   // 分辨「這次讀失敗」與「本來就沒有自己的訊息」，兩者該不該重試完全相反。
   const parseFailedSessions = new Set<string>()
@@ -419,7 +433,7 @@ export async function runIndexer(
     // 一個位元組都沒丟——內容就在去重時匹配到的那個 session 裡。resume 過的 session
     // 每輪都會走這條，計進去等於把常態當成災情。改為整輪結束後彙總一行 log。
     if (messages.length === 0 && parsed.messages.length > 0) {
-      replayOnlySessions++
+      replayOnlySessionCount++
       continue
     }
 
@@ -464,8 +478,8 @@ export async function runIndexer(
     })
   }
 
-  if (replayOnlySessions > 0) {
-    console.warn(`[indexer] ${replayOnlySessions} session(s) were pure replays of already-indexed content — their messages were not re-written, nothing lost (not counted as skipped)`)
+  if (replayOnlySessionCount > 0) {
+    console.warn(`[indexer] ${replayOnlySessionCount} session(s) were pure replays of already-indexed content — their messages were not re-written, nothing lost (not counted as skipped)`)
   }
 
   // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
@@ -517,12 +531,9 @@ export async function runIndexer(
         // 主動要它消失，補寫等於把刪掉的東西接回來。phase 2 的 excludedSessionIds 蓋不到
         // 後者——那時 session 還在表裡，走的是 existing 分支，從來沒進過那個集合。
         // 所以這裡就地重評一次規則，讓「使用者不要」贏過「補寫救資料」。
-        if (freshExclusionRules.length > 0) {
-          const firstTs = await readFirstTimestamp(session.filePath)
-          if (freshExclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))) {
-            console.warn(`[indexer] session ${logSafe(session.sessionId)} matches an exclusion rule; not restoring it as a metadata-only parent (its ${subagents.length} subagent(s) stay out too)`)
-            continue
-          }
+        if (await isExcludedByRules(freshExclusionRules, project.projectId, session.filePath)) {
+          console.warn(`[indexer] session ${logSafe(session.sessionId)} matches an exclusion rule; not restoring it as a metadata-only parent (its ${subagents.length} subagent(s) stay out too)`)
+          continue
         }
         db.indexSession({
           sessionId: session.sessionId,
