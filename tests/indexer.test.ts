@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import path from 'node:path'
 import os from 'node:os'
-import { mkdtemp, rm, mkdir, writeFile, chmod, readFile, stat, utimes } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir, writeFile, chmod, readFile, readdir, stat, utimes } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
 import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
@@ -1140,5 +1140,64 @@ describe('runIndexer — stale subagent handling', () => {
     await runIndexer(db, undefined, baseDir, tasksDir)
 
     expect(db.getAllSessionMtimes().get('sess-g/agent-g1')?.archived).toBe(false)
+  })
+
+  it('skips archiving when one session scan fails while others succeed', async () => {
+    // 「掃到的總數 > 0」擋不住部分失敗：只要還有別的 session 掃描成功讓計數非零，
+    // 掃描失敗那個 session 的 subagent 就會被當成使用者刪掉而封存。
+    const [baseDir, sessionDir] = await createProjectWithSubagent('-Users-test-partial', 'sess-x', 'agent-x1')
+    await createProjectWithSubagent('-Users-test-partial-ok', 'sess-ok', 'agent-ok')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-x/agent-x1')?.archived).toBe(false)
+
+    // 讓 sess-x 的 subagents/ 讀不到，但不能是「不存在」（ENOENT 是常態，不算失敗）：
+    // 換成同名檔案讓 readdir 回 ENOTDIR。比 chmod 穩——不受執行身分（root 無視權限）
+    // 與平台權限語意影響，CI 上行為一致。
+    const subagentsDir = path.join(sessionDir, 'subagents')
+    await rm(subagentsDir, { recursive: true })
+    await writeFile(subagentsDir, 'not a directory')
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+
+    // sess-ok 掃得到，但那不代表 sess-x 的 subagent 真的從磁碟消失了
+    expect(db.getAllSessionMtimes().get('sess-x/agent-x1')?.archived).toBe(false)
+    expect(db.getAllSessionMtimes().get('sess-ok/agent-ok')?.archived).toBe(false)
+
+    // 掃描層把失敗吞成空陣列，不主動計數的話整輪會回報 skipped: 0——
+    // 「索引不完整」與「一切正常」在 UI 上長得一模一樣
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
+  })
+
+  it('skips archiving when a project directory cannot be read', async (ctx) => {
+    // 上游一層的同款漏洞：project 讀不到時 scanner 直接 continue，那個 project 底下的
+    // session 根本不會進 subagent 掃描迴圈——session 層級的守衛偵測不到，
+    // 別的 project 掃得到就讓計數非零，於是整個讀不到的 project 的 subagent 被誤封存。
+    const [baseDir] = await createProjectWithSubagent('-Users-test-projfail', 'sess-pf', 'agent-pf1')
+    await createProjectWithSubagent('-Users-test-projfail-ok', 'sess-pok', 'agent-pok')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-pf/agent-pf1')?.archived).toBe(false)
+
+    // 目錄本身鎖掉：stat 靠父目錄權限仍會成功，readdir 才會 EACCES——
+    // 正好打中 scanner 在 project 層級 continue 的那條路徑
+    const badProject = path.join(baseDir, '-Users-test-projfail')
+    await chmod(badProject, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readdir(badProject).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badProject, 0o755)
+      ctx.skip()
+    }
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+    await chmod(badProject, 0o755)
+
+    // 檔案還在磁碟上，只是這次讀不到——不能當成使用者刪了
+    expect(db.getAllSessionMtimes().get('sess-pf/agent-pf1')?.archived).toBe(false)
+    expect(db.getAllSessionMtimes().get('sess-pok/agent-pok')?.archived).toBe(false)
+    // 整個 project 掉出索引是比單一 session 更大的缺口，更不能靜悄悄
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
   })
 })

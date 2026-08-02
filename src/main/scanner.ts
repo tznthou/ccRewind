@@ -21,10 +21,14 @@ export function decodeProjectPath(encoded: string): string {
  * 其餘錯誤（權限、I/O、掛載點消失）必須出聲：掃不到的東西不會進 DB，
  * 而掃描層是把錯誤轉成空陣列的地方 —— indexer 的 catch 永遠等不到它們，
  * skipped 計數也就數不到。這裡不出聲，那條路徑上的資料遺失就沒有任何人知道。
+ *
+ * @returns 是否為真正的失敗（非 ENOENT）。呼叫端據此區分「東西本來就不在」
+ *          與「這次讀不到」——後者不能拿掃描結果當磁碟現況的定論。
  */
-function warnUnlessMissing(action: string, target: string, err: unknown): void {
-  if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return
+function warnUnlessMissing(action: string, target: string, err: unknown): boolean {
+  if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') return false
   console.warn(`[scanner] ${action}: ${logSafe(target)} - ${logSafeError(err)}`)
+  return true
 }
 
 /**
@@ -43,14 +47,22 @@ export function isPathSafeSegment(id: string): boolean {
   return !path.isAbsolute(id)
 }
 
-/** 掃描 ~/.claude/projects/，回傳所有專案及其 JSONL 檔案 */
-export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<ScannedProject[]> {
+/**
+ * 掃描 ~/.claude/projects/，回傳所有專案及其 JSONL 檔案。
+ *
+ * @param onScanFailure 掃描過程遇到非 ENOENT 錯誤時呼叫。讀不到的 project 與 session
+ *   會從結果中缺席，而缺席在下游長得跟「檔案被刪了」一模一樣——理由同 scanSubagents。
+ */
+export async function scanProjects(
+  baseDir: string = DEFAULT_BASE_DIR,
+  onScanFailure?: () => void,
+): Promise<ScannedProject[]> {
   let entries: string[]
   try {
     entries = await readdir(baseDir)
   } catch (err) {
     // 目錄不存在或不可讀 → 回傳空陣列
-    warnUnlessMissing('cannot read projects dir', baseDir, err)
+    if (warnUnlessMissing('cannot read projects dir', baseDir, err)) onScanFailure?.()
     return []
   }
 
@@ -67,7 +79,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     try {
       dirStat = await stat(projectDir)
     } catch (err) {
-      warnUnlessMissing('cannot stat project dir', projectDir, err)
+      if (warnUnlessMissing('cannot stat project dir', projectDir, err)) onScanFailure?.()
       continue
     }
     if (!dirStat.isDirectory()) continue
@@ -77,7 +89,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
     try {
       files = await readdir(projectDir)
     } catch (err) {
-      warnUnlessMissing('cannot list project dir', projectDir, err)
+      if (warnUnlessMissing('cannot list project dir', projectDir, err)) onScanFailure?.()
       continue
     }
 
@@ -90,7 +102,7 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
       try {
         fileStat = await stat(filePath)
       } catch (err) {
-        warnUnlessMissing('cannot stat session file', filePath, err)
+        if (warnUnlessMissing('cannot stat session file', filePath, err)) onScanFailure?.()
         continue
       }
       if (!fileStat.isFile()) continue
@@ -121,15 +133,25 @@ export async function scanProjects(baseDir: string = DEFAULT_BASE_DIR): Promise<
   return projects
 }
 
-/** 掃描 session 目錄下的 subagents/*.jsonl，回傳 SubagentFile 清單 */
-export async function scanSubagents(sessionDir: string, parentSessionId: string): Promise<ScannedSubagent[]> {
+/**
+ * 掃描 session 目錄下的 subagents/*.jsonl，回傳 SubagentFile 清單。
+ *
+ * @param onScanFailure 掃描過程遇到非 ENOENT 錯誤時呼叫。回傳的空陣列（或缺項的
+ *   陣列）本身分不出「這個 session 沒有 subagent」與「這次讀不到」，而呼叫端會拿
+ *   掃描結果去封存掃不到的記錄——沒有這個訊號，一次權限錯誤就會誤傷磁碟上還在的資料。
+ */
+export async function scanSubagents(
+  sessionDir: string,
+  parentSessionId: string,
+  onScanFailure?: () => void,
+): Promise<ScannedSubagent[]> {
   const subagentsDir = path.join(sessionDir, 'subagents')
 
   let entries: string[]
   try {
     entries = await readdir(subagentsDir)
   } catch (err) {
-    warnUnlessMissing('cannot list subagents dir', subagentsDir, err)
+    if (warnUnlessMissing('cannot list subagents dir', subagentsDir, err)) onScanFailure?.()
     return []
   }
 
@@ -143,7 +165,8 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
     try {
       fileStat = await stat(filePath)
     } catch (err) {
-      warnUnlessMissing('cannot stat subagent file', filePath, err)
+      // 檔案 stat 不到同樣讓它從結果中缺席，判斷標準與整個目錄讀不到時一致
+      if (warnUnlessMissing('cannot stat subagent file', filePath, err)) onScanFailure?.()
       continue
     }
     if (!fileStat.isFile()) continue
@@ -161,7 +184,9 @@ export async function scanSubagents(sessionDir: string, parentSessionId: string)
         agentType = meta.agentType
       }
     } catch (err) {
-      // meta.json 不存在是常態（不是每個 subagent 都有）；JSON 壞掉才需要知道
+      // meta.json 不存在是常態（不是每個 subagent 都有）；JSON 壞掉才需要知道。
+      // 這裡不算掃描失敗：讀不到只是少了 agentType，subagent 本身照樣進結果，
+      // 不會被誤判成從磁碟消失。
       warnUnlessMissing('cannot read subagent meta', metaPath, err)
     }
 
