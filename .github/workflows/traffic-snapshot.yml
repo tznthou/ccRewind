@@ -33,15 +33,14 @@ jobs:
       # Pinned to a commit SHA, not the v6 tag: this job holds contents:write and runs
       # a step carrying TRAFFIC_READ_TOKEN, and a moving tag means a compromise of the
       # action repo executes with both. A full SHA is the only immutable reference.
-      # (The repo's other workflows still use tags — see the follow-up note in RESUME.)
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
 
       - name: Check out (or create) the traffic-data branch
         run: |
           set -euo pipefail
           if git ls-remote --exit-code --heads origin traffic-data >/dev/null 2>&1; then
-            # Explicit refspec: checkout@v6 only fetches the ref it checked out, so
-            # origin/traffic-data does not exist as a tracking ref to branch from.
+            # Explicit refspec: the checkout action only fetches the ref it checked
+            # out, so origin/traffic-data does not exist as a tracking ref to branch from.
             git fetch --depth 1 origin traffic-data:traffic-data
             git checkout traffic-data
           else
@@ -88,7 +87,6 @@ jobs:
             [ -f "data/$kind.json" ] || echo '{}' > "data/$kind.json"
             jq -s '.[0] * .[1]' "data/$kind.json" "new-$kind.json" > "data/$kind.json.tmp"
             mv "data/$kind.json.tmp" "data/$kind.json"
-            rm "new-$kind.json"
           done
 
           # referrers and paths have NO per-day breakdown — the API only returns a
@@ -100,14 +98,13 @@ jobs:
             [ -f "data/$kind.json" ] || echo '{}' > "data/$kind.json"
             jq -s '.[0] * .[1]' "data/$kind.json" "new-$kind.json" > "data/$kind.json.tmp"
             mv "data/$kind.json.tmp" "data/$kind.json"
-            rm "new-$kind.json"
           done
 
-          rm -f raw-*.json fetch-err.txt
+          rm -f raw-*.json new-*.json fetch-err.txt
 
           echo "Snapshot for $today:"
           jq --arg d "$today" '.[$d] // "no entry for today"' data/views.json
-          jq --arg d "$today" '.[$d] // []' data/referrers.json
+          jq --arg d "$today" '.[$d]' data/referrers.json
 
       - name: Commit and push
         run: |
