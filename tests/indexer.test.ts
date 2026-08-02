@@ -1325,6 +1325,40 @@ describe('runIndexer — subagent 的 parent 必須先在 sessions 表裡', () =
     expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
   })
 
+  it('parse 失敗只是這一次讀不到：權限回來後下一輪要能自己補上', async (ctx) => {
+    // 補 metadata-only parent 時若一律標上當前 summaryVersion，這個 session 就被凍結在
+    // 0 訊息狀態——summaryStale 不成立、mtime 又沒變，於是再也不會被排回佇列。
+    // 但權限閃斷、掛載點掉線都是會自己恢復的，那樣等於把暫時故障寫成了永久結果。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-parsefail-heal', {
+      'sess-heal': [{
+        type: 'user', uuid: 'sess-heal-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId: 'sess-heal',
+        message: { role: 'user', content: 'temporarily unreadable' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-parsefail-heal', 'sess-heal', 'agent-heal')
+
+    const badPath = path.join(baseDir, '-Users-parsefail-heal', 'sess-heal.jsonl')
+    await chmod(badPath, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readFile(badPath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badPath, 0o644)
+      ctx.skip()
+    }
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-heal')).toEqual([])
+    expect(db.getMessages('sess-heal/agent-heal')).toHaveLength(1)
+
+    // 權限回來，檔案內容與 mtime 都沒動過
+    await chmod(badPath, 0o644)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-heal')).toHaveLength(1)
+  })
+
   it('parent 已在 sessions 表裡的 replay session，subagent 照留不被誤封存', async () => {
     // 守衛的判準必須是「parent 在不在 sessions 表」，不能是「這輪有沒有走 replay 那條 continue」。
     // 寫成後者的話，這裡的 subagent 會掉出 scannedSubagentIds，被當成磁碟上消失而誤封存。

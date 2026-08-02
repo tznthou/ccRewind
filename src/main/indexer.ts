@@ -250,10 +250,11 @@ export function markAbandonedBranches(lines: ParsedLine[]): ParsedLine[] {
 }
 
 /**
- * 目錄存在且進得去。stat 失敗一律回 false（含權限問題）——呼叫端用它決定要不要
- * 封存，猜錯的代價不對等，所以拿不準時一律當作「不在」而少做。
+ * 目錄存在。stat 失敗一律回 false——呼叫端用它決定要不要封存，猜錯的代價不對等，
+ * 所以拿不準時一律當作「不在」而少做。（存在但讀不到的情況由 scanner 的
+ * onScanFailure 在上游先攔下，走不到這裡。）
  */
-async function isReadableDir(dir: string): Promise<boolean> {
+async function dirExists(dir: string): Promise<boolean> {
   try {
     return (await stat(dir)).isDirectory()
   } catch {
@@ -269,7 +270,9 @@ async function isReadableDir(dir: string): Promise<boolean> {
 export async function runIndexer(
   db: Database,
   onProgress?: ProgressCallback,
-  baseDir?: string,
+  // 預設值在這裡解析而不是交給 scanProjects：下面要 stat 的必須是「剛剛掃過的那個目錄」，
+  // 這個不變式不該靠讀另一個檔案的參數預設值來確認。
+  baseDir: string = DEFAULT_BASE_DIR,
   tasksBaseDir: string = DEFAULT_TASKS_BASE_DIR,
 ): Promise<void> {
   // 解析失敗而沒進 DB 的項目數。累計後隨 progress 一路帶到 UI——
@@ -336,11 +339,6 @@ export async function runIndexer(
     }
   }
 
-  // 標記 DB 中存在但掃描不到的 session 為 archived。
-  // 守衛與下方 subagent 那套同源（完整推理見 archiveStaleSubagents 前的註解）：掃描層
-  // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
-  // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
-  // 一個 scanFailed 就涵蓋，不需要第二個旗標。
   // 掃到 0 筆卻有既存記錄時，得先分清楚 baseDir 是「空的」還是「不在」——兩者在
   // 掃描結果上長得一模一樣，處置卻相反。ENOENT 在 scanner 裡不算掃描失敗（首次啟動
   // 時 ~/.claude/projects 本來就還不存在），所以 scanFailed 分不出這一組，只能自己確認
@@ -348,8 +346,13 @@ export async function runIndexer(
   // 狀態永遠停在「全部活躍」，那些 row 再也沒有機會被更正。
   const rootMissing = scannedSessionIds.size === 0
     && existingMtimes.size > 0
-    && !(await isReadableDir(baseDir ?? DEFAULT_BASE_DIR))
+    && !(await dirExists(baseDir))
 
+  // 標記 DB 中存在但掃描不到的 session 為 archived。
+  // 守衛與下方 subagent 那套同源（完整推理見 archiveStaleSubagents 前的註解）：掃描層
+  // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
+  // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
+  // 一個 scanFailed 就涵蓋，不需要第二個旗標。
   if (scanFailed) {
     console.warn(`[indexer] skipped session archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
   } else if (rootMissing) {
@@ -365,11 +368,11 @@ export async function runIndexer(
   sessionsToIndex.sort((a, b) => a.fileMtime.localeCompare(b.fileMtime))
   const total = sessionsToIndex.length
 
-  // 這輪真的寫進 sessions 表的 id。subagent 階段要靠它判斷 parent 在不在——
-  // existingMtimes 只是索引前的快照，這輪新建的 session 不在裡面。
-  const indexedThisRun = new Set<string>()
   // 內容已完整存在於別的 session、因而整個被去重掉的 session 數。
   let replayOnlySessions = 0
+  // 主檔讀不到、因此沒進 sessions 表的 session。subagent 階段補 parent row 時要靠它
+  // 分辨「這次讀失敗」與「本來就沒有自己的訊息」，兩者該不該重試完全相反。
+  const parseFailedSessions = new Set<string>()
 
   for (let i = 0; i < total; i++) {
     onProgress?.({
@@ -388,6 +391,7 @@ export async function runIndexer(
       parsed = await parseSession(s.filePath, s.sessionId)
     } catch (err) {
       skipped++
+      parseFailedSessions.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} not indexed (parse failed): ${logSafe(s.filePath)} - ${logSafeError(err)}`)
       continue
     }
@@ -453,7 +457,6 @@ export async function runIndexer(
       sessionFiles,
       messages: toMessageInputs(messages),
     })
-    indexedThisRun.add(s.sessionId)
   }
 
   if (replayOnlySessions > 0) {
@@ -494,10 +497,12 @@ export async function runIndexer(
       // 兩種情況下 subagent 的 JSONL 都是獨立、沒被去重過的檔案，內容不會因為 parent
       // 的主檔重複或壞掉而失去價值：Claude Code 的 30 天清理過後，index.db 這份就是
       // 它唯一還存在的地方。所以補一列 metadata-only 的 parent 把它接住，而不是連
-      // 帶丟掉。判準是「在不在表裡」而非「這輪有沒有被跳過」：DB 裡已有 parent 的
-      // replay session 每輪都會走那條 continue，當成缺席處理會讓它的 subagent 掉出
-      // scannedSubagentIds，反被誤判成磁碟上消失而封存。
-      if (!existingMtimes.has(session.sessionId) && !indexedThisRun.has(session.sessionId)) {
+      // 帶丟掉。判準是「現在在不在表裡」而非「這輪有沒有被跳過」：DB 裡已有 parent
+      // 的 replay session 每輪都會走那條 continue，當成缺席處理會讓它的 subagent 掉出
+      // scannedSubagentIds，反被誤判成磁碟上消失而封存。直接問 DB 而不查 existingMtimes，
+      // 因為那份快照取於 phase 2，大庫跑完 phase 3 是分鐘級的事，這中間 applyExclusion
+      // 可能已經把 row 刪掉了——照快照判斷會略過補寫，然後撞上這段要防的 FK 中斷。
+      if (!db.hasSession(session.sessionId)) {
         db.indexSession({
           sessionId: session.sessionId,
           projectId: project.projectId,
@@ -509,11 +514,12 @@ export async function runIndexer(
           fileMtime: session.fileMtime,
           startedAt: null,
           endedAt: null,
-          // 標成當前版本，否則 summaryStale 會讓它每一輪都重新排進索引佇列，再走一次同樣的路
-          summaryVersion: SUMMARY_VERSION,
+          // 讀失敗的留 null 讓 summaryStale 下一輪把它重新排回佇列：權限閃斷、掛載點
+          // 掉線都會自己恢復，標成當前版本等於凍結它，mtime 不變就再也不會重試。
+          // 純 replay 反過來——它沒有自己的訊息可讀，每輪重試只是白跑一趟。
+          summaryVersion: parseFailedSessions.has(session.sessionId) ? null : SUMMARY_VERSION,
           messages: [],
         })
-        indexedThisRun.add(session.sessionId)
         console.warn(`[indexer] session ${logSafe(session.sessionId)} has no messages of its own; stored as a metadata-only parent so its ${subagents.length} subagent(s) survive`)
       }
 
