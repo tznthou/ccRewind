@@ -4,8 +4,14 @@ import rehypeSearchHighlight from '../../src/renderer/utils/rehypeSearchHighligh
 
 type PluginTransform = (tree: Root) => void
 
+// unified 的 Plugin 型別把 this 綁在 Processor 上（直接呼叫會噴 TS2684），回傳型別則是
+// 接受 (tree, file, next) 的 Transformer。這個 plugin 的 factory 不使用 this、產出的
+// transform 也只吃 tree，測試刻意在沒有 processor 的情況下呼叫，故明示 this 並收窄回傳型別。
 function applyPlugin(tree: Root, query?: string): Root {
-  const transform = (rehypeSearchHighlight({ query }) as PluginTransform | undefined)
+  const transform = rehypeSearchHighlight.call(
+    undefined as never,
+    { query },
+  ) as PluginTransform | undefined
   if (transform) transform(tree)
   return tree
 }
