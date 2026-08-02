@@ -318,12 +318,33 @@ export async function runIndexer(
     }
   }
 
-  // 標記 DB 中存在但掃描不到的 session 為 archived
-  db.archiveStaleSessionsExcept(scannedSessionIds)
+  // 標記 DB 中存在但掃描不到的 session 為 archived。
+  // 守衛與下方 subagent 那套同源（完整推理見 archiveStaleSubagents 前的註解）：掃描層
+  // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
+  // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
+  // 一個 scanFailed 就涵蓋，不需要第二個旗標。
+  if (scanFailed) {
+    console.warn(`[indexer] skipped session archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
+  } else if (scannedSessionIds.size > 0) {
+    const archivedSessions = db.archiveStaleSessionsExcept(scannedSessionIds)
+    if (archivedSessions > 0) {
+      console.warn(`[indexer] archived ${archivedSessions} session(s) no longer on disk`)
+    }
+  } else if (existingMtimes.size > 0) {
+    // 掃到 0 筆卻有既存記錄：真要是使用者清空的，下一輪照樣封存得到；
+    // 但若是 baseDir 整個讀不到，這一擋就是全庫誤封存與什麼都沒發生的差別。
+    console.warn(`[indexer] skipped session archiving: scan found none but ${existingMtimes.size} indexed (treating as a failed scan, not deletions)`)
+  }
 
   // 3. INDEXING — 按 fileMtime 升冪排序，確保舊 session 先索引（UUID 去重依賴此順序）
   sessionsToIndex.sort((a, b) => a.fileMtime.localeCompare(b.fileMtime))
   const total = sessionsToIndex.length
+
+  // 這輪真的寫進 sessions 表的 id。subagent 階段要靠它判斷 parent 在不在——
+  // existingMtimes 只是索引前的快照，這輪新建的 session 不在裡面。
+  const indexedThisRun = new Set<string>()
+  // 內容已完整存在於別的 session、因而整個被去重掉的 session 數。
+  let replayOnlySessions = 0
 
   for (let i = 0; i < total; i++) {
     onProgress?.({
@@ -359,8 +380,14 @@ export async function runIndexer(
     const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
     const messages = markedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
-    // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
-    if (messages.length === 0 && parsed.messages.length > 0) continue
+    // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB。
+    // 不計入 skipped：那個數字在 UI 上的文案是「解析失敗的 session…已跳過」，而這裡
+    // 一個位元組都沒丟——內容就在去重時匹配到的那個 session 裡。resume 過的 session
+    // 每輪都會走這條，計進去等於把常態當成災情。改為整輪結束後彙總一行 log。
+    if (messages.length === 0 && parsed.messages.length > 0) {
+      replayOnlySessions++
+      continue
+    }
 
     // 去重後的時間範圍
     let startedAt = parsed.startedAt
@@ -401,6 +428,11 @@ export async function runIndexer(
       sessionFiles,
       messages: toMessageInputs(messages),
     })
+    indexedThisRun.add(s.sessionId)
+  }
+
+  if (replayOnlySessions > 0) {
+    console.warn(`[indexer] ${replayOnlySessions} session(s) were pure replays of already-indexed content — not written, nothing lost (not counted as skipped)`)
   }
 
   // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
@@ -409,6 +441,16 @@ export async function runIndexer(
   let subagentScanFailed = false
   for (const project of projects) {
     for (const session of project.sessions) {
+      // subagent_sessions.parent_session_id 有 FK 指向 sessions(id) 且 foreign_keys=ON：
+      // parent 不在表裡就是 constraint 失敗直接拋出，中斷的是整輪索引而不只這一個 session。
+      // 上面每一條「掃到了但沒寫進 sessions 表」的 continue 都會造出這個狀態——exclusion
+      // 擋下、純 replay 全被去重、parse 失敗各是一條。與其逐條補守衛（漏一條就是一次
+      // 中斷，日後新增 continue 也接不上），這裡直接問根本條件：parent 在不在表裡。
+      // 判準必須是「在不在表裡」而非「這輪有沒有被跳過」：DB 已有 parent 的 replay
+      // session 每輪都會走那條 continue，跳過它的 subagent 會讓後者掉出
+      // scannedSubagentIds，被當成磁碟上消失而誤封存。
+      if (!existingMtimes.has(session.sessionId) && !indexedThisRun.has(session.sessionId)) continue
+
       // session 目錄：<project>/<sessionId>/
       const sessionDir = path.join(path.dirname(session.filePath), session.sessionId)
       let subagents

@@ -470,17 +470,20 @@ export class Database {
   }
 
   /** 將 DB 中不在 keepIds 集合的 session 標記為 archived（JSONL 已從磁碟消失），排除 subagent sessions */
-  archiveStaleSessionsExcept(keepIds: Set<string>): void {
+  archiveStaleSessionsExcept(keepIds: Set<string>): number {
     const allRows = this.db.prepare(`SELECT id FROM sessions WHERE archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`).all() as Array<{ id: string }>
     const archiveStmt = this.db.prepare('UPDATE sessions SET archived = 1 WHERE id = ?')
+    let archived = 0
     const doArchive = this.db.transaction(() => {
       for (const row of allRows) {
         if (!keepIds.has(row.id)) {
           archiveStmt.run(row.id)
+          archived++
         }
       }
     })
     doArchive()
+    return archived
   }
 
   /**
