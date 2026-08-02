@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import path from 'node:path'
 import os from 'node:os'
-import { mkdtemp, rm, mkdir, writeFile, chmod, readFile } from 'node:fs/promises'
+import { mkdtemp, rm, mkdir, writeFile, chmod, readFile, readdir, stat, utimes } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
 import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
@@ -1041,5 +1041,163 @@ describe('runIndexer exclusion rules', () => {
     await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getExclusionRules()).toEqual([])
     expect(db.getMessages('sess-plain')).toHaveLength(2)
+  })
+})
+
+describe('runIndexer — stale subagent handling', () => {
+  /** 建一個帶 subagent 的 project，回傳 [baseDir, sessionDir] */
+  async function createProjectWithSubagent(projectId: string, sessionId: string, agentId: string): Promise<[string, string]> {
+    const baseDir = path.join(tmpDir, 'projects')
+    // uuid 必須帶 sessionId 前綴：共用固定 uuid 會讓第二個 session 被跨 session UUID
+    // 去重濾光，indexer 靜默 continue 不寫入 sessions，其 subagent 隨即 FK 失敗
+    await createProject(baseDir, projectId, {
+      [sessionId]: [
+        {
+          type: 'user', uuid: `${sessionId}-u1`, timestamp: '2026-08-01T09:00:00.000Z', sessionId,
+          message: { role: 'user', content: 'parent session' },
+        },
+      ],
+    })
+    const sessionDir = path.join(baseDir, projectId, sessionId)
+    await mkdir(path.join(sessionDir, 'subagents'), { recursive: true })
+    await writeFile(
+      path.join(sessionDir, 'subagents', `${agentId}.jsonl`),
+      makeJsonl([
+        {
+          type: 'user', uuid: `${agentId}-u1`, isSidechain: true, timestamp: '2026-08-01T10:00:00.000Z', sessionId: agentId,
+          message: { role: 'user', content: 'subagent task' },
+        },
+      ]),
+    )
+    return [baseDir, sessionDir]
+  }
+
+  it('archives an orphaned subagent instead of deleting it when the parent session disappears', async () => {
+    const [baseDir, sessionDir] = await createProjectWithSubagent('-Users-test-orphan', 'sess-p', 'agent-o1')
+    // 另留一個 session 在磁碟上。真實索引庫不會因為刪掉一個 session 就整個掃空，
+    // 而全空會觸發「掃描失敗」守衛（見下面 skips archiving entirely 那條）
+    await createProjectWithSubagent('-Users-test-orphan-keep', 'sess-keep', 'agent-keep')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-p/agent-o1')).toHaveLength(1)
+
+    // parent session 整個從磁碟消失（.jsonl 與 subagents/ 目錄一起）
+    await rm(path.join(baseDir, '-Users-test-orphan', 'sess-p.jsonl'))
+    await rm(sessionDir, { recursive: true })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 內容必須保留：index.db 的副本是那段對話唯一還存在的地方
+    expect(db.getMessages('sess-p/agent-o1')).toHaveLength(1)
+    // 但要標記成 archived，不能繼續假裝是活躍的
+    expect(db.getAllSessionMtimes().get('sess-p/agent-o1')?.archived).toBe(true)
+  })
+
+  it('un-archives a subagent when its file comes back with an unchanged mtime', async () => {
+    const [baseDir, sessionDir] = await createProjectWithSubagent('-Users-test-restore', 'sess-r', 'agent-r1')
+    await createProjectWithSubagent('-Users-test-restore-keep', 'sess-keep', 'agent-keep')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    const subPath = path.join(sessionDir, 'subagents', 'agent-r1.jsonl')
+    const content = await readFile(subPath)
+    const { mtime } = await stat(subPath)
+
+    await rm(path.join(baseDir, '-Users-test-restore', 'sess-r.jsonl'))
+    await rm(sessionDir, { recursive: true })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-r/agent-r1')?.archived).toBe(true)
+
+    // 還原檔案並保留原本的 mtime（rsync -a / Time Machine 還原都會這樣）
+    await createProject(baseDir, '-Users-test-restore', { 'sess-r': sampleSession1 })
+    await mkdir(path.join(sessionDir, 'subagents'), { recursive: true })
+    await writeFile(subPath, content)
+    await utimes(subPath, mtime, mtime)
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // archive 必須可逆，否則選 archive 而非 delete 的理由就少了一半
+    expect(db.getAllSessionMtimes().get('sess-r/agent-r1')?.archived).toBe(false)
+  })
+
+  it('leaves subagents that are still on disk untouched', async () => {
+    const [baseDir] = await createProjectWithSubagent('-Users-test-keep', 'sess-k', 'agent-k1')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-k/agent-k1')?.archived).toBe(false)
+    expect(db.getMessages('sess-k/agent-k1')).toHaveLength(1)
+  })
+
+  it('skips archiving entirely when the scan yields no subagents at all', async () => {
+    // 負向驗證：scanner 把讀取失敗轉成空陣列（scanner.ts 三處 return []），
+    // indexer 無法區分「使用者刪光了」與「掃描整個失敗」。後者若照樣 archive，
+    // 一次權限錯誤就會把全部 subagent 標成已封存。
+    const [baseDir] = await createProjectWithSubagent('-Users-test-guard', 'sess-g', 'agent-g1')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-g/agent-g1')?.archived).toBe(false)
+
+    // 模擬掃描全面失敗：baseDir 整個讀不到
+    await rm(baseDir, { recursive: true })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-g/agent-g1')?.archived).toBe(false)
+  })
+
+  it('skips archiving when one session scan fails while others succeed', async () => {
+    // 「掃到的總數 > 0」擋不住部分失敗：只要還有別的 session 掃描成功讓計數非零，
+    // 掃描失敗那個 session 的 subagent 就會被當成使用者刪掉而封存。
+    const [baseDir, sessionDir] = await createProjectWithSubagent('-Users-test-partial', 'sess-x', 'agent-x1')
+    await createProjectWithSubagent('-Users-test-partial-ok', 'sess-ok', 'agent-ok')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-x/agent-x1')?.archived).toBe(false)
+
+    // 讓 sess-x 的 subagents/ 讀不到，但不能是「不存在」（ENOENT 是常態，不算失敗）：
+    // 換成同名檔案讓 readdir 回 ENOTDIR。比 chmod 穩——不受執行身分（root 無視權限）
+    // 與平台權限語意影響，CI 上行為一致。
+    const subagentsDir = path.join(sessionDir, 'subagents')
+    await rm(subagentsDir, { recursive: true })
+    await writeFile(subagentsDir, 'not a directory')
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+
+    // sess-ok 掃得到，但那不代表 sess-x 的 subagent 真的從磁碟消失了
+    expect(db.getAllSessionMtimes().get('sess-x/agent-x1')?.archived).toBe(false)
+    expect(db.getAllSessionMtimes().get('sess-ok/agent-ok')?.archived).toBe(false)
+
+    // 掃描層把失敗吞成空陣列，不主動計數的話整輪會回報 skipped: 0——
+    // 「索引不完整」與「一切正常」在 UI 上長得一模一樣
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
+  })
+
+  it('skips archiving when a project directory cannot be read', async (ctx) => {
+    // 上游一層的同款漏洞：project 讀不到時 scanner 直接 continue，那個 project 底下的
+    // session 根本不會進 subagent 掃描迴圈——session 層級的守衛偵測不到，
+    // 別的 project 掃得到就讓計數非零，於是整個讀不到的 project 的 subagent 被誤封存。
+    const [baseDir] = await createProjectWithSubagent('-Users-test-projfail', 'sess-pf', 'agent-pf1')
+    await createProjectWithSubagent('-Users-test-projfail-ok', 'sess-pok', 'agent-pok')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-pf/agent-pf1')?.archived).toBe(false)
+
+    // 目錄本身鎖掉：stat 靠父目錄權限仍會成功，readdir 才會 EACCES——
+    // 正好打中 scanner 在 project 層級 continue 的那條路徑
+    const badProject = path.join(baseDir, '-Users-test-projfail')
+    await chmod(badProject, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readdir(badProject).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badProject, 0o755)
+      ctx.skip()
+    }
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+    await chmod(badProject, 0o755)
+
+    // 檔案還在磁碟上，只是這次讀不到——不能當成使用者刪了
+    expect(db.getAllSessionMtimes().get('sess-pf/agent-pf1')?.archived).toBe(false)
+    expect(db.getAllSessionMtimes().get('sess-pok/agent-pok')?.archived).toBe(false)
+    // 整個 project 掉出索引是比單一 session 更大的缺口，更不能靜悄悄
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
   })
 })

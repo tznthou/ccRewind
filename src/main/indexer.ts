@@ -266,7 +266,13 @@ export async function runIndexer(
 
   // 1. SCANNING
   onProgress?.({ phase: 'scanning', progress: 0, total: 0, current: 0, skipped })
-  const projects = await scanProjects(baseDir)
+  // 掃描失敗會讓 project／session 從結果中缺席，而缺席在 archive 判斷裡等同「被刪了」。
+  // 這個旗標讓下游分得出兩者——沒有它，一次權限錯誤就會誤封存磁碟上還在的資料。
+  let scanFailed = false
+  const projects = await scanProjects(baseDir, () => {
+    scanFailed = true
+    skipped++
+  })
 
   // 確保所有 project 都寫入 DB（含空 project）
   for (const project of projects) {
@@ -397,35 +403,37 @@ export async function runIndexer(
     })
   }
 
-  // 4. SUBAGENT SCANNING — 對有變動的 session，掃描 subagents/
+  // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
   const existingSubMtimes = db.getAllSubagentMtimes()
+  const scannedSubagentIds = new Set<string>()
+  let subagentScanFailed = false
   for (const project of projects) {
     for (const session of project.sessions) {
       // session 目錄：<project>/<sessionId>/
       const sessionDir = path.join(path.dirname(session.filePath), session.sessionId)
       let subagents
       try {
-        subagents = await scanSubagents(sessionDir, session.sessionId)
+        // 掃描層把失敗吞成空陣列，下面那個 catch 等不到它們——skipped 要在這裡數，
+        // 否則整輪跑完會回報 skipped: 0，看起來像完整索引（見 scanner.ts 註解）。
+        subagents = await scanSubagents(sessionDir, session.sessionId, () => {
+          subagentScanFailed = true
+          skipped++
+        })
       } catch (err) {
+        subagentScanFailed = true
         skipped++
         console.warn(`[indexer] subagents of session ${logSafe(session.sessionId)} not scanned: ${logSafe(sessionDir)} - ${logSafeError(err)}`)
         continue
       }
       if (subagents.length === 0) continue
 
-      // 清理磁碟已刪除的 stale subagents
-      const scannedSubIds = new Set(subagents.map(s => s.subagentId))
-      const storedSubIds = db.getSubagentSessionIds(session.sessionId)
-      for (const storedId of storedSubIds) {
-        if (!scannedSubIds.has(storedId)) {
-          db.deleteSubagentSession(storedId)
-        }
-      }
-
       for (const sub of subagents) {
-        // 增量比對：mtime 沒變就跳過
-        const existingMtime = existingSubMtimes.get(sub.subagentId)
-        if (existingMtime && existingMtime === sub.fileMtime) continue
+        scannedSubagentIds.add(sub.subagentId)
+        // 增量比對：mtime 沒變「且未封存」才跳過。archived 條件讓 archive 可逆——
+        // 還原檔案時 mtime 可能一模一樣（rsync -a、Time Machine 都保留 mtime），
+        // 少了它就會在這裡 continue 掉，archived 標記永遠解不開。
+        const existing = existingSubMtimes.get(sub.subagentId)
+        if (existing && existing.mtime === sub.fileMtime && !existing.archived) continue
 
         // 解析 subagent JSONL
         let parsed: ParsedSession
@@ -467,6 +475,28 @@ export async function runIndexer(
         })
       }
     }
+  }
+
+  // 磁碟上已消失的 subagent 標記為 archived（不刪 —— 理由見 archiveStaleSubagents）。
+  // 守衛：掃描層把讀取失敗轉成空陣列（scanner.ts 三處 return []），indexer 分不出
+  // 「使用者刪光了」與「掃描失敗」。照樣 archive，一次權限錯誤就會把 subagent
+  // 標成已封存——寧可少做也不要誤傷。兩種失敗形態都要擋：
+  //   - 部分失敗：某個 session 的 subagents/ 讀不到，但別的 session 掃得到。
+  //     計數非零，只看數量的守衛放它過關，失敗那個 session 的 subagent 就遭殃。
+  //   - 上游失敗：project 層級就讀不到（scanner 三處 continue），那底下的 session
+  //     根本不會進上面的迴圈，subagentScanFailed 也就永遠是 false——要靠 scanProjects
+  //     自己回報。
+  //   - 全面失敗：整個 baseDir 讀不到，掃描結果全空。
+  // 前兩者靠 scanner 回報的訊號，最後一個只能從「掃到 0 筆但 DB 有記錄」反推。
+  if (subagentScanFailed || scanFailed) {
+    console.warn(`[indexer] skipped subagent archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
+  } else if (scannedSubagentIds.size > 0) {
+    const archivedSubagents = db.archiveStaleSubagents(scannedSubagentIds)
+    if (archivedSubagents > 0) {
+      console.warn(`[indexer] archived ${archivedSubagents} subagent session(s) no longer on disk`)
+    }
+  } else if (existingSubMtimes.size > 0) {
+    console.warn(`[indexer] skipped subagent archiving: scan found none but ${existingSubMtimes.size} indexed (treating as a failed scan, not deletions)`)
   }
 
   // 5. TASK SCANNING — 掃 ~/.claude/tasks/{sessionId}/*.json

@@ -483,6 +483,29 @@ export class Database {
     doArchive()
   }
 
+  /**
+   * 將磁碟上已消失的 subagent 標記為 archived，回傳實際標記的筆數。
+   *
+   * 不刪除：subagent 的 parent session 一旦從磁碟消失，index.db 的副本就是那段對話
+   * 唯一還存在的地方。ccRewind 對 ~/.claude/ 是唯讀觀察者，沒有資格替使用者裁決
+   * 這份資料的生死；要清掉是 storage 管理（使用者主動決定）的職責。
+   */
+  archiveStaleSubagents(keepIds: Set<string>): number {
+    const rows = this.db.prepare('SELECT id FROM subagent_sessions').all() as Array<{ id: string }>
+    const stale = rows.filter(r => !keepIds.has(r.id))
+    if (stale.length === 0) return 0
+    // archived = 0 條件讓 changes 只計真正發生的變更，重跑不會灌水
+    const archiveStmt = this.db.prepare('UPDATE sessions SET archived = 1 WHERE id = ? AND archived = 0')
+    let archived = 0
+    const doArchive = this.db.transaction(() => {
+      for (const row of stale) {
+        archived += archiveStmt.run(row.id).changes
+      }
+    })
+    doArchive()
+    return archived
+  }
+
   /** 一次取得所有 session 的 file_mtime + archived 狀態（增量索引批次比對用） */
   getAllSessionMtimes(): Map<string, { mtime: string; archived: boolean; summaryVersion: number | null }> {
     const rows = this.db.prepare('SELECT id, file_mtime, archived, summary_version FROM sessions').all() as Array<{ id: string; file_mtime: string; archived: number; summary_version: number | null }>
@@ -611,11 +634,16 @@ export class Database {
   }
 
   /** 一次取得所有 subagent sessions 的 file_mtime（增量比對用） */
-  getAllSubagentMtimes(): Map<string, string> {
-    const rows = this.db.prepare('SELECT id, file_mtime FROM subagent_sessions').all() as Array<{ id: string; file_mtime: string | null }>
-    const map = new Map<string, string>()
+  getAllSubagentMtimes(): Map<string, { mtime: string; archived: boolean }> {
+    // archived 只存在 sessions 表，但增量比對需要它才能讓 archive 可逆
+    const rows = this.db.prepare(`
+      SELECT sub.id, sub.file_mtime, s.archived
+      FROM subagent_sessions sub
+      LEFT JOIN sessions s ON s.id = sub.id
+    `).all() as Array<{ id: string; file_mtime: string | null; archived: number | null }>
+    const map = new Map<string, { mtime: string; archived: boolean }>()
     for (const r of rows) {
-      if (r.file_mtime) map.set(r.id, r.file_mtime)
+      if (r.file_mtime) map.set(r.id, { mtime: r.file_mtime, archived: r.archived === 1 })
     }
     return map
   }
