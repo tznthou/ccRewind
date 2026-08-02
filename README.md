@@ -22,11 +22,10 @@
 
 對話裡藏著「這個決定當初是怎麼來的」，但 JSONL 檔案本身不會告訴你。ccRewind 把它挖出來：
 
-- **Attribution 歸因** — 每條 AI 回覆用了哪個 Skill、Plugin、MCP Server 或 Agent
-- **檔案歷史** — 點一個檔案，看它在哪些 session 被動過、做了什麼操作
-- **相關 Session** — 以 Jaccard 相似度推薦，找回「上次處理同類問題」的那段對話
-- **Tasks Panel** — AI 在這段對話規劃了哪些步驟、哪幾條卡住
-- **Subagent 面板** — subagent 的對話獨立成頁，不是主對話裡的一行摘要
+- **檔案歷史** — 點一個檔案，看它在哪些主 session 被動過、是讀取還是修改
+- **相關 Session** — 用共用檔案的 Jaccard 相似度，找出動過同一批檔案的其他對話
+- **Tasks Panel** — AI 在這段對話規劃了哪些步驟、各自的狀態與宣告的 blockedBy 相依
+- **Subagent 對話** — subagent 的完整逐字紀錄可以點進去讀，不是主對話裡的一行摘要
 
 Claude Code 預設 30 天清掉 session JSONL。過了那條線，索引庫裡的副本就是那段對話還留著的地方。
 

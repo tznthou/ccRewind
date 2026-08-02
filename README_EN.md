@@ -20,13 +20,12 @@ Retrace every decision you made with Claude Code. Lightweight, read-only, offlin
 
 ### Work Back From the Result to the Decision
 
-Your conversations hold the reasoning behind every decision, but the raw JSONL files won't hand it to you. ccRewind digs it out:
+Your conversations hold the reasoning behind how decisions were reached, but the raw JSONL files won't hand it to you. ccRewind digs it out:
 
-- **Attribution** — which Skill, Plugin, MCP server, or Agent produced each AI reply
-- **File history** — click a file to see every session that touched it, and what it did
-- **Related sessions** — Jaccard similarity surfaces the time you solved this same kind of problem
-- **Tasks panel** — what steps the AI planned in this conversation, and which ones stalled
-- **Subagent panel** — subagent conversations get their own page, not one summary line in the parent
+- **File history** — click a file to see which main sessions touched it, and whether they read or changed it
+- **Related sessions** — Jaccard similarity over shared files surfaces other conversations that touched the same set
+- **Tasks panel** — what steps the AI planned in this conversation, their status, and the blockedBy dependencies they declare
+- **Subagent conversations** — a subagent's full transcript is there to open, not one summary line in the parent
 
 Claude Code clears out session JSONL after 30 days by default. Past that line, the copy in your index is where that conversation still lives.
 
