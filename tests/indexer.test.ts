@@ -1099,6 +1099,34 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getMessages('sess-quiet/agent-q')).toEqual([])
   })
 
+  it('索引跑到一半才被排除的 session，不會在 phase 3 被寫回去', async () => {
+    // 跟上面那個的差別在走哪條路：這個 session 有進 sessionsToIndex，被擋的是主寫入
+    // 路徑。已完整索引的 session 在 phase 2 不做 exclusion 檢查（分工是交給
+    // applyExclusion 硬刪），所以寫入前那道檢查是它唯一的防線。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-p3-excl', { 'sess-p3': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-p3')).toHaveLength(2)
+
+    // 動 mtime → 這輪它會重新索引，走的是 phase 3 而不是 phase 4 的補寫
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-p3-excl', 'sess-p3.jsonl'), t, t)
+
+    let fired = false
+    const excludeMidRun: ProgressCallback = (p) => {
+      if (p.phase === 'indexing' && !fired) {
+        fired = true
+        db.applyExclusion({ projectId: '-Users-p3-excl', dateFrom: null, dateTo: null })
+      }
+    }
+    await runIndexer(db, excludeMidRun, baseDir, tasksDir)
+
+    expect(fired).toBe(true)
+    // 不自癒是這條的關鍵：下一輪 mtime 沒變就不再進佇列，寫回去就永遠回不來了
+    expect(db.getMessages('sess-p3')).toEqual([])
+  })
+
   it('summary_version 為 null 的 provisional parent 仍要重評 exclusion rule', async () => {
     // 補寫進去的 metadata-only parent 下一輪就成了 existing。若 exclusion 只看 !existing，
     // 它等於拿到永久豁免——parent 恢復可讀後整段被索引回來，使用者設的日期範圍形同虛設。

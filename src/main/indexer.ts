@@ -89,7 +89,16 @@ async function isExcludedByRules(
 ): Promise<boolean> {
   if (rules.length === 0) return false
   const firstTs = await readFirstTimestamp(filePath)
-  return rules.some(r => matchesExclusionRule(projectId, firstTs, r))
+  return matchesAnyRule(rules, projectId, firstTs)
+}
+
+/** 已經知道 timestamp 時的同步版本，省下重讀檔案。空清單一律不匹配。 */
+function matchesAnyRule(
+  rules: ExclusionRule[],
+  projectId: string,
+  firstTimestamp: string | null,
+): boolean {
+  return rules.some(r => matchesExclusionRule(projectId, firstTimestamp, r))
 }
 
 /**
@@ -450,6 +459,19 @@ export async function runIndexer(
 
     // 用去重後的 messages 產生 session 摘要 + session_files
     const { summary, sessionFiles } = summarizeSession(messages, startedAt, endedAt)
+
+    // 寫入前再問一次規則。phase 2 的判斷代表「開始跑的時候」的意圖，而這個迴圈對大庫
+    // 是分鐘級的：storage:apply 沒有跟索引協調，使用者中途按下排除時 applyExclusion
+    // 會同步刪完就回、UI 顯示成功，然後這裡把整個 session 寫回去。而且不會自癒——下一
+    // 輪 mtime 沒變就不再進佇列，它從此逃過所有規則。已完整索引的 session 在 phase 2
+    // 本來就不做這個檢查（那時的分工是交給 applyExclusion 硬刪），race 一旦發生就沒有
+    // 第二道防線。用手上已解出的 startedAt，不重讀檔案；它也正是 buildExclusionWhere
+    // 比對的那個欄位，比 phase 2 的 readFirstTimestamp 更貼近 SQL 端的判準。
+    if (matchesAnyRule(db.getExclusionRules(), s.projectId, startedAt)) {
+      excludedSessionIds.add(s.sessionId)
+      console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
+      continue
+    }
 
     // DB 寫入 — 失敗向上拋出（不應靜默）
     db.indexSession({
