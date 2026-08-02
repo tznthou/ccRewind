@@ -30,7 +30,11 @@ jobs:
     timeout-minutes: 5
 
     steps:
-      - uses: actions/checkout@v6
+      # Pinned to a commit SHA, not the v6 tag: this job holds contents:write and runs
+      # a step carrying TRAFFIC_READ_TOKEN, and a moving tag means a compromise of the
+      # action repo executes with both. A full SHA is the only immutable reference.
+      # (The repo's other workflows still use tags — see the follow-up note in RESUME.)
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
 
       - name: Check out (or create) the traffic-data branch
         run: |
