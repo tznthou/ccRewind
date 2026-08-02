@@ -2,7 +2,7 @@ import path from 'node:path'
 import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
 import type { Database, MessageInput } from './database'
-import { scanProjects, scanSubagents, scanTasks, DEFAULT_TASKS_BASE_DIR } from './scanner'
+import { scanProjects, scanSubagents, scanTasks, DEFAULT_BASE_DIR, DEFAULT_TASKS_BASE_DIR } from './scanner'
 import { logSafe, logSafeError } from './logSafe'
 import { parseSession } from './parser'
 import { parseTaskFile } from './task-parser'
@@ -250,6 +250,18 @@ export function markAbandonedBranches(lines: ParsedLine[]): ParsedLine[] {
 }
 
 /**
+ * 目錄存在且進得去。stat 失敗一律回 false（含權限問題）——呼叫端用它決定要不要
+ * 封存，猜錯的代價不對等，所以拿不準時一律當作「不在」而少做。
+ */
+async function isReadableDir(dir: string): Promise<boolean> {
+  try {
+    return (await stat(dir)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
  * 執行首次/增量索引。
  * 掃描 baseDir 下所有 JSONL，比對 file_mtime 決定哪些需要（重新）索引，
  * 解析後寫入 DB。
@@ -296,6 +308,9 @@ export async function runIndexer(
   // Exclusion rules（v1.9.0）：防止新 session 被重建（尤其 applyExclusion 硬刪後磁碟還在的場景）
   // 只攔截新 session（!existing），已 indexed 的保持 mtime 同步邏輯不變
   const exclusionRules = db.getExclusionRules()
+  // 被規則擋下的 session。subagent 階段要分辨得出「使用者主動排除」與其他沒進
+  // sessions 表的原因——前者連 subagent 都不該索引，後者的 subagent 是該救的。
+  const excludedSessionIds = new Set<string>()
 
   for (const project of projects) {
     for (const session of project.sessions) {
@@ -307,7 +322,10 @@ export async function runIndexer(
         if (exclusionRules.length > 0 && !existing) {
           const firstTs = await readFirstTimestamp(session.filePath)
           const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))
-          if (excluded) continue
+          if (excluded) {
+            excludedSessionIds.add(session.sessionId)
+            continue
+          }
         }
         sessionsToIndex.push({
           ...session,
@@ -323,17 +341,24 @@ export async function runIndexer(
   // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
   // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
   // 一個 scanFailed 就涵蓋，不需要第二個旗標。
+  // 掃到 0 筆卻有既存記錄時，得先分清楚 baseDir 是「空的」還是「不在」——兩者在
+  // 掃描結果上長得一模一樣，處置卻相反。ENOENT 在 scanner 裡不算掃描失敗（首次啟動
+  // 時 ~/.claude/projects 本來就還不存在），所以 scanFailed 分不出這一組，只能自己確認
+  // root 還在不在。真的被清空就該封存——擋著不做的話，下一輪掃描結果一樣是空的，
+  // 狀態永遠停在「全部活躍」，那些 row 再也沒有機會被更正。
+  const rootMissing = scannedSessionIds.size === 0
+    && existingMtimes.size > 0
+    && !(await isReadableDir(baseDir ?? DEFAULT_BASE_DIR))
+
   if (scanFailed) {
     console.warn(`[indexer] skipped session archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
-  } else if (scannedSessionIds.size > 0) {
+  } else if (rootMissing) {
+    console.warn(`[indexer] skipped session archiving: ${existingMtimes.size} indexed but the projects dir is gone (treating as an unmounted path, not deletions)`)
+  } else {
     const archivedSessions = db.archiveStaleSessionsExcept(scannedSessionIds)
     if (archivedSessions > 0) {
       console.warn(`[indexer] archived ${archivedSessions} session(s) no longer on disk`)
     }
-  } else if (existingMtimes.size > 0) {
-    // 掃到 0 筆卻有既存記錄：真要是使用者清空的，下一輪照樣封存得到；
-    // 但若是 baseDir 整個讀不到，這一擋就是全庫誤封存與什麼都沒發生的差別。
-    console.warn(`[indexer] skipped session archiving: scan found none but ${existingMtimes.size} indexed (treating as a failed scan, not deletions)`)
   }
 
   // 3. INDEXING — 按 fileMtime 升冪排序，確保舊 session 先索引（UUID 去重依賴此順序）
@@ -432,7 +457,7 @@ export async function runIndexer(
   }
 
   if (replayOnlySessions > 0) {
-    console.warn(`[indexer] ${replayOnlySessions} session(s) were pure replays of already-indexed content — not written, nothing lost (not counted as skipped)`)
+    console.warn(`[indexer] ${replayOnlySessions} session(s) were pure replays of already-indexed content — their messages were not re-written, nothing lost (not counted as skipped)`)
   }
 
   // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
@@ -441,15 +466,9 @@ export async function runIndexer(
   let subagentScanFailed = false
   for (const project of projects) {
     for (const session of project.sessions) {
-      // subagent_sessions.parent_session_id 有 FK 指向 sessions(id) 且 foreign_keys=ON：
-      // parent 不在表裡就是 constraint 失敗直接拋出，中斷的是整輪索引而不只這一個 session。
-      // 上面每一條「掃到了但沒寫進 sessions 表」的 continue 都會造出這個狀態——exclusion
-      // 擋下、純 replay 全被去重、parse 失敗各是一條。與其逐條補守衛（漏一條就是一次
-      // 中斷，日後新增 continue 也接不上），這裡直接問根本條件：parent 在不在表裡。
-      // 判準必須是「在不在表裡」而非「這輪有沒有被跳過」：DB 已有 parent 的 replay
-      // session 每輪都會走那條 continue，跳過它的 subagent 會讓後者掉出
-      // scannedSubagentIds，被當成磁碟上消失而誤封存。
-      if (!existingMtimes.has(session.sessionId) && !indexedThisRun.has(session.sessionId)) continue
+      // 使用者用 exclusion rule 主動排除掉的 session，連它的 subagent 都不該進 DB，
+      // 否則 applyExclusion 硬刪的資料會從這條路徑部分復活。
+      if (excludedSessionIds.has(session.sessionId)) continue
 
       // session 目錄：<project>/<sessionId>/
       const sessionDir = path.join(path.dirname(session.filePath), session.sessionId)
@@ -468,6 +487,35 @@ export async function runIndexer(
         continue
       }
       if (subagents.length === 0) continue
+
+      // subagent_sessions.parent_session_id 有 FK 指向 sessions(id) 且 foreign_keys=ON：
+      // parent 不在表裡就是 constraint 失敗直接拋出，中斷的是整輪索引而不只這一個
+      // session。主迴圈有兩條路會留下這個狀態——純 replay 被去重成空、主檔 parse 失敗。
+      // 兩種情況下 subagent 的 JSONL 都是獨立、沒被去重過的檔案，內容不會因為 parent
+      // 的主檔重複或壞掉而失去價值：Claude Code 的 30 天清理過後，index.db 這份就是
+      // 它唯一還存在的地方。所以補一列 metadata-only 的 parent 把它接住，而不是連
+      // 帶丟掉。判準是「在不在表裡」而非「這輪有沒有被跳過」：DB 裡已有 parent 的
+      // replay session 每輪都會走那條 continue，當成缺席處理會讓它的 subagent 掉出
+      // scannedSubagentIds，反被誤判成磁碟上消失而封存。
+      if (!existingMtimes.has(session.sessionId) && !indexedThisRun.has(session.sessionId)) {
+        db.indexSession({
+          sessionId: session.sessionId,
+          projectId: project.projectId,
+          projectDisplayName: project.displayName,
+          title: null,
+          messageCount: 0,
+          filePath: session.filePath,
+          fileSize: session.fileSize,
+          fileMtime: session.fileMtime,
+          startedAt: null,
+          endedAt: null,
+          // 標成當前版本，否則 summaryStale 會讓它每一輪都重新排進索引佇列，再走一次同樣的路
+          summaryVersion: SUMMARY_VERSION,
+          messages: [],
+        })
+        indexedThisRun.add(session.sessionId)
+        console.warn(`[indexer] session ${logSafe(session.sessionId)} has no messages of its own; stored as a metadata-only parent so its ${subagents.length} subagent(s) survive`)
+      }
 
       for (const sub of subagents) {
         scannedSubagentIds.add(sub.subagentId)

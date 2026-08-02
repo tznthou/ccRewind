@@ -1263,7 +1263,7 @@ describe('runIndexer — subagent 的 parent 必須先在 sessions 表裡', () =
     expect(db.getMessages('sess-es/agent-es')).toEqual([])
   })
 
-  it('純 replay 的新 session 不寫入 sessions 表時，不寫入它的 subagent', async () => {
+  it('純 replay 的新 session 仍保住它的 subagent（補一列 metadata-only 的 parent）', async () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-replay-sub', {
       'sess-origin': sharedUuidLines('sess-origin'),
@@ -1279,13 +1279,17 @@ describe('runIndexer — subagent 的 parent 必須先在 sessions 表裡', () =
 
     await runIndexer(db, undefined, baseDir, tasksDir)
 
-    // origin 先索引 → replay 的 entries 全被跨 session 去重 → 不進 sessions 表
+    // origin 先索引 → replay 的 entries 全被跨 session 去重 → 自己沒有訊息可寫
     expect(db.getMessages('sess-origin')).toHaveLength(1)
     expect(db.getMessages('sess-replay')).toEqual([])
-    expect(db.getMessages('sess-replay/agent-rp')).toEqual([])
+    // 但 subagent 的 JSONL 是獨立檔案、從沒被去重過，內容獨一無二 —— parent 的主檔
+    // 恰好是別人的複本，不構成連它一起丟掉的理由
+    expect(db.getMessages('sess-replay/agent-rp')).toHaveLength(1)
+    // 靠一列 metadata-only 的 parent 撐住 FK
+    expect(db.getAllSessionMtimes().has('sess-replay')).toBe(true)
   })
 
-  it('parse 失敗的 session 不寫入 sessions 表時，不寫入它的 subagent', async (ctx) => {
+  it('parse 失敗的 session 仍保住它的 subagent', async (ctx) => {
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-parsefail-sub', {
       'sess-ok': [{
@@ -1313,9 +1317,9 @@ describe('runIndexer — subagent 的 parent 必須先在 sessions 表裡', () =
     await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
     await chmod(badPath, 0o644)
 
-    // parent 讀不到就跳過是既有行為；重點是別讓它的 subagent 把整輪拖垮
+    // parent 讀不到就跳過是既有行為；但它的 subagent 是另一個檔案，可能好端端的
     expect(db.getMessages('sess-bad')).toEqual([])
-    expect(db.getMessages('sess-bad/agent-bad')).toEqual([])
+    expect(db.getMessages('sess-bad/agent-bad')).toHaveLength(1)
     // 健康的 session 不該被連累
     expect(db.getMessages('sess-ok')).toHaveLength(1)
     expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
@@ -1403,7 +1407,22 @@ describe('runIndexer — 主 session 的 stale 封存守衛', () => {
     expect(db.getAllSessionMtimes().get('sess-stay')?.archived).toBe(false)
   })
 
-  it('掃描整個落空時不封存任何主 session', async () => {
+  it('projects 目錄還在、只是被清空了 → 照樣封存', async () => {
+    // 與下一條的差別只在「root 還在不在」。擋著不封存的話掃描結果每輪都一樣，
+    // 那些 row 會永遠停在活躍狀態，再也沒有機會被更正。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createSoloSession('-Users-main-emptied', 'sess-emptied')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-emptied')?.archived).toBe(false)
+
+    // 使用者真的把 session 清光，但 ~/.claude/projects 本身還在
+    await rm(path.join(baseDir, '-Users-main-emptied'), { recursive: true })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-emptied')?.archived).toBe(true)
+  })
+
+  it('projects 目錄整個不見時不封存任何主 session', async () => {
     const baseDir = path.join(tmpDir, 'projects')
     await createSoloSession('-Users-main-wipe', 'sess-wipe')
     await runIndexer(db, undefined, baseDir, tasksDir)
