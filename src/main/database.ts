@@ -1390,7 +1390,7 @@ export class Database {
     }))
   }
 
-  /** 浪費偵測：高 token 但無 commit/test outcome 的 session */
+  /** 未收尾的對話：無 commit/test outcome 的 session，依 token 由高到低取前 limit 筆（無絕對門檻） */
   getWasteSessions(projectId?: string | null, limit = 20): WasteSession[] {
     let sql = `
       SELECT s.id AS session_id, s.intent_text,

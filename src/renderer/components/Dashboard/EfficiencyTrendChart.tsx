@@ -49,7 +49,7 @@ export default function EfficiencyTrendChart({ data }: Props) {
               formatter={(value, name) => {
                 const num = Number(value)
                 return name === 'avgTokensPerTurn'
-                  ? [formatTokens(num), t('dashboard.efficiency.tokensPerTurn')]
+                  ? [formatTokens(num), t('dashboard.efficiency.tokensPerMessage')]
                   : [num, t('dashboard.usage.sessions')]
               }}
               labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
