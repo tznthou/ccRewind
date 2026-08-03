@@ -1,0 +1,19 @@
+// tests/ 的型別檢查設定。tests/ 不屬於 tsconfig.node.json（只含 src/main|preload|shared）
+// 也不屬於 tsconfig.web.json（只含 src/renderer|shared），沒有這個檔案 CI 對測試檔的型別錯誤全盲。
+//
+// 刻意 composite: false —— 改成 true 會要求本 project 列出所有 transitively imported 的檔案，
+// 而 tests/ import src/ 之後會再往下拉一整串，全部噴 TS6307；改用 include src/**/* 補救則會把
+// .tsx 併進這份 node 取向的設定，產生數百個假錯誤。因此本設定不進 tsconfig.json 的
+// references（那要求 composite: true），改由 package.json 的 typecheck script 獨立跑一條 tsc -p。
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": ".",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ESNext", "DOM"],
+    "types": ["node", "vite/client"]
+  },
+  "include": ["tests/**/*"]
+}

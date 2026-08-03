@@ -25,6 +25,25 @@ async function createProject(baseDir: string, projectId: string, sessions: Recor
   }
 }
 
+/**
+ * 在既有 session 底下放一個 subagent JSONL，回傳它的路徑。
+ * 與 stale-subagent describe 內的 helper 不同：那個連 parent session 一起建（內容寫死），
+ * 這個只加 subagent，好讓呼叫端自由決定 parent 的內容與 uuid。
+ */
+async function addSubagent(baseDir: string, projectId: string, sessionId: string, agentId: string): Promise<string> {
+  const subagentsDir = path.join(baseDir, projectId, sessionId, 'subagents')
+  await mkdir(subagentsDir, { recursive: true })
+  const filePath = path.join(subagentsDir, `${agentId}.jsonl`)
+  await writeFile(filePath, makeJsonl([
+    {
+      type: 'user', uuid: `${agentId}-u1`, isSidechain: true,
+      timestamp: '2024-06-01T11:00:00.000Z', sessionId: agentId,
+      message: { role: 'user', content: 'subagent task' },
+    },
+  ]))
+  return filePath
+}
+
 beforeEach(async () => {
   tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ccrewind-idx-'))
   // 每個測試自己的 tasks 目錄。不傳就會落到真實的 ~/.claude/tasks，
@@ -490,6 +509,16 @@ function makeParsedLine(overrides: Partial<ParsedLine> = {}): ParsedLine {
     cacheCreationTokens: null,
     model: null,
     requestId: null,
+    hasImage: false,
+    attributionSkill: null,
+    attributionPlugin: null,
+    attributionMcpServer: null,
+    attributionMcpTool: null,
+    attributionAgent: null,
+    systemSubtype: null,
+    apiErrorStatus: null,
+    editedFilePath: null,
+    frameUrl: null,
     version: null,
     isCompactSummary: false,
     isSidechain: false,
@@ -1042,6 +1071,106 @@ describe('runIndexer exclusion rules', () => {
     expect(db.getExclusionRules()).toEqual([])
     expect(db.getMessages('sess-plain')).toHaveLength(2)
   })
+
+  it('索引跑到一半才被排除的 session，不會從補寫 parent 那條路復活', async () => {
+    // phase 2 的 excludedSessionIds 蓋不到這個情境：快照當下 session 還在表裡，走的是
+    // existing 分支，從來沒進過那個集合。等 phase 3 期間使用者按下排除、phase 4 又發現
+    // parent 不在表裡，補寫 metadata parent 就會把剛刪掉的東西接回來。
+    const baseDir = path.join(tmpDir, 'projects')
+    const line = (sessionId: string, uuid: string) => [{
+      type: 'user', uuid, timestamp: '2024-06-01T10:00:00.000Z', sessionId,
+      message: { role: 'user', content: 'hi' },
+    }]
+    await createProject(baseDir, '-Users-mid-excl', {
+      'sess-quiet': line('sess-quiet', 'quiet-u1'),  // 有 subagent，本輪不會重新索引
+      'sess-busy': line('sess-busy', 'busy-u1'),     // 本輪會被索引，用來把流程推進 phase 3
+    })
+    await addSubagent(baseDir, '-Users-mid-excl', 'sess-quiet', 'agent-q')
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-quiet/agent-q')).toHaveLength(1)
+
+    // 只動 sess-busy 的 mtime，sess-quiet 這輪不進 sessionsToIndex（否則 phase 3 自己就重建了，測不到 phase 4）
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-mid-excl', 'sess-busy.jsonl'), t, t)
+
+    let fired = false
+    const excludeMidRun: ProgressCallback = (p) => {
+      if (p.phase === 'indexing' && !fired) {
+        fired = true
+        db.applyExclusion({ projectId: '-Users-mid-excl', dateFrom: null, dateTo: null })
+      }
+    }
+    await runIndexer(db, excludeMidRun, baseDir, tasksDir)
+
+    expect(fired).toBe(true)
+    // 使用者主動排除的決定要贏過「補寫 metadata parent 救 subagent」
+    expect(db.getMessages('sess-quiet')).toEqual([])
+    expect(db.getMessages('sess-quiet/agent-q')).toEqual([])
+  })
+
+  it('索引跑到一半才被排除的 session，不會在 phase 3 被寫回去', async () => {
+    // 跟上面那個的差別在走哪條路：這個 session 有進 sessionsToIndex，被擋的是主寫入
+    // 路徑。已完整索引的 session 在 phase 2 不做 exclusion 檢查（分工是交給
+    // applyExclusion 硬刪），所以寫入前那道檢查是它唯一的防線。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-p3-excl', { 'sess-p3': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-p3')).toHaveLength(2)
+
+    // 動 mtime → 這輪它會重新索引，走的是 phase 3 而不是 phase 4 的補寫
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-p3-excl', 'sess-p3.jsonl'), t, t)
+
+    let fired = false
+    const excludeMidRun: ProgressCallback = (p) => {
+      if (p.phase === 'indexing' && !fired) {
+        fired = true
+        db.applyExclusion({ projectId: '-Users-p3-excl', dateFrom: null, dateTo: null })
+      }
+    }
+    await runIndexer(db, excludeMidRun, baseDir, tasksDir)
+
+    expect(fired).toBe(true)
+    // 不自癒是這條的關鍵：下一輪 mtime 沒變就不再進佇列，寫回去就永遠回不來了
+    expect(db.getMessages('sess-p3')).toEqual([])
+  })
+
+  it('summary_version 為 null 的 provisional parent 仍要重評 exclusion rule', async () => {
+    // 補寫進去的 metadata-only parent 下一輪就成了 existing。若 exclusion 只看 !existing，
+    // 它等於拿到永久豁免——parent 恢復可讀後整段被索引回來，使用者設的日期範圍形同虛設。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-prov', { 'sess-prov': sampleSession1 })
+    const filePath = path.join(baseDir, '-Users-prov', 'sess-prov.jsonl')
+    const st = await stat(filePath)
+
+    // 直接造出 provisional 狀態：有 row、沒訊息、summary_version 為 null，mtime 與磁碟一致
+    // （mtime 相同才能確定重新索引是 summaryStale 觸發的，而不是 mtime 變動）
+    db.indexSession({
+      sessionId: 'sess-prov',
+      projectId: '-Users-prov',
+      projectDisplayName: 'prov',
+      title: null,
+      messageCount: 0,
+      filePath,
+      fileSize: st.size,
+      fileMtime: st.mtime.toISOString(),
+      startedAt: null,
+      endedAt: null,
+      summaryVersion: null,
+      messages: [],
+    })
+    expect(db.getMessages('sess-prov')).toEqual([])
+
+    // 規則涵蓋這個 session 的日期（sampleSession1 是 2024-06-01）
+    db.applyExclusion({ projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-30' })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 被規則涵蓋 → 不該趁 summaryStale 重新索引把內容補齊
+    expect(db.getMessages('sess-prov')).toEqual([])
+  })
 })
 
 describe('runIndexer — stale subagent handling', () => {
@@ -1198,6 +1327,284 @@ describe('runIndexer — stale subagent handling', () => {
     expect(db.getAllSessionMtimes().get('sess-pf/agent-pf1')?.archived).toBe(false)
     expect(db.getAllSessionMtimes().get('sess-pok/agent-pok')?.archived).toBe(false)
     // 整個 project 掉出索引是比單一 session 更大的缺口，更不能靜悄悄
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
+  })
+})
+
+describe('runIndexer — subagent 的 parent 必須先在 sessions 表裡', () => {
+  // subagent_sessions.parent_session_id 有 FK 指向 sessions(id) 且 foreign_keys=ON。
+  // 主迴圈每一個「掃到了但沒寫進 sessions 表」的 continue，都會讓底下的 subagent
+  // 在寫入時撞 constraint 直接拋出——中斷的是整輪索引，不只那一個 session。
+  // 三條 continue 各測一次，因為它們是各自獨立的進入點。
+
+  /** 兩個 session 共用 uuid：後索引的那個會被跨 session 去重成空，走純 replay 那條 continue */
+  function sharedUuidLines(sessionId: string) {
+    return [
+      {
+        type: 'user', uuid: 'shared-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId,
+        message: { role: 'user', content: 'same content in both sessions' },
+      },
+    ]
+  }
+
+  it('exclusion rule 擋下 parent 時，不寫入它的 subagent', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-excl-sub', {
+      'sess-es': [{
+        type: 'user', uuid: 'sess-es-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId: 'sess-es',
+        message: { role: 'user', content: 'parent session' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-excl-sub', 'sess-es', 'agent-es')
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-es/agent-es')).toHaveLength(1)
+
+    // 硬刪 + 留規則：parent 與 subagent 一起從 DB 消失（ON DELETE CASCADE）
+    db.applyExclusion({ projectId: '-Users-excl-sub', dateFrom: null, dateTo: null })
+    expect(db.getMessages('sess-es')).toEqual([])
+    expect(db.getMessages('sess-es/agent-es')).toEqual([])
+
+    // 磁碟檔案都還在。規則把 parent 擋在 sessions 表外，subagent 就沒有 parent 可掛
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-es')).toEqual([])
+    // 使用者主動排除掉的資料不能從 subagent 這條路徑部分復活
+    expect(db.getMessages('sess-es/agent-es')).toEqual([])
+  })
+
+  it('純 replay 的新 session 仍保住它的 subagent（補一列 metadata-only 的 parent）', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-replay-sub', {
+      'sess-origin': sharedUuidLines('sess-origin'),
+      'sess-replay': sharedUuidLines('sess-replay'),
+    })
+    await addSubagent(baseDir, '-Users-replay-sub', 'sess-replay', 'agent-rp')
+
+    // 索引順序按 fileMtime 升冪。同時寫出的兩檔 mtime 可能相同，明確拉開才測得準
+    const older = new Date('2024-06-01T10:00:00.000Z')
+    const newer = new Date('2024-06-02T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-replay-sub', 'sess-origin.jsonl'), older, older)
+    await utimes(path.join(baseDir, '-Users-replay-sub', 'sess-replay.jsonl'), newer, newer)
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // origin 先索引 → replay 的 entries 全被跨 session 去重 → 自己沒有訊息可寫
+    expect(db.getMessages('sess-origin')).toHaveLength(1)
+    expect(db.getMessages('sess-replay')).toEqual([])
+    // 但 subagent 的 JSONL 是獨立檔案、從沒被去重過，內容獨一無二 —— parent 的主檔
+    // 恰好是別人的複本，不構成連它一起丟掉的理由
+    expect(db.getMessages('sess-replay/agent-rp')).toHaveLength(1)
+    // 靠一列 metadata-only 的 parent 撐住 FK
+    expect(db.getAllSessionMtimes().has('sess-replay')).toBe(true)
+  })
+
+  it('parse 失敗的 session 仍保住它的 subagent', async (ctx) => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-parsefail-sub', {
+      'sess-ok': [{
+        type: 'user', uuid: 'sess-ok-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId: 'sess-ok',
+        message: { role: 'user', content: 'healthy session' },
+      }],
+      'sess-bad': [{
+        type: 'user', uuid: 'sess-bad-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId: 'sess-bad',
+        message: { role: 'user', content: 'will become unreadable' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-parsefail-sub', 'sess-bad', 'agent-bad')
+
+    const badPath = path.join(baseDir, '-Users-parsefail-sub', 'sess-bad.jsonl')
+    await chmod(badPath, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readFile(badPath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badPath, 0o644)
+      ctx.skip()
+    }
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+    await chmod(badPath, 0o644)
+
+    // parent 讀不到就跳過是既有行為；但它的 subagent 是另一個檔案，可能好端端的
+    expect(db.getMessages('sess-bad')).toEqual([])
+    expect(db.getMessages('sess-bad/agent-bad')).toHaveLength(1)
+    // 健康的 session 不該被連累
+    expect(db.getMessages('sess-ok')).toHaveLength(1)
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
+  })
+
+  it('parse 失敗只是這一次讀不到：權限回來後下一輪要能自己補上', async (ctx) => {
+    // 補 metadata-only parent 時若一律標上當前 summaryVersion，這個 session 就被凍結在
+    // 0 訊息狀態——summaryStale 不成立、mtime 又沒變，於是再也不會被排回佇列。
+    // 但權限閃斷、掛載點掉線都是會自己恢復的，那樣等於把暫時故障寫成了永久結果。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-parsefail-heal', {
+      'sess-heal': [{
+        type: 'user', uuid: 'sess-heal-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId: 'sess-heal',
+        message: { role: 'user', content: 'temporarily unreadable' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-parsefail-heal', 'sess-heal', 'agent-heal')
+
+    const badPath = path.join(baseDir, '-Users-parsefail-heal', 'sess-heal.jsonl')
+    await chmod(badPath, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readFile(badPath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badPath, 0o644)
+      ctx.skip()
+    }
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-heal')).toEqual([])
+    expect(db.getMessages('sess-heal/agent-heal')).toHaveLength(1)
+
+    // 權限回來，檔案內容與 mtime 都沒動過
+    await chmod(badPath, 0o644)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-heal')).toHaveLength(1)
+  })
+
+  it('parent 已在 sessions 表裡的 replay session，subagent 照留不被誤封存', async () => {
+    // 守衛的判準必須是「parent 在不在 sessions 表」，不能是「這輪有沒有走 replay 那條 continue」。
+    // 寫成後者的話，這裡的 subagent 會掉出 scannedSubagentIds，被當成磁碟上消失而誤封存。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-replay-keep', {
+      'sess-kept': sharedUuidLines('sess-kept'),
+    })
+    await addSubagent(baseDir, '-Users-replay-keep', 'sess-kept', 'agent-kept')
+
+    // 第一輪：sess-kept 自己進 DB，subagent 跟著進
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-kept')).toHaveLength(1)
+    expect(db.getMessages('sess-kept/agent-kept')).toHaveLength(1)
+
+    // 事後才出現一個 uuid 相同、mtime 更早的 session，並讓 sess-kept 的 mtime 變新以觸發 re-index
+    await createProject(baseDir, '-Users-replay-keep', { 'sess-earlier': sharedUuidLines('sess-earlier') })
+    const older = new Date('2024-06-01T10:00:00.000Z')
+    const newer = new Date('2024-06-02T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-replay-keep', 'sess-earlier.jsonl'), older, older)
+    await utimes(path.join(baseDir, '-Users-replay-keep', 'sess-kept.jsonl'), newer, newer)
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // sess-kept 這輪被去重成空走了 continue，但它本來就在 sessions 表裡
+    expect(db.getMessages('sess-kept/agent-kept')).toHaveLength(1)
+    expect(db.getAllSessionMtimes().get('sess-kept/agent-kept')?.archived).toBe(false)
+  })
+
+  it('純 replay 是預期行為，不灌大 skipped', async () => {
+    // skipped 在 UI 上的文案是「解析失敗的 session…已跳過」。resume 過的 session 每輪
+    // 都會走這條 continue，計進去等於常態顯示假警報。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-replay-count', {
+      'sess-origin2': sharedUuidLines('sess-origin2'),
+      'sess-replay2': sharedUuidLines('sess-replay2'),
+    })
+    const older = new Date('2024-06-01T10:00:00.000Z')
+    const newer = new Date('2024-06-02T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-replay-count', 'sess-origin2.jsonl'), older, older)
+    await utimes(path.join(baseDir, '-Users-replay-count', 'sess-replay2.jsonl'), newer, newer)
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+    const logged = warn.mock.calls.map(c => c.join(' ')).join('\n')
+    warn.mockRestore()
+
+    expect(db.getMessages('sess-replay2')).toEqual([])
+    expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(0)
+    // 不計數不等於不留痕跡：整輪至少要講一次有幾個 session 走了這條路
+    expect(logged).toContain('replay')
+  })
+})
+
+describe('runIndexer — 主 session 的 stale 封存守衛', () => {
+  /** 建一個單 session 的 project，回傳 session 的 .jsonl 路徑 */
+  async function createSoloSession(projectId: string, sessionId: string): Promise<string> {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, projectId, {
+      [sessionId]: [{
+        type: 'user', uuid: `${sessionId}-u1`, timestamp: '2024-06-01T10:00:00.000Z', sessionId,
+        message: { role: 'user', content: 'main session' },
+      }],
+    })
+    return path.join(baseDir, projectId, `${sessionId}.jsonl`)
+  }
+
+  it('檔案真的從磁碟消失時仍會封存（守衛不能把正常行為一起擋掉）', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    const goneFile = await createSoloSession('-Users-main-gone', 'sess-gone')
+    await createSoloSession('-Users-main-stay', 'sess-stay')
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-gone')?.archived).toBe(false)
+
+    await rm(goneFile)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-gone')?.archived).toBe(true)
+    expect(db.getAllSessionMtimes().get('sess-stay')?.archived).toBe(false)
+  })
+
+  it('projects 目錄還在、只是被清空了 → 照樣封存', async () => {
+    // 與下一條的差別只在「root 還在不在」。擋著不封存的話掃描結果每輪都一樣，
+    // 那些 row 會永遠停在活躍狀態，再也沒有機會被更正。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createSoloSession('-Users-main-emptied', 'sess-emptied')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-emptied')?.archived).toBe(false)
+
+    // 使用者真的把 session 清光，但 ~/.claude/projects 本身還在
+    await rm(path.join(baseDir, '-Users-main-emptied'), { recursive: true })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-emptied')?.archived).toBe(true)
+  })
+
+  it('projects 目錄整個不見時不封存任何主 session', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createSoloSession('-Users-main-wipe', 'sess-wipe')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-wipe')?.archived).toBe(false)
+
+    // baseDir 整個讀不到：掃描結果全空，與「使用者刪光了」在資料上無從分辨
+    await rm(baseDir, { recursive: true })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getAllSessionMtimes().get('sess-wipe')?.archived).toBe(false)
+  })
+
+  it('某個 project 目錄讀不到時不封存它底下的主 session', async (ctx) => {
+    // subagent 那層擋掉的同款上游漏洞：project 讀不到時 scanner 直接 continue，
+    // 它底下的 session 一個都不會進 scannedSessionIds，別的 project 掃得到又讓
+    // 總數非零 —— 只看數量的守衛會放行，然後把讀不到的那批全封存。
+    const baseDir = path.join(tmpDir, 'projects')
+    await createSoloSession('-Users-main-projfail', 'sess-mpf')
+    await createSoloSession('-Users-main-projok', 'sess-mpok')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getAllSessionMtimes().get('sess-mpf')?.archived).toBe(false)
+
+    const badProject = path.join(baseDir, '-Users-main-projfail')
+    await chmod(badProject, 0o000)
+
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readdir(badProject).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(badProject, 0o755)
+      ctx.skip()
+    }
+
+    const progresses: IndexerProgress[] = []
+    await runIndexer(db, (s) => progresses.push({ ...s }), baseDir, tasksDir)
+    await chmod(badProject, 0o755)
+
+    expect(db.getAllSessionMtimes().get('sess-mpf')?.archived).toBe(false)
+    expect(db.getAllSessionMtimes().get('sess-mpok')?.archived).toBe(false)
     expect(progresses.find(s => s.phase === 'done')?.skipped).toBe(1)
   })
 })

@@ -18,14 +18,14 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.23.1'  # node 22 has a better-sqlite3 prebuild; see electron-smoke.yml
+          node-version: '22.23.2'  # node 22 has a better-sqlite3 prebuild; see electron-smoke.yml
           cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: TypeScript build
-        run: pnpm tsc -b
+        run: pnpm typecheck
 
       - name: ESLint
         run: pnpm eslint .
@@ -41,7 +41,7 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: '22.23.1'  # node 22 has a better-sqlite3 prebuild; see electron-smoke.yml
+          node-version: '22.23.2'  # node 22 has a better-sqlite3 prebuild; see electron-smoke.yml
           cache: 'pnpm'
 
       - name: Cache Electron binary
