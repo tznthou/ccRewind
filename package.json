@@ -8,7 +8,7 @@
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "build": "electron-vite build",
     "dist": "electron-builder build --config electron-builder.yml",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.config.json --noEmit",
     "lint": "eslint . --fix",
     "test": "ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron ./node_modules/vitest/vitest.mjs run",
     "test:coverage": "ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron ./node_modules/vitest/vitest.mjs run --coverage",
@@ -19,11 +19,11 @@
   },
   "packageManager": "pnpm@11.17.0",
   "dependencies": {
-    "@tanstack/react-virtual": "^3.14.8",
+    "@tanstack/react-virtual": "^3.14.9",
     "better-sqlite3": "^12.10.0",
     "highlight.js": "^11.11.1",
     "react-markdown": "^10.1.0",
-    "recharts": "^3.10.0",
+    "recharts": "^3.10.1",
     "rehype-highlight": "^7.0.2",
     "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1"

@@ -22,6 +22,7 @@ function line(overrides: Partial<ParsedLine> = {}): ParsedLine {
     cacheReadTokens: null,
     cacheCreationTokens: null,
     model: null,
+    requestId: null,
     hasImage: false,
     attributionSkill: null,
     attributionPlugin: null,
@@ -31,6 +32,10 @@ function line(overrides: Partial<ParsedLine> = {}): ParsedLine {
     systemSubtype: null,
     apiErrorStatus: null,
     editedFilePath: null,
+    frameUrl: null,
+    version: null,
+    isCompactSummary: false,
+    isSidechain: false,
     ...overrides,
   }
 }
