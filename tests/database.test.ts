@@ -4,6 +4,7 @@ import os from 'node:os'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import type { MessageInput } from '../src/main/database'
+import { SUMMARY_VERSION } from '../src/main/summarizer'
 
 let tmpDir: string
 let db: Database
@@ -1563,6 +1564,43 @@ describe('applyExclusion', () => {
     db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
     const subs = db.rawAll<{ c: number }>("SELECT COUNT(*) AS c FROM subagent_sessions")
     expect(subs[0].c).toBe(0)
+  })
+
+  it('re-queues metadata-only parents whose content lived in a deleted session', () => {
+    // resume 過的 session 會把前一輪的 entries replay 進自己的檔案，索引時整批撞到
+    // owner 的 UUID 而被去重成空，只在 phase 4 為了接住 subagent 留下一列
+    // metadata-only parent：message_count 0、started_at null、summary_version 當前版。
+    seedSession('s-owner', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    db.indexSession({
+      sessionId: 's-replay',
+      projectId: 'proj-a',
+      projectDisplayName: '/a',
+      title: null,
+      messageCount: 0,
+      filePath: '/tmp/s-replay.jsonl',
+      fileSize: 2048,
+      fileMtime: '2026-03-01T00:00:00.000Z',
+      startedAt: null,
+      endedAt: null,
+      summaryVersion: SUMMARY_VERSION,
+      messages: [],
+    })
+
+    // 日期規則刪掉 owner。replay parent 逃得掉——buildExclusionWhere 的
+    // `started_at IS NOT NULL` 讓 null 起始時間永遠不匹配日期條件。
+    db.applyExclusion({ projectId: null, dateFrom: '2026-01-01', dateTo: '2026-01-31' })
+
+    const rows = db.rawAll<{ id: string; summary_version: number | null }>(
+      'SELECT id, summary_version FROM sessions',
+    )
+    const ids = rows.map(r => r.id)
+    expect(ids).not.toContain('s-owner')
+    expect(ids).toContain('s-replay')
+
+    // 這一刻 replay parent 的內容只剩磁碟上那份，而 owner 的 UUID 已經不在表裡，
+    // 重新索引就能把它收回自己名下。summary_version 必須歸零讓 summaryStale 排隊，
+    // 否則 mtime 不變 + 版本是最新 = 這輩子不會再被索引，磁碟有檔案卻永久讀不到。
+    expect(rows.find(r => r.id === 's-replay')!.summary_version).toBeNull()
   })
 })
 

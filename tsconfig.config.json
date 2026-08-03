@@ -1,0 +1,24 @@
+// 根目錄建構設定檔（electron.vite.config.ts / vitest.config.ts）的型別檢查。
+// 它們不屬於 tsconfig.node.json（只含 src/main|preload|shared）、不屬於
+// tsconfig.web.json（只含 src/renderer|shared），也不在 tsconfig.test.json 的
+// tests/ 底下——三份設定加起來仍有這個洞。
+//
+// 實測過這個洞是真的：把 `const probe: number = '不是數字'` 加進 vitest.config.ts，
+// 補這份之前 `pnpm typecheck` 照樣 exit 0。Vite 執行設定檔時只轉譯不做完整型別檢查，
+// 所以型別壞掉的建構設定可以一路綠燈 merge 進去。
+//
+// include 用 `*.ts` 而非列舉檔名：tsconfig 的 `*` 只匹配這一層，之後在根目錄新增
+// 設定檔會自動被涵蓋，不用有人記得回來改這裡。
+//
+// composite: false 的理由同 tsconfig.test.json——本設定因此不進 tsconfig.json 的
+// references（那要求 composite: true），改由 package.json 的 typecheck script 獨立跑。
+{
+  "extends": "./tsconfig.node.json",
+  "compilerOptions": {
+    "composite": false,
+    "rootDir": ".",
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["*.ts"]
+}
