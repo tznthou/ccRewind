@@ -4,7 +4,7 @@ import os from 'node:os'
 import type { ScannedProject, ScannedSession, ScannedSubagent, ScannedTask } from '../shared/types'
 import { logSafe, logSafeError } from './logSafe'
 
-const DEFAULT_BASE_DIR = path.join(os.homedir(), '.claude', 'projects')
+export const DEFAULT_BASE_DIR = path.join(os.homedir(), '.claude', 'projects')
 
 /** ~/.claude/tasks/ 是 Claude Code TaskCreate/TaskUpdate 寫入位置，與 projects/ 平行 */
 export const DEFAULT_TASKS_BASE_DIR = path.join(os.homedir(), '.claude', 'tasks')

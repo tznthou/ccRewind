@@ -2,7 +2,7 @@ import path from 'node:path'
 import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
 import type { Database, MessageInput } from './database'
-import { scanProjects, scanSubagents, scanTasks, DEFAULT_TASKS_BASE_DIR } from './scanner'
+import { scanProjects, scanSubagents, scanTasks, DEFAULT_BASE_DIR, DEFAULT_TASKS_BASE_DIR } from './scanner'
 import { logSafe, logSafeError } from './logSafe'
 import { parseSession } from './parser'
 import { parseTaskFile } from './task-parser'
@@ -73,6 +73,32 @@ export function matchesExclusionRule(
     if (rule.dateTo != null && date > rule.dateTo) return false
   }
   return true
+}
+
+/**
+ * 這個 session 有沒有被任何一條規則涵蓋。
+ *
+ * 空規則清單直接回 false 而不碰磁碟——絕大多數使用者一條規則都沒設，這個短路
+ * 省掉的是「每個 session 一次 readFirstTimestamp」。短路必須留在這裡而不是各
+ * call site，否則兩邊又要各自記得寫一次。
+ */
+async function isExcludedByRules(
+  rules: ExclusionRule[],
+  projectId: string,
+  filePath: string,
+): Promise<boolean> {
+  if (rules.length === 0) return false
+  const firstTs = await readFirstTimestamp(filePath)
+  return matchesAnyRule(rules, projectId, firstTs)
+}
+
+/** 已經知道 timestamp 時的同步版本，省下重讀檔案。空清單一律不匹配。 */
+function matchesAnyRule(
+  rules: ExclusionRule[],
+  projectId: string,
+  firstTimestamp: string | null,
+): boolean {
+  return rules.some(r => matchesExclusionRule(projectId, firstTimestamp, r))
 }
 
 /**
@@ -250,6 +276,19 @@ export function markAbandonedBranches(lines: ParsedLine[]): ParsedLine[] {
 }
 
 /**
+ * 目錄存在。stat 失敗一律回 false——呼叫端用它決定要不要封存，猜錯的代價不對等，
+ * 所以拿不準時一律當作「不在」而少做。（存在但讀不到的情況由 scanner 的
+ * onScanFailure 在上游先攔下，走不到這裡。）
+ */
+async function dirExists(dir: string): Promise<boolean> {
+  try {
+    return (await stat(dir)).isDirectory()
+  } catch {
+    return false
+  }
+}
+
+/**
  * 執行首次/增量索引。
  * 掃描 baseDir 下所有 JSONL，比對 file_mtime 決定哪些需要（重新）索引，
  * 解析後寫入 DB。
@@ -257,7 +296,9 @@ export function markAbandonedBranches(lines: ParsedLine[]): ParsedLine[] {
 export async function runIndexer(
   db: Database,
   onProgress?: ProgressCallback,
-  baseDir?: string,
+  // 預設值在這裡解析而不是交給 scanProjects：下面要 stat 的必須是「剛剛掃過的那個目錄」，
+  // 這個不變式不該靠讀另一個檔案的參數預設值來確認。
+  baseDir: string = DEFAULT_BASE_DIR,
   tasksBaseDir: string = DEFAULT_TASKS_BASE_DIR,
 ): Promise<void> {
   // 解析失敗而沒進 DB 的項目數。累計後隨 progress 一路帶到 UI——
@@ -296,6 +337,9 @@ export async function runIndexer(
   // Exclusion rules（v1.9.0）：防止新 session 被重建（尤其 applyExclusion 硬刪後磁碟還在的場景）
   // 只攔截新 session（!existing），已 indexed 的保持 mtime 同步邏輯不變
   const exclusionRules = db.getExclusionRules()
+  // 被規則擋下的 session。subagent 階段要分辨得出「使用者主動排除」與其他沒進
+  // sessions 表的原因——前者連 subagent 都不該索引，後者的 subagent 是該救的。
+  const excludedSessionIds = new Set<string>()
 
   for (const project of projects) {
     for (const session of project.sessions) {
@@ -304,10 +348,15 @@ export async function runIndexer(
       // 重新索引條件：新 session、mtime 變更、archived session 重新出現、或 summary engine 升版
       const summaryStale = existing && (existing.summaryVersion === null || existing.summaryVersion < SUMMARY_VERSION)
       if (!existing || existing.mtime !== session.fileMtime || existing.archived || summaryStale) {
-        if (exclusionRules.length > 0 && !existing) {
-          const firstTs = await readFirstTimestamp(session.filePath)
-          const excluded = exclusionRules.some(r => matchesExclusionRule(project.projectId, firstTs, r))
-          if (excluded) continue
+        // summary_version 為 null 的也要重評：那是「還沒真正索引完成」的狀態（parse
+        // 失敗，或 phase 4 為了接住 subagent 補寫的 metadata-only parent），語義上更
+        // 接近新 session 而不是已索引。少了這一半，一個在 parent 暫時讀不到時補寫的
+        // metadata parent 會因為下一輪「已 existing」而永久豁免 date rule——等權限恢復
+        // 就整段索引回來，使用者設的排除範圍等於沒設。
+        if ((!existing || existing.summaryVersion === null)
+          && await isExcludedByRules(exclusionRules, project.projectId, session.filePath)) {
+          excludedSessionIds.add(session.sessionId)
+          continue
         }
         sessionsToIndex.push({
           ...session,
@@ -318,12 +367,40 @@ export async function runIndexer(
     }
   }
 
-  // 標記 DB 中存在但掃描不到的 session 為 archived
-  db.archiveStaleSessionsExcept(scannedSessionIds)
+  // 掃到 0 筆卻有既存記錄時，得先分清楚 baseDir 是「空的」還是「不在」——兩者在
+  // 掃描結果上長得一模一樣，處置卻相反。ENOENT 在 scanner 裡不算掃描失敗（首次啟動
+  // 時 ~/.claude/projects 本來就還不存在），所以 scanFailed 分不出這一組，只能自己確認
+  // root 還在不在。真的被清空就該封存——擋著不做的話，下一輪掃描結果一樣是空的，
+  // 狀態永遠停在「全部活躍」，那些 row 再也沒有機會被更正。
+  const emptyScanFromMissingRoot = scannedSessionIds.size === 0
+    && existingMtimes.size > 0
+    && !(await dirExists(baseDir))
+
+  // 標記 DB 中存在但掃描不到的 session 為 archived。
+  // 守衛與下方 subagent 那套同源（完整推理見下方 subagent 封存守衛前的註解）：掃描層
+  // 把讀取失敗轉成空陣列或 continue，缺席在這裡等同「被刪了」。差別只在訊號來源——
+  // 主 session 的 project 層與 session 層失敗都由 scanProjects 的 onScanFailure 回報，
+  // 一個 scanFailed 就涵蓋，不需要第二個旗標。
+  if (scanFailed) {
+    console.warn(`[indexer] skipped session archiving: a scan failed (cannot tell deletions from unreadable dirs)`)
+  } else if (emptyScanFromMissingRoot) {
+    console.warn(`[indexer] skipped session archiving: ${existingMtimes.size} indexed but the projects dir is gone (treating as an unmounted path, not deletions)`)
+  } else {
+    const archivedSessions = db.archiveStaleSessionsExcept(scannedSessionIds)
+    if (archivedSessions > 0) {
+      console.warn(`[indexer] archived ${archivedSessions} session(s) no longer on disk`)
+    }
+  }
 
   // 3. INDEXING — 按 fileMtime 升冪排序，確保舊 session 先索引（UUID 去重依賴此順序）
   sessionsToIndex.sort((a, b) => a.fileMtime.localeCompare(b.fileMtime))
   const total = sessionsToIndex.length
+
+  // 內容已完整存在於別的 session、因而整個被去重掉的 session 數。
+  let replayOnlySessionCount = 0
+  // 主檔讀不到、因此沒進 sessions 表的 session。subagent 階段補 parent row 時要靠它
+  // 分辨「這次讀失敗」與「本來就沒有自己的訊息」，兩者該不該重試完全相反。
+  const parseFailedSessions = new Set<string>()
 
   for (let i = 0; i < total; i++) {
     onProgress?.({
@@ -342,6 +419,7 @@ export async function runIndexer(
       parsed = await parseSession(s.filePath, s.sessionId)
     } catch (err) {
       skipped++
+      parseFailedSessions.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} not indexed (parse failed): ${logSafe(s.filePath)} - ${logSafeError(err)}`)
       continue
     }
@@ -359,8 +437,14 @@ export async function runIndexer(
     const existingUuids = uuids.length > 0 ? db.getExistingUuids(uuids, s.sessionId) : new Set<string>()
     const messages = markedLines.filter(m => !(m.uuid && existingUuids.has(m.uuid)))
 
-    // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB
-    if (messages.length === 0 && parsed.messages.length > 0) continue
+    // 純 replay session（所有 messages 都被去重）→ 跳過，不寫入 DB。
+    // 不計入 skipped：那個數字在 UI 上的文案是「解析失敗的 session…已跳過」，而這裡
+    // 一個位元組都沒丟——內容就在去重時匹配到的那個 session 裡。resume 過的 session
+    // 每輪都會走這條，計進去等於把常態當成災情。改為整輪結束後彙總一行 log。
+    if (messages.length === 0 && parsed.messages.length > 0) {
+      replayOnlySessionCount++
+      continue
+    }
 
     // 去重後的時間範圍
     let startedAt = parsed.startedAt
@@ -375,6 +459,19 @@ export async function runIndexer(
 
     // 用去重後的 messages 產生 session 摘要 + session_files
     const { summary, sessionFiles } = summarizeSession(messages, startedAt, endedAt)
+
+    // 寫入前再問一次規則。phase 2 的判斷代表「開始跑的時候」的意圖，而這個迴圈對大庫
+    // 是分鐘級的：storage:apply 沒有跟索引協調，使用者中途按下排除時 applyExclusion
+    // 會同步刪完就回、UI 顯示成功，然後這裡把整個 session 寫回去。而且不會自癒——下一
+    // 輪 mtime 沒變就不再進佇列，它從此逃過所有規則。已完整索引的 session 在 phase 2
+    // 本來就不做這個檢查（那時的分工是交給 applyExclusion 硬刪），race 一旦發生就沒有
+    // 第二道防線。用手上已解出的 startedAt，不重讀檔案；它也正是 buildExclusionWhere
+    // 比對的那個欄位，比 phase 2 的 readFirstTimestamp 更貼近 SQL 端的判準。
+    if (matchesAnyRule(db.getExclusionRules(), s.projectId, startedAt)) {
+      excludedSessionIds.add(s.sessionId)
+      console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
+      continue
+    }
 
     // DB 寫入 — 失敗向上拋出（不應靜默）
     db.indexSession({
@@ -403,12 +500,24 @@ export async function runIndexer(
     })
   }
 
+  if (replayOnlySessionCount > 0) {
+    console.warn(`[indexer] ${replayOnlySessionCount} session(s) were pure replays of already-indexed content — their messages were not re-written, nothing lost (not counted as skipped)`)
+  }
+
   // 4. SUBAGENT SCANNING — 掃描每個掃得到的 session 底下的 subagents/
   const existingSubMtimes = db.getAllSubagentMtimes()
   const scannedSubagentIds = new Set<string>()
   let subagentScanFailed = false
+  // 重讀而非沿用 phase 2 的 exclusionRules：大庫跑完 phase 3 是分鐘級的事，這中間
+  // 使用者可能新增了規則、或按下 applyExclusion 把某個 parent 硬刪掉。下面補寫
+  // metadata parent 時要用得到當下的規則，拿舊快照判斷等於看著過期的意圖做事。
+  const freshExclusionRules = db.getExclusionRules()
   for (const project of projects) {
     for (const session of project.sessions) {
+      // 使用者用 exclusion rule 主動排除掉的 session，連它的 subagent 都不該進 DB，
+      // 否則 applyExclusion 硬刪的資料會從這條路徑部分復活。
+      if (excludedSessionIds.has(session.sessionId)) continue
+
       // session 目錄：<project>/<sessionId>/
       const sessionDir = path.join(path.dirname(session.filePath), session.sessionId)
       let subagents
@@ -426,6 +535,47 @@ export async function runIndexer(
         continue
       }
       if (subagents.length === 0) continue
+
+      // subagent_sessions.parent_session_id 有 FK 指向 sessions(id) 且 foreign_keys=ON：
+      // parent 不在表裡就是 constraint 失敗直接拋出，中斷的是整輪索引而不只這一個
+      // session。主迴圈有兩條路會留下這個狀態——純 replay 被去重成空、主檔 parse 失敗。
+      // 兩種情況下 subagent 的 JSONL 都是獨立、沒被去重過的檔案，內容不會因為 parent
+      // 的主檔重複或壞掉而失去價值：Claude Code 的 30 天清理過後，index.db 這份就是
+      // 它唯一還存在的地方。所以補一列 metadata-only 的 parent 把它接住，而不是連
+      // 帶丟掉。判準是「現在在不在表裡」而非「這輪有沒有被跳過」：DB 裡已有 parent
+      // 的 replay session 每輪都會走那條 continue，當成缺席處理會讓它的 subagent 掉出
+      // scannedSubagentIds，反被誤判成磁碟上消失而封存。直接問 DB 而不查 existingMtimes，
+      // 因為那份快照取於 phase 2，大庫跑完 phase 3 是分鐘級的事，這中間 applyExclusion
+      // 可能已經把 row 刪掉了——照快照判斷會略過補寫，然後撞上這段要防的 FK 中斷。
+      if (!db.hasSession(session.sessionId)) {
+        // hasSession 為 false 有兩種來源，處置相反：parent 從沒進過表（replay 被去重
+        // 成空、主檔 parse 失敗）是該救的；parent 剛被 applyExclusion 硬刪掉則是使用者
+        // 主動要它消失，補寫等於把刪掉的東西接回來。phase 2 的 excludedSessionIds 蓋不到
+        // 後者——那時 session 還在表裡，走的是 existing 分支，從來沒進過那個集合。
+        // 所以這裡就地重評一次規則，讓「使用者不要」贏過「補寫救資料」。
+        if (await isExcludedByRules(freshExclusionRules, project.projectId, session.filePath)) {
+          console.warn(`[indexer] session ${logSafe(session.sessionId)} matches an exclusion rule; not restoring it as a metadata-only parent (its ${subagents.length} subagent(s) stay out too)`)
+          continue
+        }
+        db.indexSession({
+          sessionId: session.sessionId,
+          projectId: project.projectId,
+          projectDisplayName: project.displayName,
+          title: null,
+          messageCount: 0,
+          filePath: session.filePath,
+          fileSize: session.fileSize,
+          fileMtime: session.fileMtime,
+          startedAt: null,
+          endedAt: null,
+          // 讀失敗的留 null 讓 summaryStale 下一輪把它重新排回佇列：權限閃斷、掛載點
+          // 掉線都會自己恢復，標成當前版本等於凍結它，mtime 不變就再也不會重試。
+          // 純 replay 反過來——它沒有自己的訊息可讀，每輪重試只是白跑一趟。
+          summaryVersion: parseFailedSessions.has(session.sessionId) ? null : SUMMARY_VERSION,
+          messages: [],
+        })
+        console.warn(`[indexer] session ${logSafe(session.sessionId)} has no messages of its own; stored as a metadata-only parent so its ${subagents.length} subagent(s) survive`)
+      }
 
       for (const sub of subagents) {
         scannedSubagentIds.add(sub.subagentId)
