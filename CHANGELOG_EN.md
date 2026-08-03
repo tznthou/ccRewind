@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.1] - 2026-08-03
+
+### Fixed
+
+- **A single orphaned subagent aborted the entire indexing run**: when a subagent's parent was absent from the sessions table, the foreign key constraint threw outright — taking down not that one session but the whole run. Two paths leave that state behind: a resumed session whose messages were all deduplicated away by UUID, and a main file that failed to parse. In both cases the subagent's JSONL is an independent file that was never deduplicated, and its content does not lose value because the parent's main file was a duplicate or was damaged. A metadata-only parent row is now written to catch it, rather than dropping it along the way. User-set exclusion rules still win: a parent covered by a rule is not restored, and its subagents stay out with it
+- **A vanished scan root marked the whole index as archived**: an unmounted external drive or a dropped mount point produces a scan result identical to "the user deleted every conversation", yet the correct response is the opposite. When the scan returns nothing but the database holds records, the root directory is now checked first; if it is gone, archiving is skipped and the reason is logged
+- **Content of a replayed session became permanently unreadable once exclusion deleted its owner**: a resumed session replays the previous run's entries into its own file, so indexing deduplicates them all against the original session's UUIDs and only a metadata row remains. Once the original is hard-deleted by an exclusion rule, those messages could in fact be re-indexed under the resumed session — but its file mtime does not change because something else was deleted, and its summary version is already current, so it never re-enters the queue. The file stays on disk while the database can no longer reach that conversation
+- **Type checking was doing nothing**: `tsc --noEmit` against a solution-style tsconfig does not follow project references at all — zero checks. On top of that, `tests/` and the root build config files fell outside every tsconfig's coverage. Confirmed by planting a type error in `vitest.config.ts`: before this change it still exited 0. The three configs are now each checked independently
+- **Orphaned subagent records were never archived**: subagents whose source file no longer exists stayed marked active indefinitely
+
+### Changed
+
+- **Database migrations extracted into their own module**, separate from the main database code
+- **Daily traffic snapshots**: GitHub keeps traffic data for a rolling 14 days and anything not captured is gone for good, so it is now snapshotted daily onto a dedicated branch. Referrer and path snapshots are keyed by full timestamp rather than date — they are the top 10 of a rolling 14-day aggregate, so two runs on the same day are not the same measurement and the later one is not a superset of the earlier
+- **The README now leads with tracing decisions back to their origin**, replacing the theme showcase
+- **Dependency updates**: Node.js 22.23.2, the TypeScript toolchain, and other safe patches
+
 ## [1.21.0] - 2026-08-01
 
 ### Added
