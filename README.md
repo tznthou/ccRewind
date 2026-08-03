@@ -18,22 +18,16 @@
   <img src="docs/preview-brand.webp" alt="ccRewind 品牌形象" width="480" />
 </p>
 
-### 三種佈景主題 × Context Budget 儀表板
+### 從結果回推決策路徑
 
-一鍵切換三種視覺風格，搭配內建 Token 用量儀表板，對話考古也可以很有氛圍感。
+對話裡藏著「這個決定當初是怎麼來的」，但 JSONL 檔案本身不會告訴你。ccRewind 把它挖出來：
 
-<table>
-  <tr>
-    <td align="center"><strong>📂 檔案室 Archive</strong></td>
-    <td align="center"><strong>🕐 時間線 Timeline</strong></td>
-    <td align="center"><strong>💻 終端回憶 Terminal</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/theme-archive.webp" alt="Archive 主題 — 暖色調檔案室風格，搭配 Context Budget 儀表板" width="320" /></td>
-    <td><img src="docs/theme-timeline.webp" alt="Timeline 主題 — 冷色調時間線風格，搭配 Context Budget 儀表板" width="320" /></td>
-    <td><img src="docs/theme-terminal.webp" alt="Terminal 主題 — 深色終端風格，搭配 Context Budget 儀表板" width="320" /></td>
-  </tr>
-</table>
+- **檔案歷史** — 點一個檔案，看它在哪些主 session 被動過、是讀取還是修改
+- **相關 Session** — 用共用檔案的 Jaccard 相似度，找出動過同一批檔案的其他對話
+- **Tasks Panel** — AI 在這段對話規劃了哪些步驟、各自的狀態與宣告的 blockedBy 相依
+- **Subagent 對話** — subagent 的完整逐字紀錄可以點進去讀，不是主對話裡的一行摘要
+
+Claude Code 預設 30 天清掉 session JSONL。過了那條線，索引庫裡的副本就是那段對話還留著的地方。
 
 ---
 
@@ -62,6 +56,21 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 ## 功能特色
 
 <details open>
+<summary><b>統計與考古</b></summary>
+
+| 功能 | 說明 |
+|------|------|
+| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（tokens/turn）、浪費偵測（高 token 低產出 session 一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
+| **跨 Session 考古** | 檔案歷史抽屜（點檔案看它在哪些 session 出現過）、相關 Session 推薦（Jaccard 相似度）、可展開 File Chips |
+| **檔案反向索引** | 每個 session 操作了哪些檔案、什麼操作（read/edit/write），可點擊檔案追蹤跨 session 歷史。同時整合 attachment 層的檔案編輯紀錄，涵蓋 tool call 以外的檔案變更 |
+| **Attribution 歸因追蹤** | 記錄每條 AI 回覆使用了哪個 Skill、Plugin、MCP Server/Tool 或 Agent——追溯「這段回答是怎麼產出的」，從結果回推決策路徑 |
+| **Session 自動摘要** | 結構化摘要引擎：意圖提取（跳過 greeting）、動作概要（Edit×8, 5 files）、outcome 推斷（committed/tested/in-progress）、20+ 條多信號標籤 |
+| **Subagent 瀏覽** | 自動掃描 `subagents/*.jsonl` 並建立索引。有 subagent 的 Session 顯示可點擊 chips（agent type + 訊息數），點擊進入後以 breadcrumb 導覽回 parent session |
+| **Tasks Panel** | 自動掃描 `~/.claude/tasks/{sessionId}/*.json` 並在 ChatView 顯示任務快照——subject、三態 status 徽章、blockedBy chips，讓你看清楚 AI 在這段對話裡規劃了哪些步驟、哪幾條卡住。append-mode (session_id, task_id) PK 與 session reindex 解耦，刪掉 session 重建時不會把任務歷史一起洗掉 |
+
+</details>
+
+<details open>
 <summary><b>對話瀏覽與搜尋</b></summary>
 
 | 功能 | 說明 |
@@ -77,7 +86,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 </details>
 
-<details open>
+<details>
 <summary><b>Token 與 Context</b></summary>
 
 | 功能 | 說明 |
@@ -86,21 +95,6 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 | **Token Insights** | 自動解讀圖表：偵測 context spike 並歸因、評估 cache 效率、標記 output 熱點、分析成長趨勢，讓圖表不只好看還能看懂 |
 | **Token 熱力指示** | Assistant 訊息左側色碼條（綠=cache 命中佳、紅=高成本），Session 列表顯示 token 總量並可依 token 排序 |
 | **精確 Token 統計** | 自動偵測同一 API response 被拆成多個 JSONL entries 的情況，透過 requestId 去重避免 token 重複計算（修正 ~2.3x 膨脹） |
-
-</details>
-
-<details>
-<summary><b>統計與考古</b></summary>
-
-| 功能 | 說明 |
-|------|------|
-| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（tokens/turn）、浪費偵測（高 token 低產出 session 一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
-| **跨 Session 考古** | 檔案歷史抽屜（點檔案看它在哪些 session 出現過）、相關 Session 推薦（Jaccard 相似度）、可展開 File Chips |
-| **檔案反向索引** | 每個 session 操作了哪些檔案、什麼操作（read/edit/write），可點擊檔案追蹤跨 session 歷史。同時整合 attachment 層的檔案編輯紀錄，涵蓋 tool call 以外的檔案變更 |
-| **Attribution 歸因追蹤** | 記錄每條 AI 回覆使用了哪個 Skill、Plugin、MCP Server/Tool 或 Agent——追溯「這段回答是怎麼產出的」，從結果回推決策路徑 |
-| **Session 自動摘要** | 結構化摘要引擎：意圖提取（跳過 greeting）、動作概要（Edit×8, 5 files）、outcome 推斷（committed/tested/in-progress）、20+ 條多信號標籤 |
-| **Subagent 瀏覽** | 自動掃描 `subagents/*.jsonl` 並建立索引。有 subagent 的 Session 顯示可點擊 chips（agent type + 訊息數），點擊進入後以 breadcrumb 導覽回 parent session |
-| **Tasks Panel** | 自動掃描 `~/.claude/tasks/{sessionId}/*.json` 並在 ChatView 顯示任務快照——subject、三態 status 徽章、blockedBy chips，讓你看清楚 AI 在這段對話裡規劃了哪些步驟、哪幾條卡住。append-mode (session_id, task_id) PK 與 session reindex 解耦，刪掉 session 重建時不會把任務歷史一起洗掉 |
 
 </details>
 
@@ -134,6 +128,23 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 | **無障礙** | WCAG 2.1 AA 對比度、ARIA 標籤（含 radio 鍵盤模式）、焦點管理 |
 
 </details>
+
+### 三種佈景主題
+
+一鍵切換三種視覺風格，搭配內建 Context Budget 儀表板。
+
+<table>
+  <tr>
+    <td align="center"><strong>📂 檔案室 Archive</strong></td>
+    <td align="center"><strong>🕐 時間線 Timeline</strong></td>
+    <td align="center"><strong>💻 終端回憶 Terminal</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/theme-archive.webp" alt="Archive 主題 — 暖色調檔案室風格，搭配 Context Budget 儀表板" width="320" /></td>
+    <td><img src="docs/theme-timeline.webp" alt="Timeline 主題 — 冷色調時間線風格，搭配 Context Budget 儀表板" width="320" /></td>
+    <td><img src="docs/theme-terminal.webp" alt="Terminal 主題 — 深色終端風格，搭配 Context Budget 儀表板" width="320" /></td>
+  </tr>
+</table>
 
 ---
 

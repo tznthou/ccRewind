@@ -18,22 +18,16 @@ Retrace every decision you made with Claude Code. Lightweight, read-only, offlin
   <img src="docs/preview-brand.webp" alt="ccRewind Branding" width="480" />
 </p>
 
-### Three Themes × Context Budget Dashboard
+### Work Back From the Result to the Decision
 
-Switch between three visual themes with one click. Built-in token usage dashboard lets you review conversations in style.
+Your conversations hold the reasoning behind how decisions were reached, but the raw JSONL files won't hand it to you. ccRewind digs it out:
 
-<table>
-  <tr>
-    <td align="center"><strong>📂 Archive</strong></td>
-    <td align="center"><strong>🕐 Timeline</strong></td>
-    <td align="center"><strong>💻 Terminal</strong></td>
-  </tr>
-  <tr>
-    <td><img src="docs/theme-archive.webp" alt="Archive theme — warm-toned file cabinet style with Context Budget dashboard" width="320" /></td>
-    <td><img src="docs/theme-timeline.webp" alt="Timeline theme — cool-toned timeline style with Context Budget dashboard" width="320" /></td>
-    <td><img src="docs/theme-terminal.webp" alt="Terminal theme — dark terminal style with Context Budget dashboard" width="320" /></td>
-  </tr>
-</table>
+- **File history** — click a file to see which main sessions touched it, and whether they read or changed it
+- **Related sessions** — Jaccard similarity over shared files surfaces other conversations that touched the same set
+- **Tasks panel** — what steps the AI planned in this conversation, their status, and the blockedBy dependencies they declare
+- **Subagent conversations** — a subagent's full transcript is there to open, not one summary line in the parent
+
+Claude Code clears out session JSONL after 30 days by default. Past that line, the copy in your index is where that conversation still lives.
 
 ---
 
@@ -62,6 +56,21 @@ Built for depth, not breadth.
 ## Features
 
 <details open>
+<summary><b>Statistics & Archaeology</b></summary>
+
+| Feature | Description |
+|---------|-------------|
+| **Statistics Dashboard** | Cross-session analytics: usage trend (dual-axis area chart), efficiency trend (tokens/turn), waste detection (high-token low-outcome sessions with click-to-navigate), project health (outcome stacked bar + trend arrows), tool/tag distribution, work pattern heatmap |
+| **Cross-Session Archaeology** | File history drawer (click a file to see every session that touched it), related session recommendations (Jaccard similarity), expandable file chips |
+| **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions. Also integrates attachment-level file edit records, covering file changes beyond tool calls |
+| **Attribution Tracking** | Records which Skill, Plugin, MCP Server/Tool, or Agent produced each AI response — trace "how was this answer generated" and reconstruct the decision path from output back to tooling |
+| **Session Auto-Summary** | Structured rule engine: intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), outcome inference (committed/tested/in-progress), and 20+ multi-signal tags |
+| **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
+| **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. Append-mode (session_id, task_id) PK is decoupled from session reindex, so deleting and rebuilding a session never wipes its task history |
+
+</details>
+
+<details open>
 <summary><b>Browsing & Search</b></summary>
 
 | Feature | Description |
@@ -77,7 +86,7 @@ Built for depth, not breadth.
 
 </details>
 
-<details open>
+<details>
 <summary><b>Token & Context</b></summary>
 
 | Feature | Description |
@@ -86,21 +95,6 @@ Built for depth, not breadth.
 | **Token Insights** | Auto-interpret the charts: detect context spikes and attribute them, evaluate cache efficiency, mark output hotspots, analyse growth trends — so the charts aren't just pretty, they're readable |
 | **Token Heat Indicators** | Color bar on the left of assistant messages (green = good cache hit, red = high cost). Session list shows total tokens and supports token-based sorting |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
-
-</details>
-
-<details>
-<summary><b>Statistics & Archaeology</b></summary>
-
-| Feature | Description |
-|---------|-------------|
-| **Statistics Dashboard** | Cross-session analytics: usage trend (dual-axis area chart), efficiency trend (tokens/turn), waste detection (high-token low-outcome sessions with click-to-navigate), project health (outcome stacked bar + trend arrows), tool/tag distribution, work pattern heatmap |
-| **Cross-Session Archaeology** | File history drawer (click a file to see every session that touched it), related session recommendations (Jaccard similarity), expandable file chips |
-| **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions. Also integrates attachment-level file edit records, covering file changes beyond tool calls |
-| **Attribution Tracking** | Records which Skill, Plugin, MCP Server/Tool, or Agent produced each AI response — trace "how was this answer generated" and reconstruct the decision path from output back to tooling |
-| **Session Auto-Summary** | Structured rule engine: intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), outcome inference (committed/tested/in-progress), and 20+ multi-signal tags |
-| **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
-| **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. Append-mode (session_id, task_id) PK is decoupled from session reindex, so deleting and rebuilding a session never wipes its task history |
 
 </details>
 
@@ -134,6 +128,24 @@ Built for depth, not breadth.
 | **Accessibility** | WCAG 2.1 AA contrast, ARIA labels (incl. radio keyboard pattern), focus management |
 
 </details>
+
+### Three Themes
+
+Switch between three visual themes with one click, each with the built-in Context Budget dashboard.
+
+<table>
+  <tr>
+    <td align="center"><strong>📂 Archive</strong></td>
+    <td align="center"><strong>🕐 Timeline</strong></td>
+    <td align="center"><strong>💻 Terminal</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/theme-archive.webp" alt="Archive theme — warm-toned file cabinet style with Context Budget dashboard" width="320" /></td>
+    <td><img src="docs/theme-timeline.webp" alt="Timeline theme — cool-toned timeline style with Context Budget dashboard" width="320" /></td>
+    <td><img src="docs/theme-terminal.webp" alt="Terminal theme — dark terminal style with Context Budget dashboard" width="320" /></td>
+  </tr>
+</table>
+
 
 ---
 
