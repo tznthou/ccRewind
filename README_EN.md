@@ -172,7 +172,7 @@ graph TB
     subgraph Renderer Process
         SB[Sidebar<br>Project List + Session List + Search]
         CV[ChatView<br>Conversation Reader + Token Budget<br>+ File Chips + Related Sessions]
-        DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Waste Detection · Tool/Tag Distribution · Work Patterns]
+        DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Unresolved Sessions · Tool/Tag Distribution · Work Patterns]
         FH[FileHistoryDrawer<br>Cross-Session File History Timeline]
         SP[StoragePage<br>Overview cards · Project bars<br>Exclusion rules · Confirm Dialog]
     end
@@ -278,7 +278,7 @@ ccRewind/
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
 │   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + Tasks Panel + export
-│   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
+│   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, unresolved sessions, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights

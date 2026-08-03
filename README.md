@@ -172,7 +172,7 @@ graph TB
     subgraph Renderer Process
         SB[Sidebar<br>專案選擇 + Session 清單 + 搜尋]
         CV[ChatView<br>對話閱讀器 + Token Budget<br>+ File Chips + Related Sessions]
-        DB_UI[Dashboard<br>使用/效率趨勢 · 專案健康度 · 浪費偵測<br>工具分佈 · 標籤分佈 · 工作模式熱力圖]
+        DB_UI[Dashboard<br>使用/效率趨勢 · 專案健康度 · 未收尾的對話<br>工具分佈 · 標籤分佈 · 工作模式熱力圖]
         FH[FileHistoryDrawer<br>跨 Session 檔案歷史時間軸]
         SP[StoragePage<br>總覽卡 · 專案佔用 bar<br>排除規則 · 統一 Confirm Dialog]
     end
@@ -278,7 +278,7 @@ ccRewind/
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # 專案選擇 + Session 清單 + 搜尋
 │   │   │   ├── ChatView/      # 對話閱讀器 + Token 熱力指示 + File Chips + Subagent 導覽 + Tasks Panel + 匯出
-│   │   │   ├── Dashboard/     # 統計儀表板：使用/效率趨勢、專案健康度、浪費偵測、工具/標籤分佈、工作模式
+│   │   │   ├── Dashboard/     # 統計儀表板：使用/效率趨勢、專案健康度、未收尾的對話、工具/標籤分佈、工作模式
 │   │   │   ├── Archaeology/   # 跨 Session 考古：FileHistoryDrawer、RelatedSessionsPanel
 │   │   │   ├── Storage/       # 儲存管理：總覽卡、專案佔用 bar、排除規則、統一 Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget 面板：面積圖、圓餅圖、熱力條、Insights

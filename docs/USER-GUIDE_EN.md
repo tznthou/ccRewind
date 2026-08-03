@@ -49,11 +49,11 @@ Each session row in the sidebar shows the total token count (e.g. 1.2M), and cli
 
 ## Dashboard
 
-Click the Dashboard icon (four-square grid) in the title bar to switch to the cross-session analytics view, which offers seven panels:
+Click the Dashboard icon (four-square grid) in the title bar to switch to the cross-session analytics view, which offers six panels:
 
-- **Usage / Efficiency Trend**: Dual-axis area chart (session count + token consumption), switchable to efficiency trend (daily average tokens/turn), with 7D / 30D / 90D / All range selection
-- **Project Health**: Replaces the old project ranking — each project shows an outcome stacked bar (committed/tested/in-progress/quick-qa/unknown), a 7-day trend arrow, and average tokens/turn
-- **Waste Detection**: Lists sessions with the highest token consumption but no commit or test outcome, showing intent, token count, duration, file count, and outcome badge. Click any entry to jump straight to its replay
+- **Usage / Efficiency Trend**: Dual-axis area chart (session count + token consumption), switchable to efficiency trend (daily average tokens per JSONL record), with 7D / 30D / 90D / All range selection
+- **Project Health**: Replaces the old project ranking — each project shows an outcome stacked bar (committed/tested/in-progress/quick-qa/unknown), a 7-day trend arrow, and average tokens per record
+- **Unresolved Sessions**: Lists sessions with the highest token consumption but no commit or test outcome, showing intent, token count, duration, file count, and outcome badge. Click any entry to jump straight to its replay
 - **Tool Usage / Tags**: Donut charts showing tool usage frequency and tag distribution respectively
 - **Work Patterns**: 24-hour activity heatmap plus average session duration — your most productive hours at a glance
 
