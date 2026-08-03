@@ -154,6 +154,11 @@ describe('subagent DB integration', () => {
         toolNames: [], timestamp: '2024-06-01T00:00:00.000Z', sequence: 0,
         rawJson: null, inputTokens: null, outputTokens: null,
         cacheReadTokens: null, cacheCreationTokens: null, model: null,
+        hasImage: false, attributionSkill: null, attributionPlugin: null,
+        attributionMcpServer: null, attributionMcpTool: null, attributionAgent: null,
+        systemSubtype: null, apiErrorStatus: null, parentUuid: null,
+        isCompactSummary: false, isSidechain: false, isAbandonedBranch: false,
+        version: null, frameUrl: null,
       }],
     })
 

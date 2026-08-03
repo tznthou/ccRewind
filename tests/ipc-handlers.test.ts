@@ -26,6 +26,7 @@ function getHandler(channel: string) {
 /** DRY helper：建立測試用 MessageInput */
 function msg(overrides: Partial<MessageInput> & Pick<MessageInput, 'type' | 'role' | 'sequence'>): MessageInput {
   return {
+    uuid: null,
     contentText: null,
     contentJson: null,
     hasToolUse: false,
@@ -33,6 +34,25 @@ function msg(overrides: Partial<MessageInput> & Pick<MessageInput, 'type' | 'rol
     toolNames: [],
     timestamp: null,
     rawJson: null,
+    inputTokens: null,
+    outputTokens: null,
+    cacheReadTokens: null,
+    cacheCreationTokens: null,
+    model: null,
+    hasImage: false,
+    attributionSkill: null,
+    attributionPlugin: null,
+    attributionMcpServer: null,
+    attributionMcpTool: null,
+    attributionAgent: null,
+    systemSubtype: null,
+    apiErrorStatus: null,
+    parentUuid: null,
+    isCompactSummary: false,
+    isSidechain: false,
+    isAbandonedBranch: false,
+    version: null,
+    frameUrl: null,
     ...overrides,
   }
 }
@@ -375,7 +395,10 @@ describe('IPC Handlers', () => {
         { webContents: { send: mockSend } } as unknown as Electron.BrowserWindow,
       ])
 
-      const status = { phase: 'indexing' as const, progress: 50, total: 10, current: 5 }
+      const status = {
+        phase: 'indexing' as const, progress: 50, total: 10, current: 5,
+        skipped: 0, lastIndexedAt: null,
+      }
       sendIndexerStatus(status)
       expect(mockSend).toHaveBeenCalledWith('indexer:status', status)
     })
@@ -384,6 +407,7 @@ describe('IPC Handlers', () => {
       vi.mocked(BrowserWindow.getAllWindows).mockReturnValue([])
       expect(() => sendIndexerStatus({
         phase: 'done', progress: 100, total: 0, current: 0,
+        skipped: 0, lastIndexedAt: '2026-08-02T00:00:00.000Z',
       })).not.toThrow()
     })
   })

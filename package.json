@@ -8,7 +8,7 @@
     "dev": "unset ELECTRON_RUN_AS_NODE && electron-vite dev",
     "build": "electron-vite build",
     "dist": "electron-builder build --config electron-builder.yml",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc -b && tsc -p tsconfig.test.json --noEmit && tsc -p tsconfig.config.json --noEmit",
     "lint": "eslint . --fix",
     "test": "ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron ./node_modules/vitest/vitest.mjs run",
     "test:coverage": "ELECTRON_RUN_AS_NODE=1 ./node_modules/.bin/electron ./node_modules/vitest/vitest.mjs run --coverage",
