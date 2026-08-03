@@ -1851,6 +1851,7 @@ export class Database {
       const affectedProjects = new Set(sessions.map(s => s.project_id))
 
       this.deleteSessionsBatch(allIds, sessionIds)
+      if (sessionIds.length > 0) this.requeueMetadataOnlyParents()
       const createdRule = this.addExclusionRule(rule)
       for (const pid of affectedProjects) this.updateProjectStats(pid)
       deletedCount = allIds.length
@@ -1862,6 +1863,31 @@ export class Database {
       try { this.db.exec('VACUUM'); vacuumed = true } catch { /* delete already committed */ }
     }
     return { rule: result, releasedBytes: Math.max(0, bytesBefore - this.getDbBytes()), vacuumed }
+  }
+
+  /**
+   * 把 metadata-only parent（message_count = 0）的 summary_version 歸零，讓下一輪索引重試它們。
+   *
+   * 這些列的內容不在自己名下：它們是 resume 產生的 session，檔案裡 replay 了前一輪的
+   * entries，索引時整批撞上 owner 的 UUID 被去重成空，只留一列把 subagent 接住。owner 剛
+   * 被硬刪掉的話那批 UUID 就空出來了，重新索引能把內容收回它自己名下——但它的檔案 mtime
+   * 不會因為別人被刪而改變，summary_version 又是當前版，summaryStale 永遠排不到它。
+   * 結果是磁碟上檔案還在、DB 卻永久讀不到那段對話。歸零是唯一能把它排回佇列的訊號。
+   *
+   * 掃全部 metadata-only parent 而不只跟被刪 session 相關的那些：UUID 去重當下沒有留下
+   * 「這列的內容歸屬誰」的紀錄，DB 裡查不出精確集合。多標的那些下一輪重試一次、發現仍是
+   * 空的就寫回當前版本，成本是一次 parse；漏標的則是永久丟資料，代價不對等。
+   * 只在真的刪掉 session 時呼叫，所以這不是每輪索引的常態開銷。
+   *
+   * 排除 subagent：它們走 subagent_sessions 自己的 mtime 比對重新索引，不看 summary_version。
+   */
+  private requeueMetadataOnlyParents(): void {
+    this.db.prepare(`
+      UPDATE sessions SET summary_version = NULL
+      WHERE message_count = 0
+        AND summary_version IS NOT NULL
+        AND id ${Database.EXCLUDE_SUBAGENTS}
+    `).run()
   }
 
   /** 將多個 session 從 sessions_fts 移除（external content FTS5 需手動維護）*/
