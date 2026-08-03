@@ -64,6 +64,7 @@ jobs:
           fi
 
           today=$(date -u +%Y-%m-%d)
+          snapshot_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           mkdir -p data
 
           # A 403 here is almost never an outage — it is the PAT having expired or
@@ -89,12 +90,19 @@ jobs:
             mv "data/$kind.json.tmp" "data/$kind.json"
           done
 
-          # referrers and paths have NO per-day breakdown — the API only returns a
-          # 14-day aggregate. There is nothing to merge day-by-day, so each run is
-          # stored as its own dated snapshot and the series is read as a trend.
+          # referrers and paths have NO per-day breakdown — the API returns a top-10
+          # slice of a rolling 14-day aggregate. Each run is therefore keyed by its
+          # full timestamp, not by date: two runs on the same UTC day are NOT the same
+          # measurement, and the later one is not a superset of the earlier. A new
+          # referrer can push an existing one out of the top 10, and an existing one's
+          # traffic can age out of the 14-day window between the two runs. Keying by
+          # date would let the second run overwrite the first and take those entries
+          # with it — which is the exact data loss this workflow exists to prevent.
+          # (views/clones above are different: they carry the day itself, so a later
+          # run genuinely does supersede an earlier one for that day.)
           for kind in referrers paths; do
             fetch "repos/$REPO/traffic/popular/$kind" "raw-$kind.json"
-            jq --arg d "$today" '{($d): .}' "raw-$kind.json" > "new-$kind.json"
+            jq --arg d "$snapshot_at" '{($d): .}' "raw-$kind.json" > "new-$kind.json"
             [ -f "data/$kind.json" ] || echo '{}' > "data/$kind.json"
             jq -s '.[0] * .[1]' "data/$kind.json" "new-$kind.json" > "data/$kind.json.tmp"
             mv "data/$kind.json.tmp" "data/$kind.json"
@@ -102,9 +110,9 @@ jobs:
 
           rm -f raw-*.json new-*.json fetch-err.txt
 
-          echo "Snapshot for $today:"
+          echo "Snapshot at $snapshot_at:"
           jq --arg d "$today" '.[$d] // "no entry for today"' data/views.json
-          jq --arg d "$today" '.[$d]' data/referrers.json
+          jq --arg d "$snapshot_at" '.[$d]' data/referrers.json
 
       - name: Commit and push
         run: |
