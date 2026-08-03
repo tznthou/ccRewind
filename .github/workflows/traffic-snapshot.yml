@@ -1,0 +1,128 @@
+name: Traffic snapshot
+
+# GitHub only keeps traffic data for a rolling 14 days. Anything not captured
+# before it ages out is gone for good, so this snapshots it daily onto a
+# dedicated `traffic-data` branch (never main — that branch is protected and
+# this data has no business in the code history).
+#
+# Token split, on purpose:
+#   - reading  /traffic/* needs push-level access, which GITHUB_TOKEN does not
+#     have (it 403s), so it uses a narrow PAT: TRAFFIC_READ_TOKEN
+#   - writing  the data branch uses the built-in GITHUB_TOKEN
+# That way the PAT only ever needs read scope; nothing hands a write-capable
+# token to code we don't control.
+
+on:
+  schedule:
+    - cron: '17 3 * * *'  # 03:17 UTC daily; off-the-hour to dodge cron congestion
+  workflow_dispatch:  # manual trigger, used to verify the first run
+
+permissions:
+  contents: write  # push snapshots to the traffic-data branch
+
+concurrency:
+  group: traffic-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      # Pinned to a commit SHA, not the v6 tag: this job holds contents:write and runs
+      # a step carrying TRAFFIC_READ_TOKEN, and a moving tag means a compromise of the
+      # action repo executes with both. A full SHA is the only immutable reference.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6.1.0
+
+      - name: Check out (or create) the traffic-data branch
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code --heads origin traffic-data >/dev/null 2>&1; then
+            # Explicit refspec: the checkout action only fetches the ref it checked
+            # out, so origin/traffic-data does not exist as a tracking ref to branch from.
+            git fetch --depth 1 origin traffic-data:traffic-data
+            git checkout traffic-data
+          else
+            # First run: start an orphan branch so the data carries no code history.
+            # Clearing the index is enough — the later `git add data` never stages
+            # the leftover working-tree files.
+            git checkout --orphan traffic-data
+            git rm -rfq --cached .
+          fi
+
+      - name: Fetch traffic and merge into the archive
+        env:
+          GH_TOKEN: ${{ secrets.TRAFFIC_READ_TOKEN }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::TRAFFIC_READ_TOKEN is not set. The traffic API needs a PAT with Administration:read — GITHUB_TOKEN returns 403 here."
+            exit 1
+          fi
+
+          today=$(date -u +%Y-%m-%d)
+          snapshot_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          mkdir -p data
+
+          # A 403 here is almost never an outage — it is the PAT having expired or
+          # lost Administration:read. Say that out loud, instead of leaving a bare
+          # HTTP error for someone to decode months from now.
+          fetch() {
+            if ! gh api "$1" > "$2" 2>fetch-err.txt; then
+              echo "::error::Cannot read $1. Check the TRAFFIC_READ_TOKEN secret — it needs Administration:read on this repo and it carries an expiry date. This is the token far more often than it is GitHub being down."
+              cat fetch-err.txt >&2
+              return 1
+            fi
+          }
+
+          # views and clones carry a per-day breakdown, so key them by day and let
+          # a later run overwrite an earlier one: today's numbers are still partial
+          # when we read them, and tomorrow's run sees the finished figure.
+          for kind in views clones; do
+            fetch "repos/$REPO/traffic/$kind" "raw-$kind.json"
+            jq --arg k "$kind" '[.[$k][] | {(.timestamp[0:10]): {count, uniques}}] | add // {}' \
+              "raw-$kind.json" > "new-$kind.json"
+            [ -f "data/$kind.json" ] || echo '{}' > "data/$kind.json"
+            jq -s '.[0] * .[1]' "data/$kind.json" "new-$kind.json" > "data/$kind.json.tmp"
+            mv "data/$kind.json.tmp" "data/$kind.json"
+          done
+
+          # referrers and paths have NO per-day breakdown — the API returns a top-10
+          # slice of a rolling 14-day aggregate. Each run is therefore keyed by its
+          # full timestamp, not by date: two runs on the same UTC day are NOT the same
+          # measurement, and the later one is not a superset of the earlier. A new
+          # referrer can push an existing one out of the top 10, and an existing one's
+          # traffic can age out of the 14-day window between the two runs. Keying by
+          # date would let the second run overwrite the first and take those entries
+          # with it — which is the exact data loss this workflow exists to prevent.
+          # (views/clones above are different: they carry the day itself, so a later
+          # run genuinely does supersede an earlier one for that day.)
+          for kind in referrers paths; do
+            fetch "repos/$REPO/traffic/popular/$kind" "raw-$kind.json"
+            jq --arg d "$snapshot_at" '{($d): .}' "raw-$kind.json" > "new-$kind.json"
+            [ -f "data/$kind.json" ] || echo '{}' > "data/$kind.json"
+            jq -s '.[0] * .[1]' "data/$kind.json" "new-$kind.json" > "data/$kind.json.tmp"
+            mv "data/$kind.json.tmp" "data/$kind.json"
+          done
+
+          rm -f raw-*.json new-*.json fetch-err.txt
+
+          echo "Snapshot at $snapshot_at:"
+          jq --arg d "$today" '.[$d] // "no entry for today"' data/views.json
+          jq --arg d "$snapshot_at" '.[$d]' data/referrers.json
+
+      - name: Commit and push
+        run: |
+          set -euo pipefail
+          git add data
+          if git diff --cached --quiet; then
+            echo "Nothing changed — no commit."
+            exit 0
+          fi
+          git -c user.name='github-actions[bot]' \
+              -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+              commit -m "chore(traffic): snapshot $(date -u +%Y-%m-%d)"
+          git push origin traffic-data
