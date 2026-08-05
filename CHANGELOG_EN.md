@@ -7,6 +7,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.2] - 2026-08-05
+
+### Fixed
+
+- **The efficiency trend was labelled "Tokens/Turn", but turns are not what it counts**: the divisor is the count of JSONL records the session retained after indexing, and fully half of those records are `attachment`, `progress`, `permission-mode` and similar state entries rather than conversation. Measured across 674,569 indexed rows, actual user messages number only 17,501 — treating record count as turn count inflates the divisor 38.5x. The efficiency chart's tooltip now reads "Tokens/Message", the project health card's unit reads `/msg`, and the docs spell out "average tokens per JSONL record". **The number itself has not changed.** Nor is the new label exact — the divisor still counts JSONL records rather than conversation messages; it has merely stopped calling them turns
+- **The name "Waste Detection" lingered in the docs**: it was once this feature's official name, renamed to Unresolved Sessions back in v1.12.0 ([#19](https://github.com/tznthou/ccRewind/pull/19)) — but that rename was frontend-only, deliberately leaving the `stats:waste` IPC channel and the `WasteSession` type at the boundary. That release's notes stated the two-name asymmetry "lives only at the IPC seam"; that understated its reach. Five documents — both READMEs, both user guides and the getting-started doc — kept the old name as well, for nearly three months. Separately, the feature applies no "high token" threshold of any kind: it takes sessions with no commit/test outcome, ranks them by token spend, and the panel shows the top 10. The docs now match the UI
+- **The file index docs omitted a fourth operation**: Glob and Grep are recorded as `discovery`, where the docs listed only read/edit/write. The file index also does not extract file paths from Bash command contents, which had gone unmentioned
+- **The Tasks Panel docs described overwriting as accumulation**: a task moving from in-progress to completed keeps only its final state, not a snapshot of every step
+
 ## [1.21.1] - 2026-08-03
 
 ### Fixed
