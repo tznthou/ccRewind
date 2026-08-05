@@ -1212,7 +1212,7 @@ describe('Phase 3.5: getRelatedSessions', () => {
 
 describe('Phase 4: getEfficiencyTrend', () => {
   beforeEach(() => {
-    // Session with 10 messages, 5000 total tokens => 500 tokens/turn
+    // Session with 10 JSONL records, 5000 total tokens => 500 tokens per record
     db.indexSession({
       sessionId: 'eff-001', projectId: 'proj-eff', projectDisplayName: '/test/eff',
       title: 'Efficient session', messageCount: 10, filePath: '/tmp/eff1.jsonl', fileSize: 0,
@@ -1220,7 +1220,7 @@ describe('Phase 4: getEfficiencyTrend', () => {
       startedAt: '2024-03-01T10:00:00.000Z', endedAt: '2024-03-01T11:00:00.000Z',
       messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 3000, outputTokens: 2000 })],
     })
-    // Session with 2 messages, 10000 total tokens => 5000 tokens/turn
+    // Session with 2 JSONL records, 10000 total tokens => 5000 tokens per record
     db.indexSession({
       sessionId: 'eff-002', projectId: 'proj-eff', projectDisplayName: '/test/eff',
       title: 'Wasteful session', messageCount: 2, filePath: '/tmp/eff2.jsonl', fileSize: 0,
@@ -1230,10 +1230,10 @@ describe('Phase 4: getEfficiencyTrend', () => {
     })
   })
 
-  it('computes daily avg tokens/turn', () => {
+  it('computes daily avg tokens per JSONL record', () => {
     const trend = db.getEfficiencyTrend(null, 0)
     const day = trend.find(d => d.date === '2024-03-01')!
-    // total tokens = 15000, total turns = 12, avg = 1250
+    // total tokens = 15000, total JSONL records = 12, avg = 1250
     expect(day.avgTokensPerTurn).toBe(1250)
     expect(day.totalTurns).toBe(12)
     expect(day.sessionCount).toBe(2)
@@ -1337,10 +1337,10 @@ describe('Phase 4: getProjectHealth', () => {
     expect(h.outcomeDistribution.inProgress).toBe(0)
   })
 
-  it('computes avg tokens/turn across all sessions', () => {
+  it('computes avg tokens per JSONL record across all sessions', () => {
     const health = db.getProjectHealth()
     const h = health.find(p => p.projectId === 'proj-h')!
-    // total tokens = 12500, total turns = 18, avg ≈ 694
+    // total tokens = 12500, total JSONL records = 18, avg ≈ 694
     expect(h.avgTokensPerTurn).toBe(694)
   })
 })

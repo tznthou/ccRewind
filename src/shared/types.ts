@@ -439,7 +439,7 @@ export interface ElectronAPI {
   getWorkPatterns: (projectId?: string | null) => Promise<WorkPatterns>
   /** 效率趨勢（每日 token ÷ JSONL 記錄數） */
   getEfficiencyTrend: (projectId?: string | null, days?: number) => Promise<DailyEfficiency[]>
-  /** 未收尾的對話（無 commit/test outcome，依 token 由高到低） */
+  /** 未收尾的對話（無 commit/test outcome，依 token 用量由高到低） */
   getWasteSessions: (projectId?: string | null, limit?: number) => Promise<WasteSession[]>
   /** 專案健康（outcome 分佈 + 趨勢） */
   getProjectHealth: () => Promise<ProjectHealth[]>

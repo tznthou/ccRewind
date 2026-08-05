@@ -60,7 +60,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 | 功能 | 說明 |
 |------|------|
-| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（每則 JSONL 記錄的平均 token）、未收尾的對話（沒有 commit/test 結果的 session 依 token 由高到低排序，一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
+| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（每則 JSONL 記錄的平均 token）、未收尾的對話（沒有 commit/test 結果的 session 依 token 用量由高到低排序，一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
 | **跨 Session 考古** | 檔案歷史抽屜（點檔案看它在哪些 session 出現過）、相關 Session 推薦（Jaccard 相似度）、可展開 File Chips |
 | **檔案反向索引** | 每個 session 操作了哪些檔案、什麼操作（Read·Edit·Write 記為 read/edit/write，Glob·Grep 記為 discovery），可點擊檔案追蹤跨 session 歷史。同時整合 attachment 層的檔案編輯紀錄，涵蓋 tool call 以外的檔案變更；Bash 指令內的檔案操作不在索引範圍 |
 | **Attribution 歸因追蹤** | 記錄每條 AI 回覆使用了哪個 Skill、Plugin、MCP Server/Tool 或 Agent——追溯「這段回答是怎麼產出的」，從結果回推決策路徑 |
