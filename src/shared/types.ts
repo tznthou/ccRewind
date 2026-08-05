@@ -252,13 +252,14 @@ export interface WorkPatterns {
 /** 每日效率趨勢 */
 export interface DailyEfficiency {
   date: string
-  /** 當日平均 tokens/turn */
+  /** 當日 token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
   avgTokensPerTurn: number
   sessionCount: number
+  /** message_count 加總 = JSONL 記錄數，非對話輪次 */
   totalTurns: number
 }
 
-/** 浪費偵測條目 */
+/** 未收尾的對話條目（IPC boundary 型別名沿用舊稱，見 ROADMAP 的 rename 記錄） */
 export interface WasteSession {
   sessionId: string
   intentText: string | null
@@ -436,9 +437,9 @@ export interface ElectronAPI {
   getTagDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
   /** 工作模式 */
   getWorkPatterns: (projectId?: string | null) => Promise<WorkPatterns>
-  /** 效率趨勢（tokens/turn 每日） */
+  /** 效率趨勢（每日 token ÷ JSONL 記錄數） */
   getEfficiencyTrend: (projectId?: string | null, days?: number) => Promise<DailyEfficiency[]>
-  /** 浪費偵測（高 token 低產出 session） */
+  /** 未收尾的對話（無 commit/test outcome，依 token 用量由高到低） */
   getWasteSessions: (projectId?: string | null, limit?: number) => Promise<WasteSession[]>
   /** 專案健康（outcome 分佈 + 趨勢） */
   getProjectHealth: () => Promise<ProjectHealth[]>

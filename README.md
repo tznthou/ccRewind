@@ -60,13 +60,13 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 | 功能 | 說明 |
 |------|------|
-| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（tokens/turn）、浪費偵測（高 token 低產出 session 一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
+| **統計儀表板** | 跨 session 分析：使用趨勢（雙軸面積圖）、效率趨勢（每則 JSONL 記錄的平均 token）、未收尾的對話（沒有 commit/test 結果的 session 依 token 用量由高到低排序，一鍵跳轉）、專案健康度（outcome 堆疊條 + 趨勢箭頭）、工具/標籤分佈、工作模式熱力圖 |
 | **跨 Session 考古** | 檔案歷史抽屜（點檔案看它在哪些 session 出現過）、相關 Session 推薦（Jaccard 相似度）、可展開 File Chips |
-| **檔案反向索引** | 每個 session 操作了哪些檔案、什麼操作（read/edit/write），可點擊檔案追蹤跨 session 歷史。同時整合 attachment 層的檔案編輯紀錄，涵蓋 tool call 以外的檔案變更 |
+| **檔案反向索引** | 每個 session 操作了哪些檔案、什麼操作（Read·Edit·Write 記為 read/edit/write，Glob·Grep 記為 discovery），可點擊檔案追蹤跨 session 歷史。同時整合 attachment 層的檔案編輯紀錄，涵蓋 tool call 以外的檔案變更；Bash 指令內的檔案操作不在索引範圍 |
 | **Attribution 歸因追蹤** | 記錄每條 AI 回覆使用了哪個 Skill、Plugin、MCP Server/Tool 或 Agent——追溯「這段回答是怎麼產出的」，從結果回推決策路徑 |
 | **Session 自動摘要** | 結構化摘要引擎：意圖提取（跳過 greeting）、動作概要（Edit×8, 5 files）、outcome 推斷（committed/tested/in-progress）、20+ 條多信號標籤 |
-| **Subagent 瀏覽** | 自動掃描 `subagents/*.jsonl` 並建立索引。有 subagent 的 Session 顯示可點擊 chips（agent type + 訊息數），點擊進入後以 breadcrumb 導覽回 parent session |
-| **Tasks Panel** | 自動掃描 `~/.claude/tasks/{sessionId}/*.json` 並在 ChatView 顯示任務快照——subject、三態 status 徽章、blockedBy chips，讓你看清楚 AI 在這段對話裡規劃了哪些步驟、哪幾條卡住。append-mode (session_id, task_id) PK 與 session reindex 解耦，刪掉 session 重建時不會把任務歷史一起洗掉 |
+| **Subagent 瀏覽** | 自動掃描 `subagents/*.jsonl` 並建立索引。有 subagent 的 Session 顯示可點擊 chips（agent type + 訊息數；JSONL 未記錄 agent type 時顯示通用標籤），點擊進入後以 breadcrumb 導覽回 parent session |
+| **Tasks Panel** | 自動掃描 `~/.claude/tasks/{sessionId}/*.json` 並在 ChatView 顯示任務快照——subject、三態 status 徽章、blockedBy chips，讓你看清楚 AI 在這段對話裡規劃了哪些步驟、哪幾條卡住。`(session_id, task_id)` PK 獨立於 session reindex，刪掉 session 重建時不會把任務資料一起洗掉；同一 task 以最新狀態覆寫，不保留狀態變化過程 |
 
 </details>
 
@@ -172,7 +172,7 @@ graph TB
     subgraph Renderer Process
         SB[Sidebar<br>專案選擇 + Session 清單 + 搜尋]
         CV[ChatView<br>對話閱讀器 + Token Budget<br>+ File Chips + Related Sessions]
-        DB_UI[Dashboard<br>使用/效率趨勢 · 專案健康度 · 浪費偵測<br>工具分佈 · 標籤分佈 · 工作模式熱力圖]
+        DB_UI[Dashboard<br>使用/效率趨勢 · 專案健康度 · 未收尾的對話<br>工具分佈 · 標籤分佈 · 工作模式熱力圖]
         FH[FileHistoryDrawer<br>跨 Session 檔案歷史時間軸]
         SP[StoragePage<br>總覽卡 · 專案佔用 bar<br>排除規則 · 統一 Confirm Dialog]
     end
@@ -278,7 +278,7 @@ ccRewind/
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # 專案選擇 + Session 清單 + 搜尋
 │   │   │   ├── ChatView/      # 對話閱讀器 + Token 熱力指示 + File Chips + Subagent 導覽 + Tasks Panel + 匯出
-│   │   │   ├── Dashboard/     # 統計儀表板：使用/效率趨勢、專案健康度、浪費偵測、工具/標籤分佈、工作模式
+│   │   │   ├── Dashboard/     # 統計儀表板：使用/效率趨勢、專案健康度、未收尾的對話、工具/標籤分佈、工作模式
 │   │   │   ├── Archaeology/   # 跨 Session 考古：FileHistoryDrawer、RelatedSessionsPanel
 │   │   │   ├── Storage/       # 儲存管理：總覽卡、專案佔用 bar、排除規則、統一 Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget 面板：面積圖、圓餅圖、熱力條、Insights

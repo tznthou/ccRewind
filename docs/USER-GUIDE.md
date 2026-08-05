@@ -49,11 +49,11 @@ Session 列表的每筆項目旁顯示 token 總量（如 1.2M），並可點擊
 
 ## 統計儀表板
 
-點擊標題列的 Dashboard 圖示（四格方塊）切換到統計視圖，提供七個跨 Session 分析面板：
+點擊標題列的 Dashboard 圖示（四格方塊）切換到統計視圖，提供六個跨 Session 分析面板：
 
-- **Usage / Efficiency Trend**：雙軸面積圖（session 數 + token 消耗），可切換為效率趨勢（每日平均 tokens/turn），支援 7D / 30D / 90D / All 切換
-- **Project Health**：取代舊版專案排名，每個專案顯示 outcome 堆疊橫條（committed/tested/in-progress/quick-qa/unknown）、7 天趨勢箭頭、平均 tokens/turn
-- **Waste Detection**：列出消耗最多 token 但無 commit/test 產出的 session，顯示意圖、token 數、時長、檔案數、outcome badge，點擊可直接跳轉回放
+- **Usage / Efficiency Trend**：雙軸面積圖（session 數 + token 消耗），可切換為效率趨勢（每日平均每則 JSONL 記錄的 token），支援 7D / 30D / 90D / All 切換
+- **Project Health**：取代舊版專案排名，每個專案顯示 outcome 堆疊橫條（committed/tested/in-progress/quick-qa/unknown）、7 天趨勢箭頭、平均每則記錄的 token
+- **未收尾的對話**：列出消耗最多 token 但無 commit/test 產出的 session，顯示意圖、token 數、時長、檔案數、outcome badge，點擊可直接跳轉回放
 - **Tool Usage / Tags**：甜甜圈圓餅圖，分別顯示工具使用頻率和標籤分佈
 - **Work Patterns**：24 小時活動熱力圖 + 平均 session 時長，一眼看出你的高產時段
 

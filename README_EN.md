@@ -60,13 +60,13 @@ Built for depth, not breadth.
 
 | Feature | Description |
 |---------|-------------|
-| **Statistics Dashboard** | Cross-session analytics: usage trend (dual-axis area chart), efficiency trend (tokens/turn), waste detection (high-token low-outcome sessions with click-to-navigate), project health (outcome stacked bar + trend arrows), tool/tag distribution, work pattern heatmap |
+| **Statistics Dashboard** | Cross-session analytics: usage trend (dual-axis area chart), efficiency trend (average tokens per JSONL record), unresolved sessions (those without a commit/test outcome, ranked by token spend, with click-to-navigate), project health (outcome stacked bar + trend arrows), tool/tag distribution, work pattern heatmap |
 | **Cross-Session Archaeology** | File history drawer (click a file to see every session that touched it), related session recommendations (Jaccard similarity), expandable file chips |
-| **File Reverse Index** | For every session, which files were touched and how (read/edit/write); click any file to trace its history across sessions. Also integrates attachment-level file edit records, covering file changes beyond tool calls |
+| **File Reverse Index** | For every session, which files were touched and how (Read·Edit·Write map to read/edit/write; Glob·Grep map to discovery); click any file to trace its history across sessions. Also integrates attachment-level file edit records, covering file changes beyond tool calls. File operations performed inside Bash commands are not indexed |
 | **Attribution Tracking** | Records which Skill, Plugin, MCP Server/Tool, or Agent produced each AI response — trace "how was this answer generated" and reconstruct the decision path from output back to tooling |
 | **Session Auto-Summary** | Structured rule engine: intent extraction (skipping greetings), action breakdown (e.g. `Edit×8, 5 files`), outcome inference (committed/tested/in-progress), and 20+ multi-signal tags |
-| **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
-| **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. Append-mode (session_id, task_id) PK is decoupled from session reindex, so deleting and rebuilding a session never wipes its task history |
+| **Subagent Browser** | Automatically scans and indexes `subagents/*.jsonl` transcripts. Sessions with subagents display clickable chips (agent type + message count; a generic label is shown when the JSONL records no agent type); clicking navigates into the subagent conversation with a breadcrumb bar for parent navigation |
+| **Tasks Panel** | Scans `~/.claude/tasks/{sessionId}/*.json` and renders per-session TODO snapshots inline in ChatView — subject, three-state status badge, blockedBy chips — so you can see what steps the AI planned in this conversation and which ones got stuck. The `(session_id, task_id)` PK is independent of session reindex, so deleting and rebuilding a session never wipes its task data; each task is overwritten with its latest state, so the progression between states is not retained |
 
 </details>
 
@@ -172,7 +172,7 @@ graph TB
     subgraph Renderer Process
         SB[Sidebar<br>Project List + Session List + Search]
         CV[ChatView<br>Conversation Reader + Token Budget<br>+ File Chips + Related Sessions]
-        DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Waste Detection · Tool/Tag Distribution · Work Patterns]
+        DB_UI[Dashboard<br>Usage/Efficiency Trends · Project Health<br>Unresolved Sessions · Tool/Tag Distribution · Work Patterns]
         FH[FileHistoryDrawer<br>Cross-Session File History Timeline]
         SP[StoragePage<br>Overview cards · Project bars<br>Exclusion rules · Confirm Dialog]
     end
@@ -278,7 +278,7 @@ ccRewind/
 │   │   ├── components/
 │   │   │   ├── Sidebar/       # Project list + session list + search
 │   │   │   ├── ChatView/      # Conversation reader + Token heat indicators + File Chips + Subagent navigation + Tasks Panel + export
-│   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, waste detection, tool/tag distribution, work patterns
+│   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, unresolved sessions, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights

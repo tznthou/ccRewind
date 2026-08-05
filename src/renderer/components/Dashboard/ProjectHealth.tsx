@@ -95,7 +95,7 @@ export default function ProjectHealthComponent({ data }: Props) {
               </div>
 
               <div className={styles.healthMeta}>
-                {p.avgTokensPerTurn != null ? `${formatTokens(p.avgTokensPerTurn)}/t` : '-'}
+                {p.avgTokensPerTurn != null ? `${formatTokens(p.avgTokensPerTurn)}/msg` : '-'}
               </div>
             </div>
           )

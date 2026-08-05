@@ -1347,7 +1347,7 @@ export class Database {
 
   // ── Phase 4: Dashboard 進階功能 ──
 
-  /** 效率趨勢：每日平均 tokens/turn */
+  /** 效率趨勢：每日 token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
   getEfficiencyTrend(projectId?: string | null, days = 30): DailyEfficiency[] {
     let sql = `
       SELECT date(started_at) AS date,
@@ -1390,7 +1390,7 @@ export class Database {
     }))
   }
 
-  /** 浪費偵測：高 token 但無 commit/test outcome 的 session */
+  /** 未收尾的對話：無 commit/test outcome 的 session，依 token 用量由高到低取前 limit 筆（無絕對門檻） */
   getWasteSessions(projectId?: string | null, limit = 20): WasteSession[] {
     let sql = `
       SELECT s.id AS session_id, s.intent_text,
