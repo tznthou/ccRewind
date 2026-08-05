@@ -7,6 +7,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.2] - 2026-08-05
+
+### Fixed
+
+- **The efficiency trend was labelled "Tokens/Turn", but turns are not what it counts**: the divisor is the session's JSONL record count, and fully half of those records are `attachment`, `progress`, `permission-mode` and similar state entries rather than conversation. Measured across 674,569 indexed rows, actual user messages number only 17,501 — treating record count as turn count inflates the divisor 38.5x. The label now reads "Tokens/Message", project health reads `/msg`, and the docs say "average tokens per JSONL record". **The number itself has not changed; it has simply stopped being called the wrong thing**
+- **The docs had invented a feature name, "Waste Detection"**: the code and the UI have always called it Unresolved Sessions, and it applies no "high token" threshold of any kind — it takes sessions with no commit/test outcome and lists the top 20 by token spend. The docs now match the UI
+- **The file index docs omitted a fourth operation**: Glob and Grep are recorded as `discovery`, where the docs listed only read/edit/write. File operations performed inside Bash commands are not indexed at all, which had gone unmentioned
+- **The Tasks Panel docs described overwriting as accumulation**: a task moving from in-progress to completed keeps only its final state, not a snapshot of every step
+
 ## [1.21.1] - 2026-08-03
 
 ### Fixed

@@ -6,6 +6,15 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.21.2] - 2026-08-05
+
+### Fixed
+
+- **效率趨勢標成「Tokens/輪」，但它算的不是輪次**：分母是 session 的 JSONL 記錄數，而那份記錄裡有整整一半是 `attachment`、`progress`、`permission-mode` 這類狀態列，不是對話。在 674,569 列的索引上實測，真正的使用者發話只有 17,501 筆——把記錄數當成輪次，分母膨脹 38.5 倍。介面標籤改為「Tokens/則」、專案健康度的單位改為 `/msg`，說明文件同步改為「每則 JSONL 記錄的平均 token」。**數值本身沒有變，變的是它終於叫對名字**
+- **說明文件自己發明了「浪費偵測」這個功能名**：程式與介面從頭到尾都叫「未收尾的對話」，而且它並沒有任何判定「高 token」的門檻——實際行為是取沒有 commit/test 結果的 session，依 token 用量由高到低列出前 20 筆。文件已改回與介面一致
+- **檔案反向索引的說明漏掉第四種操作**：Glob 與 Grep 會記為 `discovery`，而文件只列了 read/edit/write。另外 Bash 指令內的檔案操作完全不進索引，這點原本沒有寫明
+- **Tasks Panel 的說明把覆寫寫成了累加**：同一個 task 從進行中到完成只會留下最後一版，不是保留每一次的快照
+
 ## [1.21.1] - 2026-08-03
 
 ### Fixed
