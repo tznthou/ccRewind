@@ -89,6 +89,24 @@ describe('isOmittedThinking', () => {
   it('只有空白字元的 thinking 不算 omitted（有內容就照原樣渲染）', () => {
     expect(isOmittedThinking({ type: 'thinking', thinking: ' ', signature: 'Eosn' })).toBe(false)
   })
+
+  // 型別宣告擋不住畸形的原始 JSON——parser 是寬容模式，signature 進來可能是任何東西。
+  // 走 extractThinkingBlocks 是因為那才是真實路徑：直接構造物件會被 TS 擋掉，
+  // 測不到 runtime 真正會遇到的形狀。
+  it('signature 是物件（畸形 JSON）不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: {} }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
+
+  it('signature 是數字不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: 123 }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
+
+  it('signature 是 true 不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: true }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
 })
 
 // 這組斷言與 MessageBubble 的兩個 early return 綁定：任一邊改了條件、另一邊沒跟上，

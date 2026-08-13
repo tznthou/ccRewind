@@ -76,11 +76,17 @@ export function extractThinkingBlocks(contentJson: string | null): ThinkingBlock
  * 寫檔時弄丟的，也不存在任何可以撈回來的地方，signature 又不可解析，
  * 所以 ccRewind 能做的只有如實說明，讓使用者知道這裡本來有推理。
  *
- * 要求 signature 真的存在才算數：UI 會據此向使用者宣稱空白的原因，
+ * 要求 signature 真的是非空字串才算數：UI 會據此向使用者宣稱空白的原因，
  * 少了這個依據就成了瞎猜。實測全庫 5,005 個空 thinking block 全數帶有 signature。
+ *
+ * 型別宣告在這裡幫不上忙——parser 是寬容模式（未知結構原樣保留），signature
+ * 從原始 JSON 進來可能是物件、數字或布林。單純判 truthy 會讓畸形資料也被
+ * 認定成 API 省略，UI 就開始說一個沒有依據的原因。
  */
 export function isOmittedThinking(block: ThinkingBlock): boolean {
-  return block.thinking === '' && !!block.signature
+  return block.thinking === ''
+    && typeof block.signature === 'string'
+    && block.signature.length > 0
 }
 
 /**
