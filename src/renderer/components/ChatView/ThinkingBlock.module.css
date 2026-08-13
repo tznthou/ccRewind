@@ -37,6 +37,19 @@
   font-style: italic;
 }
 
+/* display:omitted 的空 thinking——單行、不可展開、不佔版面。
+   刻意不給邊框：這類 block 有時佔一個 session 的多數，配上虛線框會蓋過真正的內容。 */
+.omitted {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin: var(--space-sm) 0;
+  font-size: var(--font-size-xs);
+  font-style: italic;
+  color: var(--color-text-secondary);
+  opacity: 0.75;
+}
+
 .content {
   padding: var(--space-md);
   font-size: var(--font-size-sm);
