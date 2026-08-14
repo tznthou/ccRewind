@@ -7,6 +7,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.21.3] - 2026-08-14
+
+### Security
+
+- **Electron updated to 41.10.3** ([#97](https://github.com/tznthou/ccRewind/pull/97)): patches [CVE-2026-70608](https://nvd.nist.gov/vuln/detail/CVE-2026-70608) (CVSS 7.2), where a sandboxed iframe could open a new window through the OpenURL navigation path even without the `allow-popups` keyword. **This application does not reach that path** — it embeds no iframe or webview, and `setWindowOpenHandler` unconditionally returns `{ action: 'deny' }` (`src/main/index.ts:36`), which is precisely the mitigation the upstream advisory lists. The update ships regardless, because "not affected" is a statement about the code as it stands today, not a guarantee that holds forever
+
+### Fixed
+
+- **Thinking sections rendered as an empty box**: Claude's reasoning can be omitted by the API, in which case the JSONL holds `thinking: ""` alongside a complete signature. The UI rendered that faithfully, so users got a box that expanded onto nothing — indistinguishable from a broken feature. Measured across the index, every empty thinking block carries a signature, without exception (5,034 of them at the time of writing; that count grows daily, the ratio is the point). This content was not lost by this application and there is nowhere to recover it from (the signature is an opaque string by API specification, not something that can be decoded), so the only honest option is to say so. A single line of explanation now states that reasoning was present here and why it is not shown. ⚠️ Classifying a block as API-omitted requires the signature to be a genuinely non-empty string — the parser is deliberately lenient, so malformed source JSON can leave that field holding an object or a number, and a plain truthy check would have the UI assert a reason it has no basis for ([#100](https://github.com/tznthou/ccRewind/pull/100))
+- **Remote control usage always read as "never used" on older data**: when `has_remote_control` was introduced in v1.19.0, it was populated by clearing file timestamps to force a re-index. That path cannot reach archived sessions — their source JSONL has usually been removed by Claude Code's 30-day cleanup, leaving no file to read and the column sitting at its default of 0. Measured on this machine's index, all 139 sessions that had used remote control had lost their source file (139 of 139), while the 3,316 markers those sessions produced were still intact in the database. The evidence needed for the flag never left the database — only the files did — so it is now backfilled from those existing records (migration v24). ⚠️ Those markers carry no content of their own; the backfill recovers the fact that a session once used remote control, not any conversation ([#101](https://github.com/tznthou/ccRewind/pull/101))
+
+### Changed
+
+- **Development dependency updates** ([#98](https://github.com/tznthou/ccRewind/pull/98)): pnpm 11.20.0, ESLint 10.8, typescript-eslint 8.66, globals 17.9. All four are used only during development and build; none reach the shipped runtime
+
 ## [1.21.2] - 2026-08-05
 
 ### Fixed
