@@ -5,6 +5,12 @@
 // 而 tests/ import src/ 之後會再往下拉一整串，全部噴 TS6307；改用 include src/**/* 補救則會把
 // .tsx 併進這份 node 取向的設定，產生數百個假錯誤。因此本設定不進 tsconfig.json 的
 // references（那要求 composite: true），改由 package.json 的 typecheck script 獨立跑一條 tsc -p。
+//
+// allowJs：測試需要 import scripts/*.mjs（node 直接執行的開發工具，沒有 .d.ts）。
+// 沒有這個選項，tsc 會噴 TS7016 說找不到型別宣告。只開 allowJs 不開 checkJs——
+// TS 從 .mjs 推導型別供測試檔使用，但不對那些工具本身做型別檢查（它們有 eslint 管）。
+// 注意這個錯誤只有 CLI 的 `tsc -p tsconfig.test.json` 會報，編輯器診斷不會，
+// 所以「IDE 沒紅」不能當作型別過關的依據。
 {
   "extends": "./tsconfig.node.json",
   "compilerOptions": {
@@ -13,6 +19,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "lib": ["ESNext", "DOM"],
+    "allowJs": true,
     "types": ["node", "vite/client"]
   },
   "include": ["tests/**/*"]

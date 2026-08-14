@@ -158,6 +158,7 @@ function toMessageInputs(lines: ParsedLine[]): MessageInput[] {
     isAbandonedBranch: msg.isAbandonedBranch ?? false,
     version: nearestVersions[idx],
     frameUrl: msg.frameUrl,
+    bridgeSessionId: msg.bridgeSessionId,
   }))
 }
 

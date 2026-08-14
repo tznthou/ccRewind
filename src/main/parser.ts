@@ -271,6 +271,15 @@ export function parseLine(line: string): ParsedLine | null {
     frameUrl = rawUrl && rawUrl.length <= 4096 ? rawUrl : null
   }
 
+  // Bridge-session: remote-control 連線的橋接 id，可還原出 claude.ai 上的對話網址。
+  // 這個 entry 沒有 timestamp 也沒有內容，整個 session 只有這個欄位是有用資訊——
+  // 而且原檔一旦被 30 天清理掉就再也拿不到（DB 既有的 bridge-session 訊息內容全為 NULL）。
+  let bridgeSessionId: string | null = null
+  if (type === 'bridge-session') {
+    const rawId = typeof obj.bridgeSessionId === 'string' ? obj.bridgeSessionId : null
+    bridgeSessionId = rawId && rawId.length <= 128 ? rawId : null
+  }
+
   return {
     type,
     uuid,
@@ -302,6 +311,7 @@ export function parseLine(line: string): ParsedLine | null {
     apiErrorStatus,
     editedFilePath,
     frameUrl,
+    bridgeSessionId,
     version,
     isCompactSummary,
     isSidechain,

@@ -6,16 +6,23 @@ import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import type { SessionMeta } from '../../../shared/types'
+import { buildRemoteControlUrl } from '../../../shared/remoteControl'
+import { openExternalUrl } from '../../utils/openExternal'
 import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
 
 type SortKey = 'time' | 'tokens'
 
+// 三行內容（標題 / meta / tags）在 meta 折成兩行時需要 91px：
+// padding 8 + 標題 20 + gap 2 + meta 34 + gap 2 + tags 17 + padding 8。
+// 原本的 80px 不夠，而 .sessionItem 是固定高的 flex 容器，放不下時會把最後一行
+// （.sessionTags，帶 overflow: hidden）壓縮到剩 6px，於是標籤只露出半截。
+// meta 會不會折行取決於訊息數與 token 數的位數，session 越長越容易觸發。
 const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
-  archive: 80,
-  timeline: 80,
-  terminal: 80,
+  archive: 92,
+  timeline: 92,
+  terminal: 92,
 }
 
 export default function SessionList() {
@@ -75,7 +82,7 @@ export default function SessionList() {
     overscan: 5,
   })
 
-  const { listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
+  const { activeIndex, listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
     items: sortedSessions,
     getItemId: (s) => s.id,
     onActivate: (s) => dispatch({ type: 'SELECT_SESSION', sessionId: s.id }),
@@ -131,6 +138,20 @@ export default function SessionList() {
       className={styles.sessionListContainer}
       aria-label={t('sidebar.sessionList.aria.label')}
       {...listboxProps}
+      onKeyDown={(e) => {
+        // 遠端連結的鍵盤入口。listbox option 內不能放可聚焦元素（會破壞
+        // aria-activedescendant 的焦點模型），所以那顆 badge 對鍵盤是不可及的；
+        // 用捷徑補上等效操作，而不是把 tabIndex 打開。
+        if ((e.key === 'o' || e.key === 'O') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const url = buildRemoteControlUrl(sortedSessions[activeIndex]?.bridgeSessionId)
+          if (url) {
+            e.preventDefault()
+            openExternalUrl(url)
+            return
+          }
+        }
+        listboxProps.onKeyDown(e)
+      }}
     >
       <div
         style={{
@@ -196,6 +217,32 @@ export default function SessionList() {
                   )}
                 </span>
                 <span>
+                  {session.hasRemoteControl && (() => {
+                    // 多數歷史 session 沒有 bridgeSessionId（原檔已被 30 天清理，且無回填來源），
+                    // 這時仍要顯示標記、只是不可點——badge 的意義是「曾經遠端連線過」，不是「有連結」。
+                    const remoteUrl = buildRemoteControlUrl(session.bridgeSessionId)
+                    if (!remoteUrl) {
+                      return (
+                        <span className={styles.remoteBadge} title={t('sidebar.sessionList.remoteControl.hint')}>
+                          {t('sidebar.sessionList.remoteControl')}
+                        </span>
+                      )
+                    }
+                    return (
+                      <a
+                        className={`${styles.remoteBadge} ${styles.remoteBadgeLink}`}
+                        href={remoteUrl}
+                        title={t('sidebar.sessionList.remoteControl.open')}
+                        aria-label={t('sidebar.sessionList.remoteControl.open')}
+                        // 不讓點擊冒泡到列本身，否則開連結的同時也切換了選取的 session
+                        onClick={e => e.stopPropagation()}
+                        // 列表是 listbox，焦點由 aria-activedescendant 管理，內部元素不進 tab 序
+                        tabIndex={-1}
+                      >
+                        {t('sidebar.sessionList.remoteControl')}
+                      </a>
+                    )
+                  })()}
                   {session.archived ? `${t('sidebar.sessionList.archived')} · ` : ''}{t('sidebar.sessionList.messageCount', { count: session.messageCount })}
                   {session.totalInputTokens != null && session.totalInputTokens > 0 && (
                     <span className={styles.tokenBadge}> · {formatTokens((session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0))}</span>

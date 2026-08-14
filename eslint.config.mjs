@@ -25,6 +25,17 @@ export default tseslint.config(
     },
   },
   {
+    // .mjs 另立一個 block 而非併進上面的 glob：上面是 sourceType: 'commonjs'，
+    // ESM 語法（import / top-level await）在那個 parser 設定下會直接解析失敗。
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      // 只需要 globals：沒有這行，scripts/*.mjs 會噴一整排 process / console / fetch
+      // 的 no-undef（實測移除後 eslint exit 1）。WebSocket 不必另外補，globals.node 已收錄。
+      // sourceType 不必寫——flat config 對 .mjs 預設就是 module。
+      globals: { ...globals.node },
+    },
+  },
+  {
     files: ['src/renderer/scripts/**/*.js'],
     languageOptions: {
       globals: { ...globals.browser },

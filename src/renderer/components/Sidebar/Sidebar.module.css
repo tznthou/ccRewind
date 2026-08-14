@@ -203,6 +203,10 @@
   margin-top: 2px;
   flex-wrap: nowrap;
   overflow: hidden;
+  /* 不讓外層固定高度把這行壓扁：沒有這條，meta 折成兩行時整列高度不夠，
+     這行會被 shrink 到剩幾 px，標籤只露出上半截（比整行不顯示更難看）。
+     overflow: hidden 負責橫向裁切，flex-shrink 管的是縱向不被壓縮。 */
+  flex-shrink: 0;
 }
 
 .tag {
@@ -224,6 +228,30 @@
 .tokenBadge {
   font-family: var(--font-mono);
   color: var(--color-text-muted);
+}
+
+/* Session 曾透過 remote control 連線（bridge-session 裸標記推導，無時間軸位置，只能標在 session 層級）。
+   給專屬色而非沿用 .tag 的中性灰有兩個理由：一是它夾在 meta 那行的灰字裡幾乎看不見（實測要人
+   指出位置才找得到），二是 .tag 的底色就是 --color-bg-hover，滑鼠移到該列時列底色與它相同，
+   pill 的形狀會整個消失。色相避開 .outcomeTag 已用的綠/藍/橘/紫。 */
+.remoteBadge {
+  composes: tag;
+  margin-right: 4px;
+  background: color-mix(in srgb, #14b8a6 22%, transparent);
+  color: #0f766e;
+  font-weight: 500;
+}
+
+/* 只有拿得到 bridgeSessionId 的 session 才是連結（原檔還在時才抽得到）。
+   不可點的那些維持 span，所以底線是「這個能開」的唯一視覺差異。 */
+.remoteBadgeLink {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.remoteBadgeLink:hover {
+  background: color-mix(in srgb, #14b8a6 38%, transparent);
 }
 
 .durationBadge {

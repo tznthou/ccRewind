@@ -83,6 +83,10 @@ export interface SessionMeta {
   totalOutputTokens: number | null
   /** 是否曾出現 bridge-session type（remote-control 連線），indexer 推導（v23 引入） */
   hasRemoteControl: boolean
+  /** bridge-session entry 的 bridgeSessionId，用來組出 claude.ai 對話網址（v25 引入）。
+   *  ⚠️ 只有原檔還在時取得到——DB 既有的 bridge-session 訊息內容全為 NULL，無回填來源，
+   *  而 CC 預設 30 天清理 JSONL，故歷史 session 多半為 null（有 badge 但沒有連結） */
+  bridgeSessionId: string | null
   starred: boolean
 }
 
@@ -634,6 +638,9 @@ export interface ParsedLine {
   editedFilePath: string | null
   /** frame-link type 的 frameUrl 欄位：claude.ai 上 Artifact 產出的連結 */
   frameUrl: string | null
+  /** bridge-session type 的 bridgeSessionId：可還原 claude.ai 對話網址（v25 引入）。
+   *  session 層級資訊——同一 session 的每個 bridge-session entry 帶的都是同一個值 */
+  bridgeSessionId: string | null
   /** JSONL 頂層 version（CC 版本字串，如 "2.1.201"）。多數 entry 皆有，少數 unknown-type entry 沒有——
    *  indexer 用鄰近 entry 的值回填後存進 message_archive，供除錯回答「這個 shape 是哪個版本引入的」 */
   version: string | null

@@ -53,6 +53,9 @@ export interface MessageInput {
   version: string | null
   /** frame-link type 的 Artifact 連結 */
   frameUrl: string | null
+  /** bridge-session type 的 bridgeSessionId。不寫進 messages 表——它是 session 層級資訊，
+   *  同一 session 的每個 bridge-session entry 帶的值都相同，由 insertSession 收斂後存進 sessions */
+  bridgeSessionId: string | null
 }
 
 /** session_files 寫入用型別 */
@@ -405,7 +408,7 @@ export class Database {
     const rows = this.db.prepare(
       `SELECT s.id, s.project_id, s.title, s.message_count, s.started_at, s.ended_at, s.archived,
               s.summary_text, s.intent_text, s.outcome_status, s.duration_seconds, s.active_duration_seconds, s.summary_version,
-              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens, s.has_remote_control,
+              s.tags, s.files_touched, s.tools_used, s.total_input_tokens, s.total_output_tokens, s.has_remote_control, s.bridge_session_id,
               CASE WHEN st.session_id IS NOT NULL THEN 1 ELSE 0 END AS starred
        FROM sessions s
        LEFT JOIN session_stars st ON s.id = st.session_id
@@ -432,6 +435,7 @@ export class Database {
       total_input_tokens: number | null
       total_output_tokens: number | null
       has_remote_control: number
+      bridge_session_id: string | null
       starred: number
     }>
 
@@ -455,6 +459,7 @@ export class Database {
       totalInputTokens: r.total_input_tokens,
       totalOutputTokens: r.total_output_tokens,
       hasRemoteControl: r.has_remote_control === 1,
+      bridgeSessionId: r.bridge_session_id,
       starred: r.starred === 1,
     }))
   }
@@ -793,11 +798,15 @@ export class Database {
       // bridge-session type 貫穿整個 session 生命週期、非逐輪出現，故用「存在與否」
       // 判斷整個 session 是否曾透過 remote-control 連線，而非逐訊息標記
       const hasRemoteControl = params.messages.some(m => m.type === 'bridge-session')
+      // 同一 session 的每個 bridge-session entry 帶的都是同一個 bridgeSessionId，取第一個非空即可。
+      // 這是那些 entry 唯一有用的資訊（它們沒有 timestamp 也沒有內容），且原檔被 30 天清理後
+      // 就再也取不到，所以在索引當下就存進 session 層級。
+      const bridgeSessionId = params.messages.find(m => m.bridgeSessionId)?.bridgeSessionId ?? null
       const insertResult = this.db.prepare(`
         INSERT INTO sessions (id, project_id, title, message_count, file_path, file_size, file_mtime, started_at, ended_at,
           summary_text, intent_text, outcome_status, outcome_signals, duration_seconds, active_duration_seconds, summary_version,
-          tags, files_touched, tools_used, total_input_tokens, total_output_tokens, has_remote_control)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          tags, files_touched, tools_used, total_input_tokens, total_output_tokens, has_remote_control, bridge_session_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         params.sessionId, params.projectId, params.title, params.messageCount,
         params.filePath, params.fileSize, params.fileMtime,
@@ -809,6 +818,7 @@ export class Database {
         params.filesTouched ?? null, params.toolsUsed ?? null,
         totalInput || null, totalOutput || null,
         hasRemoteControl ? 1 : 0,
+        bridgeSessionId,
       )
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(
