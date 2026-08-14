@@ -58,7 +58,10 @@ try {
     clip = { ...rect, scale: CLIP_SCALE }
   }
 
-  const shot = await client.send('Page.captureScreenshot', clip ? { clip, format: 'png' } : { format: 'png' })
+  // 沒有 clip 時要開 captureBeyondViewport，否則「整頁」只會截到可視範圍——
+  // CDP 這個參數預設 false，而比可視區高的頁面正是最需要整頁截圖的情況。
+  const shot = await client.send('Page.captureScreenshot',
+    clip ? { clip, format: 'png' } : { format: 'png', captureBeyondViewport: true })
   // 緊接著寫入前再驗一次：上面那次檢查到現在隔了一整段 CDP 往返，被驗過的祖先目錄
   // 可能已經被換掉。重驗縮小時間窗，`wx` 則讓「已存在就失敗」不依賴時間窗。
   const safePath = assertSafeOutputPath(outPath)

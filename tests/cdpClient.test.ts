@@ -9,8 +9,8 @@
 // 二來乾淨的 CI worker 上根本沒有那個目錄，靠它會讓測試結果隨環境浮動。
 import { describe, it, expect, afterEach } from 'vitest'
 import { mkdtempSync, rmSync, mkdirSync, symlinkSync, linkSync, writeFileSync, readFileSync, realpathSync } from 'node:fs'
-import { tmpdir, homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { tmpdir } from 'node:os'
+import { join, resolve, dirname } from 'node:path'
 
 import { assertSafeOutputPath, defaultProtectedRoot, isUsableRect, writeFileNoClobber } from '../scripts/cdp-client.mjs'
 
@@ -99,9 +99,19 @@ describe('assertSafeOutputPath', () => {
     expect(defaultProtectedRoot(fakeHome)).toBe(join(fakeHome, '.claude'))
   })
 
-  it('不傳 protectedRoot 時，實際擋下的是 ~/.claude 底下的路徑', () => {
-    // 只用路徑字串，不建立也不寫入任何檔案。預設值若被改掉或防護被拿掉，這條會紅。
-    expect(() => assertSafeOutputPath(join(homedir(), '.claude', 'shot.png'))).toThrow(/唯讀承諾/)
+  it('不傳 protectedRoot 時，實際擋下的是家目錄底下的 .claude', () => {
+    // 用假家目錄取代真實的：os.homedir() 在 POSIX 上讀 $HOME，覆寫它就能驗到
+    // 「預設值真的接上了 assertSafeOutputPath」，同時完全不碰開發者或 CI 的 ~/.claude/。
+    // 預設值若被改掉或防護被拿掉，這條會紅。
+    const { claudeDir } = makeFakeHome()
+    const origHome = process.env.HOME
+    process.env.HOME = dirname(claudeDir)
+    try {
+      expect(() => assertSafeOutputPath(join(claudeDir, 'shot.png'))).toThrow(/唯讀承諾/)
+    } finally {
+      if (origHome === undefined) delete process.env.HOME
+      else process.env.HOME = origHome
+    }
   })
 })
 

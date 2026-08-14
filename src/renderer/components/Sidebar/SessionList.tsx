@@ -7,6 +7,7 @@ import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import type { SessionMeta } from '../../../shared/types'
 import { buildRemoteControlUrl } from '../../../shared/remoteControl'
+import { openExternalUrl } from '../../utils/openExternal'
 import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
@@ -81,7 +82,7 @@ export default function SessionList() {
     overscan: 5,
   })
 
-  const { listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
+  const { activeIndex, listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
     items: sortedSessions,
     getItemId: (s) => s.id,
     onActivate: (s) => dispatch({ type: 'SELECT_SESSION', sessionId: s.id }),
@@ -137,6 +138,20 @@ export default function SessionList() {
       className={styles.sessionListContainer}
       aria-label={t('sidebar.sessionList.aria.label')}
       {...listboxProps}
+      onKeyDown={(e) => {
+        // 遠端連結的鍵盤入口。listbox option 內不能放可聚焦元素（會破壞
+        // aria-activedescendant 的焦點模型），所以那顆 badge 對鍵盤是不可及的；
+        // 用捷徑補上等效操作，而不是把 tabIndex 打開。
+        if ((e.key === 'o' || e.key === 'O') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+          const url = buildRemoteControlUrl(sortedSessions[activeIndex]?.bridgeSessionId)
+          if (url) {
+            e.preventDefault()
+            openExternalUrl(url)
+            return
+          }
+        }
+        listboxProps.onKeyDown(e)
+      }}
     >
       <div
         style={{
