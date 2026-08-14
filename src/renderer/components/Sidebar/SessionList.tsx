@@ -196,6 +196,11 @@ export default function SessionList() {
                   )}
                 </span>
                 <span>
+                  {session.hasRemoteControl && (
+                    <span className={styles.remoteBadge} title={t('sidebar.sessionList.remoteControl.hint')}>
+                      {t('sidebar.sessionList.remoteControl')}
+                    </span>
+                  )}
                   {session.archived ? `${t('sidebar.sessionList.archived')} · ` : ''}{t('sidebar.sessionList.messageCount', { count: session.messageCount })}
                   {session.totalInputTokens != null && session.totalInputTokens > 0 && (
                     <span className={styles.tokenBadge}> · {formatTokens((session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0))}</span>

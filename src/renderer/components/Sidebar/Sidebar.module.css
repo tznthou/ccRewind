@@ -226,6 +226,17 @@
   color: var(--color-text-muted);
 }
 
+/* Session 曾透過 remote control 連線（bridge-session 裸標記推導，無時間軸位置，只能標在 session 層級） */
+.remoteBadge {
+  font-size: var(--font-size-xs);
+  background: var(--color-bg-hover);
+  color: var(--color-text-secondary);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  margin-right: 4px;
+}
+
 .durationBadge {
   color: var(--color-text-muted);
 }
