@@ -53,6 +53,7 @@ function msg(overrides: Partial<MessageInput> & Pick<MessageInput, 'type' | 'rol
     isAbandonedBranch: false,
     version: null,
     frameUrl: null,
+    bridgeSessionId: null,
     ...overrides,
   }
 }

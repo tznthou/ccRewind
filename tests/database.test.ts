@@ -41,6 +41,7 @@ function msg(overrides: Partial<MessageInput> & { type: string; sequence: number
     isAbandonedBranch: false,
     version: null,
     frameUrl: null,
+    bridgeSessionId: null,
     ...overrides,
   }
 }
@@ -2054,6 +2055,55 @@ describe('migration v24: backfill has_remote_control from existing bridge-sessio
 
   it('schema version is at least 24', () => {
     expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(24)
+  })
+
+  it('captures bridgeSessionId from bridge-session entries into the session row', () => {
+    db.indexSession({
+      sessionId: 'bridge-capture', projectId: 'proj-1', projectDisplayName: '/test',
+      title: null, messageCount: 2, filePath: '/tmp/bridge.jsonl', fileSize: 0,
+      fileMtime: '2026-08-14T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'hi', sequence: 0 }),
+        msg({ type: 'bridge-session', sequence: 1, bridgeSessionId: 'cse_01EGNHv8EmxwAyZtUQUMD7uy' }),
+      ],
+    })
+
+    const found = db.getSessions('proj-1').find(s => s.id === 'bridge-capture')
+    expect(found?.bridgeSessionId).toBe('cse_01EGNHv8EmxwAyZtUQUMD7uy')
+    expect(found?.hasRemoteControl).toBe(true)
+  })
+
+  it('takes the first non-empty bridgeSessionId when several entries carry it', () => {
+    // 同一 session 的每個 bridge-session entry 帶的是同一個值；真實檔案裡這個 type
+    // 會出現多次（實測單一 session 6 筆），收斂成一個即可
+    db.indexSession({
+      sessionId: 'bridge-multi', projectId: 'proj-1', projectDisplayName: '/test',
+      title: null, messageCount: 3, filePath: '/tmp/multi.jsonl', fileSize: 0,
+      fileMtime: '2026-08-14T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [
+        msg({ type: 'bridge-session', sequence: 0, bridgeSessionId: null }),
+        msg({ type: 'bridge-session', sequence: 1, bridgeSessionId: 'cse_01EGNHv8EmxwAyZtUQUMD7uy' }),
+        msg({ type: 'bridge-session', sequence: 2, bridgeSessionId: 'cse_01EGNHv8EmxwAyZtUQUMD7uy' }),
+      ],
+    })
+
+    expect(db.getSessions('proj-1').find(s => s.id === 'bridge-multi')?.bridgeSessionId)
+      .toBe('cse_01EGNHv8EmxwAyZtUQUMD7uy')
+  })
+
+  it('leaves bridgeSessionId null when the entries carry none (the historical case)', () => {
+    // 絕大多數既有 session 屬於這類：有 bridge-session 標記但沒有 id，
+    // 因為當初沒抽出來存，而原始 JSONL 已被 30 天清理刪除
+    db.indexSession({
+      sessionId: 'bridge-legacy', projectId: 'proj-1', projectDisplayName: '/test',
+      title: null, messageCount: 1, filePath: '/tmp/legacy.jsonl', fileSize: 0,
+      fileMtime: '2026-08-14T00:00:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'bridge-session', sequence: 0, bridgeSessionId: null })],
+    })
+
+    const found = db.getSessions('proj-1').find(s => s.id === 'bridge-legacy')
+    expect(found?.bridgeSessionId).toBeNull()
+    expect(found?.hasRemoteControl).toBe(true)
   })
 
   it('backfills archived sessions that hold bridge-session messages', () => {

@@ -488,4 +488,22 @@ export const migrations: Migration[] = [
       db.prepare(BACKFILL_HAS_REMOTE_CONTROL_SQL).run()
     },
   },
+  {
+    version: 25,
+    description: 'add bridge_session_id to sessions; force reindex to capture it while source files still exist',
+    up: (db) => {
+      db.exec(`
+        ALTER TABLE sessions ADD COLUMN bridge_session_id TEXT;
+      `)
+      // 這個欄位**無法回填**：DB 既有的 bridge-session 訊息 content 全為 NULL，
+      // 當初沒把 bridgeSessionId 抽出來存，資料只存在於原始 JSONL。
+      // 而 Claude Code 預設 30 天清理 JSONL——實測全庫僅 4 個 session 的原檔還在，
+      // 其餘標了 has_remote_control 的 session 將永遠沒有連結。force reindex 是唯一
+      // 能救回那 4 個、並讓日後每個新 session 都留住這個值的手段。
+      db.exec(`
+        UPDATE sessions SET file_mtime = NULL;
+        UPDATE subagent_sessions SET file_mtime = NULL;
+      `)
+    },
+  },
 ]

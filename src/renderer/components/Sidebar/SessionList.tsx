@@ -6,6 +6,7 @@ import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import type { SessionMeta } from '../../../shared/types'
+import { buildRemoteControlUrl } from '../../../shared/remoteControl'
 import { formatDateTime, formatDuration } from '../../utils/formatTime'
 import { formatTokens } from '../../utils/formatTokens'
 import styles from './Sidebar.module.css'
@@ -201,11 +202,32 @@ export default function SessionList() {
                   )}
                 </span>
                 <span>
-                  {session.hasRemoteControl && (
-                    <span className={styles.remoteBadge} title={t('sidebar.sessionList.remoteControl.hint')}>
-                      {t('sidebar.sessionList.remoteControl')}
-                    </span>
-                  )}
+                  {session.hasRemoteControl && (() => {
+                    // 多數歷史 session 沒有 bridgeSessionId（原檔已被 30 天清理，且無回填來源），
+                    // 這時仍要顯示標記、只是不可點——badge 的意義是「曾經遠端連線過」，不是「有連結」。
+                    const remoteUrl = buildRemoteControlUrl(session.bridgeSessionId)
+                    if (!remoteUrl) {
+                      return (
+                        <span className={styles.remoteBadge} title={t('sidebar.sessionList.remoteControl.hint')}>
+                          {t('sidebar.sessionList.remoteControl')}
+                        </span>
+                      )
+                    }
+                    return (
+                      <a
+                        className={`${styles.remoteBadge} ${styles.remoteBadgeLink}`}
+                        href={remoteUrl}
+                        title={t('sidebar.sessionList.remoteControl.open')}
+                        aria-label={t('sidebar.sessionList.remoteControl.open')}
+                        // 不讓點擊冒泡到列本身，否則開連結的同時也切換了選取的 session
+                        onClick={e => e.stopPropagation()}
+                        // 列表是 listbox，焦點由 aria-activedescendant 管理，內部元素不進 tab 序
+                        tabIndex={-1}
+                      >
+                        {t('sidebar.sessionList.remoteControl')}
+                      </a>
+                    )
+                  })()}
                   {session.archived ? `${t('sidebar.sessionList.archived')} · ` : ''}{t('sidebar.sessionList.messageCount', { count: session.messageCount })}
                   {session.totalInputTokens != null && session.totalInputTokens > 0 && (
                     <span className={styles.tokenBadge}> · {formatTokens((session.totalInputTokens ?? 0) + (session.totalOutputTokens ?? 0))}</span>

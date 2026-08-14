@@ -158,7 +158,7 @@ describe('subagent DB integration', () => {
         attributionMcpServer: null, attributionMcpTool: null, attributionAgent: null,
         systemSubtype: null, apiErrorStatus: null, parentUuid: null,
         isCompactSummary: false, isSidechain: false, isAbandonedBranch: false,
-        version: null, frameUrl: null,
+        version: null, frameUrl: null, bridgeSessionId: null,
       }],
     })
 

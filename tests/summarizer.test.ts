@@ -33,6 +33,7 @@ function line(overrides: Partial<ParsedLine> = {}): ParsedLine {
     apiErrorStatus: null,
     editedFilePath: null,
     frameUrl: null,
+    bridgeSessionId: null,
     version: null,
     isCompactSummary: false,
     isSidechain: false,

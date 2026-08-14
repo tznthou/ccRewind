@@ -242,6 +242,18 @@
   font-weight: 500;
 }
 
+/* 只有拿得到 bridgeSessionId 的 session 才是連結（原檔還在時才抽得到）。
+   不可點的那些維持 span，所以底線是「這個能開」的唯一視覺差異。 */
+.remoteBadgeLink {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.remoteBadgeLink:hover {
+  background: color-mix(in srgb, #14b8a6 38%, transparent);
+}
+
 .durationBadge {
   color: var(--color-text-muted);
 }
