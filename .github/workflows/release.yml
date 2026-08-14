@@ -31,32 +31,27 @@ jobs:
             echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
           fi
 
+      # 說明文字從 CHANGELOG.md 抽當版段落組出來。這一步跑在 build 之前，
+      # 所以 CHANGELOG 漏寫該版本時會在這裡就停下，不會先產出 artifacts 才發現。
+      - name: Build release notes
+        id: notes
+        run: |
+          ./scripts/release-notes.sh "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          echo "本版說明文字（${VERSION}）："
+          cat "$RUNNER_TEMP/release-notes.md"
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+
       - name: Create Release
         run: |
-          gh release delete ${{ steps.get_version.outputs.VERSION }} --yes || true
-          gh release create ${{ steps.get_version.outputs.VERSION }} \
-            --title "ccRewind ${{ steps.get_version.outputs.VERSION }}" \
-            --notes "$(cat <<'NOTES'
-          ## ccRewind ${{ steps.get_version.outputs.VERSION }}
-
-          Claude Code 對話回放與考古工具
-
-          ### macOS
-          - **DMG** (recommended): 拖曳至 Applications 即可
-          - **ZIP**: 解壓後直接執行
-
-          > ⚠️ **macOS**：首次開啟時可能顯示「無法驗證開發者」警告。
-          > 請至「系統設定 → 隱私與安全性」，找到 ccRewind 並點擊「仍要打開」即可。
-          >
-          > ⚠️ **Windows**：首次執行時會顯示 SmartScreen「Windows 已保護您的電腦」警告。
-          > 請點擊「其他資訊」→「仍要執行」即可。
-
-          System requirements: macOS 11+ / Windows 10+
-          NOTES
-          )" \
+          gh release delete "$VERSION" --yes || true
+          gh release create "$VERSION" \
+            --title "ccRewind $VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --draft=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
 
   build-macos:
     needs: create-release
