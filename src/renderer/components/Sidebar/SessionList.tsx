@@ -12,10 +12,15 @@ import styles from './Sidebar.module.css'
 
 type SortKey = 'time' | 'tokens'
 
+// 三行內容（標題 / meta / tags）在 meta 折成兩行時需要 91px：
+// padding 8 + 標題 20 + gap 2 + meta 34 + gap 2 + tags 17 + padding 8。
+// 原本的 80px 不夠，而 .sessionItem 是固定高的 flex 容器，放不下時會把最後一行
+// （.sessionTags，帶 overflow: hidden）壓縮到剩 6px，於是標籤只露出半截。
+// meta 會不會折行取決於訊息數與 token 數的位數，session 越長越容易觸發。
 const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
-  archive: 80,
-  timeline: 80,
-  terminal: 80,
+  archive: 92,
+  timeline: 92,
+  terminal: 92,
 }
 
 export default function SessionList() {
