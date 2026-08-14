@@ -18,10 +18,9 @@
 //
 // ⚠️ 重啟前先確認埠已釋放（lsof -ti:9222），否則新 process 會 bind 失敗而靜默沒開 CDP。
 //
-// 零外部依賴：Node 22 起 WebSocket 是全域內建，不需要 ws 套件。
+// 連線層（逾時、CDP 協定錯誤、斷線處理）在 cdp-client.mjs。
 
-const CDP_PORT = process.env.CDP_PORT || '9222'
-const EVAL_TIMEOUT_MS = 15_000
+import { openPageSocket } from './cdp-client.mjs'
 
 const expression = process.argv[2]
 if (!expression) {
@@ -29,51 +28,14 @@ if (!expression) {
   process.exit(1)
 }
 
-let targets
+let client
 try {
-  targets = await (await fetch(`http://localhost:${CDP_PORT}/json`)).json()
-} catch {
-  console.error(`連不上 CDP (localhost:${CDP_PORT})。dev server 開著嗎？參數有沒有踩到上面那個 \`--\` 陷阱？`)
-  process.exit(1)
-}
-
-const page = targets.find(t => t.type === 'page')
-if (!page) {
-  console.error('CDP 有回應但找不到 page target（renderer 還沒載入？）')
-  process.exit(1)
-}
-
-const ws = new WebSocket(page.webSocketDebuggerUrl)
-
-const result = new Promise((resolve, reject) => {
-  const timer = setTimeout(() => reject(new Error(`CDP 逾時 ${EVAL_TIMEOUT_MS}ms`)), EVAL_TIMEOUT_MS)
-  const finish = (fn, arg) => { clearTimeout(timer); fn(arg); ws.close() }
-
-  ws.addEventListener('open', () => {
-    ws.send(JSON.stringify({
-      id: 1,
-      method: 'Runtime.evaluate',
-      // returnByValue 讓回傳值直接序列化過來，省去再查 objectId 的往返。
-      // awaitPromise 讓 expression 可以是 async，呼叫端不必自己輪詢。
-      params: { expression, returnByValue: true, awaitPromise: true },
-    }))
-  })
-
-  ws.addEventListener('message', ev => {
-    const msg = JSON.parse(ev.data)
-    if (msg.id !== 1) return
-    const thrown = msg.result?.exceptionDetails
-    if (thrown) finish(reject, new Error(thrown.exception?.description || '頁面內 JS 例外'))
-    else finish(resolve, msg.result?.result?.value)
-  })
-
-  ws.addEventListener('error', () => finish(reject, new Error('WebSocket 連線失敗')))
-})
-
-try {
-  const value = await result
+  client = await openPageSocket()
+  const value = await client.evaluate(expression)
   console.log(typeof value === 'string' ? value : JSON.stringify(value, null, 2))
 } catch (e) {
   console.error('FAILED:', e.message)
-  process.exit(1)
+  process.exitCode = 1
+} finally {
+  client?.close()
 }
