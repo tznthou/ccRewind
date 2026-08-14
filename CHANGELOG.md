@@ -6,6 +6,21 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.21.3] - 2026-08-14
+
+### Security
+
+- **Electron 更新至 41.10.3**（[#97](https://github.com/tznthou/ccRewind/pull/97)）：修補 [CVE-2026-70608](https://nvd.nist.gov/vuln/detail/CVE-2026-70608)（CVSS 7.2），沙箱化的 iframe 即使沒有 `allow-popups`，仍可經由 OpenURL 這條導覽路徑開出新視窗。**此程式未走到那條路徑**——它不嵌入任何 iframe 或 webview，而 `setWindowOpenHandler` 一律回傳 `{ action: 'deny' }`（`src/main/index.ts:36`），正是官方 advisory 列為緩解措施的那個做法。仍隨上游更新，因為「不受影響」的判斷依據是現在這份程式碼，不是一個可以永遠成立的保證
+
+### Fixed
+
+- **思考過程顯示成一個空白的框**：Claude 的推理內容可以被 API 設定為省略，此時 JSONL 裡留下的是 `thinking: ""` 加上一份完整的 signature。介面照著渲染，於是使用者看到一個展得開、裡面什麼都沒有的框——看起來像程式壞了。實測索引庫裡空的 thinking block 全部帶有 signature，沒有例外（撰稿當下 5,034 個；這個數字每天都在長，比例才是重點）。這些內容不是本程式弄丟的，也不存在任何可以撈回來的地方（signature 依 API 規格是不可解析的不透明字串），所以能做的只有如實說明。現在改為一行說明文字，講清楚這裡本來有推理、以及它為什麼不在。⚠️ 判定「是 API 省略」要求 signature 確實是非空字串——解析器採寬容模式，畸形的原始 JSON 可以讓這個欄位變成物件或數字，只判斷 truthy 會讓程式對使用者宣稱一個沒有依據的原因（[#100](https://github.com/tznthou/ccRewind/pull/100)）
+- **remote control 的使用記錄在舊資料上一律顯示為「未使用」**：v1.19.0 加入 `has_remote_control` 欄位時，是靠清空檔案時間戳觸發重新索引來填值。那條路走不到已封存的 session——它們的原始 JSONL 多半已被 Claude Code 的 30 天清理刪除，沒有檔案可讀，欄位就一直停在預設值 0。在此機器的索引庫上實測，139 個曾經使用 remote control 的 session，原始檔案 139 個全都不在了，而它們留下的 3,316 筆標記仍完好地存在資料庫裡。判斷所需的依據從未離開資料庫，離開的只有檔案，所以改為直接從既有記錄回填（migration v24）。⚠️ 那些標記本身不含任何內容，回填取回的是「這個 session 曾經用過 remote control」這個事實，不是對話內容（[#101](https://github.com/tznthou/ccRewind/pull/101)）
+
+### Changed
+
+- **開發相依更新**（[#98](https://github.com/tznthou/ccRewind/pull/98)）：pnpm 11.20.0、ESLint 10.8、typescript-eslint 8.66、globals 17.9。四者都只在開發與建置階段使用，不進入實際執行的程式
+
 ## [1.21.2] - 2026-08-05
 
 ### Fixed
