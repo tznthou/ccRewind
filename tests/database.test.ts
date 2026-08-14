@@ -4,6 +4,7 @@ import os from 'node:os'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import type { MessageInput } from '../src/main/database'
+import { BACKFILL_HAS_REMOTE_CONTROL_SQL } from '../src/main/migrations'
 import { SUMMARY_VERSION } from '../src/main/summarizer'
 
 let tmpDir: string
@@ -2016,5 +2017,95 @@ describe('migration v22: parent_uuid/is_compact_summary/is_sidechain/is_abandone
   it('parent_uuid index exists for efficient parent-child lookups', () => {
     const indexes = db.rawAll<{ name: string }>("PRAGMA index_list(messages)").map(i => i.name)
     expect(indexes).toContain('idx_messages_parent_uuid')
+  })
+})
+
+describe('migration v24: backfill has_remote_control from existing bridge-session messages', () => {
+  /** 建立一個含 n 筆 bridge-session 訊息的 session，並強制把旗標打回 0（模擬 v23 之前索引的舊資料） */
+  function seedStaleSession(sessionId: string, opts: { bridge: boolean; archived: boolean }): void {
+    db.upsertProject('p24', 'Project 24')
+    db.indexSession({
+      sessionId, projectId: 'p24', projectDisplayName: 'Project 24',
+      title: 'v24 seed', messageCount: 2, filePath: `/tmp/${sessionId}.jsonl`, fileSize: 1,
+      fileMtime: '2026-05-20T00:00:00Z', startedAt: '2026-05-20T00:00:00Z', endedAt: '2026-05-20T01:00:00Z',
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'hello', sequence: 0 }),
+        ...(opts.bridge ? [msg({ type: 'bridge-session', sequence: 1 })] : []),
+      ],
+    })
+    // indexSession 會依訊息推導旗標，這裡打回 0 以重現「欄位停在 DEFAULT 0」的舊 DB 狀態
+    db.rawExec('UPDATE sessions SET has_remote_control = 0 WHERE id = ?', sessionId)
+    if (opts.archived) {
+      db.rawExec('UPDATE sessions SET archived = 1 WHERE id = ?', sessionId)
+    }
+  }
+
+  function flagOf(sessionId: string): number {
+    return db.rawAll<{ has_remote_control: number }>(
+      'SELECT has_remote_control FROM sessions WHERE id = ?', sessionId,
+    )[0].has_remote_control
+  }
+
+  function archivedOf(sessionId: string): number {
+    return db.rawAll<{ archived: number }>(
+      'SELECT archived FROM sessions WHERE id = ?', sessionId,
+    )[0].archived
+  }
+
+  it('schema version is at least 24', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(24)
+  })
+
+  it('backfills archived sessions that hold bridge-session messages', () => {
+    // 這是本 migration 的核心：archived session 的原始 JSONL 多半已被 CC 的 30 天清理刪除，
+    // 走 re-index 在物理上不可能，只能從 DB 內既存的訊息回填
+    seedStaleSession('v24-archived', { bridge: true, archived: true })
+    expect(flagOf('v24-archived')).toBe(0)
+
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+
+    expect(flagOf('v24-archived')).toBe(1)
+    // 封存狀態本身不能被 backfill 動到
+    expect(archivedOf('v24-archived')).toBe(1)
+  })
+
+  it('backfills non-archived sessions too', () => {
+    seedStaleSession('v24-active', { bridge: true, archived: false })
+
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+
+    expect(flagOf('v24-active')).toBe(1)
+  })
+
+  it('leaves sessions without bridge-session messages untouched', () => {
+    seedStaleSession('v24-no-bridge', { bridge: false, archived: true })
+
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+
+    expect(flagOf('v24-no-bridge')).toBe(0)
+  })
+
+  it('is idempotent — a second run leaves the flag at 1', () => {
+    seedStaleSession('v24-idem', { bridge: true, archived: true })
+
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+
+    expect(flagOf('v24-idem')).toBe(1)
+  })
+
+  it('does not touch sessions already flagged as 1', () => {
+    db.upsertProject('p24', 'Project 24')
+    db.indexSession({
+      sessionId: 'v24-already', projectId: 'p24', projectDisplayName: 'Project 24',
+      title: 'already flagged', messageCount: 1, filePath: '/tmp/v24-already.jsonl', fileSize: 1,
+      fileMtime: '2026-08-14T00:00:00Z', startedAt: '2026-08-14T00:00:00Z', endedAt: null,
+      messages: [msg({ type: 'bridge-session', sequence: 0 })],
+    })
+    expect(flagOf('v24-already')).toBe(1)
+
+    db.rawExec(BACKFILL_HAS_REMOTE_CONTROL_SQL)
+
+    expect(flagOf('v24-already')).toBe(1)
   })
 })
