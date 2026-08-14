@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { extractThinkingBlocks, extractToolBlocks, isDisplayableMessage, type ThinkingBlock } from '../../src/renderer/components/ChatView/contentBlocks'
+import { extractThinkingBlocks, extractToolBlocks, isDisplayableMessage, isOmittedThinking, type ThinkingBlock } from '../../src/renderer/components/ChatView/contentBlocks'
 import type { Message } from '../../src/shared/types'
 
 const json = (blocks: unknown) => JSON.stringify(blocks)
@@ -52,6 +52,61 @@ describe('extractThinkingBlocks', () => {
     ])
     expect(extractThinkingBlocks(cj).map(b => b.thinking)).toEqual(['有效'])
   })
+
+  // API 的 display:"omitted" 會回傳 thinking:"" + signature（官方格式）。
+  // 這種 block 必須照樣抽出來——UI 靠它顯示「思考過程未保留」，
+  // 濾掉的話該則訊息會整個消失，使用者無從得知這裡本來有推理。
+  it('thinking 為空字串但帶 signature（display:omitted）仍會被抽出', () => {
+    const cj = json([{ type: 'thinking', thinking: '', signature: 'EosnCkYICxIM' }])
+    expect(extractThinkingBlocks(cj)).toHaveLength(1)
+  })
+
+  it('保留 signature 欄位供 UI 判斷 omitted（漏帶則 UI 無法區分空白成因）', () => {
+    const cj = json([{ type: 'thinking', thinking: '', signature: 'EosnCkYICxIM' }])
+    expect(extractThinkingBlocks(cj)[0].signature).toBe('EosnCkYICxIM')
+  })
+})
+
+// 判斷「空白是 API 刻意省略」還是「單純沒內容」。UI 的文案會據此宣稱原因，
+// 歸因錯了就是對使用者說謊，所以 signature 必須真的存在才算 omitted。
+describe('isOmittedThinking', () => {
+  it('空 thinking + 有 signature → true（API display:omitted）', () => {
+    expect(isOmittedThinking({ type: 'thinking', thinking: '', signature: 'Eosn' })).toBe(true)
+  })
+
+  it('空 thinking + 無 signature 欄位 → false（不得宣稱是 omitted）', () => {
+    expect(isOmittedThinking({ type: 'thinking', thinking: '' })).toBe(false)
+  })
+
+  it('空 thinking + signature 為空字串 → false', () => {
+    expect(isOmittedThinking({ type: 'thinking', thinking: '', signature: '' })).toBe(false)
+  })
+
+  it('有明文 thinking → false（即使帶 signature，正常 block 不是 omitted）', () => {
+    expect(isOmittedThinking({ type: 'thinking', thinking: '我在想…', signature: 'Eosn' })).toBe(false)
+  })
+
+  it('只有空白字元的 thinking 不算 omitted（有內容就照原樣渲染）', () => {
+    expect(isOmittedThinking({ type: 'thinking', thinking: ' ', signature: 'Eosn' })).toBe(false)
+  })
+
+  // 型別宣告擋不住畸形的原始 JSON——parser 是寬容模式，signature 進來可能是任何東西。
+  // 走 extractThinkingBlocks 是因為那才是真實路徑：直接構造物件會被 TS 擋掉，
+  // 測不到 runtime 真正會遇到的形狀。
+  it('signature 是物件（畸形 JSON）不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: {} }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
+
+  it('signature 是數字不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: 123 }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
+
+  it('signature 是 true 不算 omitted', () => {
+    const [block] = extractThinkingBlocks(json([{ type: 'thinking', thinking: '', signature: true }]))
+    expect(isOmittedThinking(block)).toBe(false)
+  })
 })
 
 // 這組斷言與 MessageBubble 的兩個 early return 綁定：任一邊改了條件、另一邊沒跟上，
@@ -77,6 +132,13 @@ describe('isDisplayableMessage', () => {
 
   it('無 contentText 但有 thinking block 仍會渲染', () => {
     const cj = json([{ type: 'thinking', thinking: '推理' }])
+    expect(isDisplayableMessage(msg({ contentJson: cj }))).toBe(true)
+  })
+
+  // 全庫實測 5,005 個空 thinking block 全帶 signature（2026-08-13 統計，08-07 起
+  // 比例明顯上升）。這種訊息若判為不渲染，虛擬列表的 count 會與 MessageBubble 對不上。
+  it('只有 display:omitted 的空 thinking block 仍會渲染', () => {
+    const cj = json([{ type: 'thinking', thinking: '', signature: 'EosnCkYICxIM' }])
     expect(isDisplayableMessage(msg({ contentJson: cj }))).toBe(true)
   })
 

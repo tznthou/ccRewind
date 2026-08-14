@@ -1,9 +1,15 @@
 import type { Message } from '../../../shared/types'
 
-/** content array 裡的 thinking block（Claude 推理過程，原始 JSONL 保留在 message_content.content_json） */
+/**
+ * content array 裡的 thinking block（Claude 推理過程，原始 JSONL 保留在 message_content.content_json）。
+ *
+ * signature 是 API 對該段思考的加密簽章，用途是多輪對話回傳時讓 API 驗證來源；
+ * 官方明訂 opaque、不可解析，所以它無法還原出明文，只能拿來判斷空白的成因。
+ */
 export interface ThinkingBlock {
   type: 'thinking'
   thinking: string
+  signature?: string
 }
 
 interface ToolUseBlock {
@@ -60,6 +66,27 @@ export function extractThinkingBlocks(contentJson: string | null): ThinkingBlock
   } catch {
     return []
   }
+}
+
+/**
+ * 這段思考的空白是 API 端刻意省略，而非資料損毀或解析失誤。
+ *
+ * Messages API 的 `thinking.display: "omitted"` 會回傳 `thinking: ""` 搭配完整的
+ * signature（官方文件的回應範例即長這樣）。明文從未送達 client——不是 Claude Code
+ * 寫檔時弄丟的，也不存在任何可以撈回來的地方，signature 又不可解析，
+ * 所以 ccRewind 能做的只有如實說明，讓使用者知道這裡本來有推理。
+ *
+ * 要求 signature 真的是非空字串才算數：UI 會據此向使用者宣稱空白的原因，
+ * 少了這個依據就成了瞎猜。實測全庫 5,005 個空 thinking block 全數帶有 signature。
+ *
+ * 型別宣告在這裡幫不上忙——parser 是寬容模式（未知結構原樣保留），signature
+ * 從原始 JSON 進來可能是物件、數字或布林。單純判 truthy 會讓畸形資料也被
+ * 認定成 API 省略，UI 就開始說一個沒有依據的原因。
+ */
+export function isOmittedThinking(block: ThinkingBlock): boolean {
+  return block.thinking === ''
+    && typeof block.signature === 'string'
+    && block.signature.length > 0
 }
 
 /**

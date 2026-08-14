@@ -62,7 +62,7 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
       )}
 
       {thinkingBlocks.map((block, i) => (
-        <ThinkingBlock key={`thinking-${i}`} thinking={block.thinking} searchQuery={searchQuery} />
+        <ThinkingBlock key={`thinking-${i}`} block={block} searchQuery={searchQuery} />
       ))}
 
       {message.contentText && (
