@@ -28,6 +28,21 @@ function rebuildSideTables(db: BetterSqlite3.Database): void {
   `)
 }
 
+/**
+ * 由 messages 表既存的 bridge-session 訊息回填 sessions.has_remote_control。
+ *
+ * v23 引入該欄位時採「清空 file_mtime 觸發 re-index」的做法，但已封存 session 的原始
+ * JSONL 多半已被 Claude Code 的 30 天清理刪除，re-index 讀不到檔案，欄位只能停在
+ * DEFAULT 0。DB 內的 bridge-session 訊息本身沒有遺失，故直接由它回填。
+ *
+ * migration 與測試共用同一份 SQL，避免兩邊各抄一份後語意悄悄分岔。
+ */
+export const BACKFILL_HAS_REMOTE_CONTROL_SQL = `
+  UPDATE sessions SET has_remote_control = 1
+  WHERE has_remote_control = 0
+    AND id IN (SELECT DISTINCT session_id FROM messages WHERE type = 'bridge-session')
+`
+
 /** 所有 migrations，依 version 遞增排列 */
 export const migrations: Migration[] = [
   {
@@ -464,6 +479,13 @@ export const migrations: Migration[] = [
         UPDATE sessions SET file_mtime = NULL;
         UPDATE subagent_sessions SET file_mtime = NULL;
       `)
+    },
+  },
+  {
+    version: 24,
+    description: 'backfill has_remote_control from existing bridge-session messages (archived sessions cannot be re-indexed)',
+    up: (db) => {
+      db.prepare(BACKFILL_HAS_REMOTE_CONTROL_SQL).run()
     },
   },
 ]

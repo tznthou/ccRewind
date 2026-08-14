@@ -197,8 +197,8 @@ export class Database {
   }
 
   /** ⚠️ 測試專用：接受任意 SQL，禁止接到 IPC handler */
-  rawAll<T>(sql: string): T[] {
-    return this.db.prepare(sql).all() as T[]
+  rawAll<T>(sql: string, ...params: ReadonlyArray<string | number | bigint | Buffer | null>): T[] {
+    return this.db.prepare(sql).all(...params) as T[]
   }
 
   /** ⚠️ 測試專用：執行 DML / DDL（DELETE / UPDATE / INSERT），禁止接到 IPC handler */
