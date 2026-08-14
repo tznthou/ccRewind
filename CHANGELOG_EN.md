@@ -7,6 +7,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - 2026-08-14
+
+### Added
+
+- **The session list now marks conversations that used remote control, and links back to claude.ai where possible** ([#103](https://github.com/tznthou/ccRewind/pull/103)): the `has_remote_control` column landed in v1.19.0 and v1.21.3 backfilled it for older data, but the interface had never read it — the data was there, the outlet was not. Sessions are now marked in the list, and those carrying a bridge session id render as links that open the same conversation on claude.ai in the system browser. ⚠️ **The marker means only "this session used remote control at some point" — it does not imply a link is available.** Most have none; the reason is in the Fixed entry below. The link stays out of the tab order: a listbox option must not contain a focusable element, and forcing one in breaks arrow-key navigation, so pressing `O` with the list focused opens the currently selected session instead.
+
+### Fixed
+
+- **Very few sessions can link back to claude.ai, and the share will only shrink**: the parser never read the bridge session id, so every existing row in the database holds nothing. This differs from the remote control backfill in v1.21.3 — there the evidence had never left the database, here the only source is the original JSONL. Re-indexing is therefore the only path, and it reaches only sessions whose source file still exists. Measured on this machine's index, of 143 sessions marked as having used remote control, just 4 could still recover an id (migration v25). Claude Code clears conversation records after 30 days by default, so that ratio only falls and there is no way to make it up later — which is precisely why this did not wait for a later release
+- **Session tags were squeezed down to an unreadable sliver**: list rows are fixed-height flex containers, and when the metadata line wraps to two lines the three lines of content need 91px against the 80px the container allowed. In that layout, running out of room does not present as overflow — child items are compressed instead, so measuring scroll height reveals nothing at all. Row height is now 92px, and the tag line no longer shrinks
+
+### Changed
+
+- **Three CDP tools added for verifying the interface during development** (`scripts/cdp-client.mjs`, `cdp-eval.mjs`, `cdp-screenshot.mjs`): they query the real DOM of a running window and capture screenshots. Development-only; none reach the shipped runtime. Writes are guarded three ways — refusing to write under `~/.claude/`, refusing to overwrite any existing file, and connecting only to targets served by the local dev server
+
 ## [1.21.3] - 2026-08-14
 
 ### Security

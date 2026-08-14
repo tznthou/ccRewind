@@ -6,6 +6,21 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.22.0] - 2026-08-14
+
+### Added
+
+- **session 列表標出曾經使用 remote control 的對話，能連回去的就連回 claude.ai**（[#103](https://github.com/tznthou/ccRewind/pull/103)）：`has_remote_control` 這個欄位 v1.19.0 就加進資料庫、v1.21.3 又補齊了舊資料，但介面從來沒有讀過它——資料一直在，出口沒開。現在列表上會標出來，拿得到 bridge session id 的那些會是連結，點了在系統瀏覽器開啟 claude.ai 上的同一段對話。⚠️ **標記本身的意思只有「這個 session 曾經用過 remote control」，不等於有連結可點**——大部分都沒有，原因見下方 Fixed 那條。連結不進 Tab 順序：listbox 的鍵盤模型不允許選項裡放可聚焦的元素，硬放會破壞方向鍵導覽，所以改為在列表聚焦時按 `O` 開啟目前選取的那個 session
+
+### Fixed
+
+- **能連回 claude.ai 的 session 極少，而且只會愈來愈少**：解析器原本沒有讀取 bridge session id，資料庫裡既有的記錄因此全是空的。這一點和 v1.21.3 的 remote control 回填不同——那次判斷所需的依據還留在資料庫裡，這次沒有，唯一的來源是原始 JSONL。所以只能重新索引，而重新索引只碰得到原始檔案還在的 session。在此機器的索引庫上實測，143 個帶有 remote control 標記的 session 只有 4 個仍取得回 id（migration v25）。Claude Code 預設 30 天清理對話記錄，這個比例只會往下掉，不存在補救路徑——這正是這項改動不等下一版的原因
+- **session 標籤被壓成一條看不清的細線**：列表項目是固定高度的 flex 容器，中繼資料折成兩行時，三行內容需要 91px 而容器只給 80px。空間不足在這種排版下不會表現成溢出，而是子項目被壓扁，所以量測捲動高度完全看不出異常。列高改為 92px，標籤那一行不再參與收縮
+
+### Changed
+
+- **新增三支 CDP 工具供開發時驗證介面**（`scripts/cdp-client.mjs`、`cdp-eval.mjs`、`cdp-screenshot.mjs`）：對執行中的視窗查詢真實 DOM 與截圖，只在開發階段使用，不進入實際執行的程式。寫入端有三道防護——拒絕寫入 `~/.claude/`、拒絕覆寫任何已存在的檔案、只連本機開發伺服器的分頁
+
 ## [1.21.3] - 2026-08-14
 
 ### Security
