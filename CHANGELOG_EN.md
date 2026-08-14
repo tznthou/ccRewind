@@ -7,6 +7,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.0] - 2026-08-14
+
+### Added
+
+- **The session list now marks conversations that used remote control, and links to claude.ai where an id is available** ([#103](https://github.com/tznthou/ccRewind/pull/103)): the `has_remote_control` column landed in v1.19.0 and v1.21.3 backfilled it for older data, but the interface had never read it — the data was there, the outlet was not. Sessions are now marked in the list, and those carrying a bridge session id render as links that open the corresponding claude.ai session URL in the system browser. ⚠️ **The marker means only "this session used remote control at some point" — it does not imply a link is available.** Most older sessions have none; the reason is in the Fixed entry below. The link deliberately stays out of the tab order: this list uses the `aria-activedescendant` keyboard model, where a focusable element inside an option disables arrow-key navigation, so pressing `O` with the list focused opens the currently selected session instead.
+
+### Fixed
+
+- **The parser now captures the bridge session id, so remote-control conversations can link back to claude.ai**: the field had never been parsed, leaving every existing database row empty prior to migration v25. This differs from the remote control backfill in v1.21.3 — there the evidence had never left the database, here the only source is the original JSONL, recoverable only by re-indexing, which reaches only sessions whose source file still exists. Measured on this machine's index, of 143 sessions marked as having used remote control, just 4 could still recover an id. ⚠️ **That ratio describes existing historical data, not what happens from here on**: Claude Code clears conversation records after 30 days by default, and sessions past that window have no recovery path — but from this release onward, new sessions capture the id as they are indexed. The actual ratio varies per user with their retention settings and how long they have been using the tool
+- **Session tags were squeezed down to an unreadable sliver**: list rows are fixed-height flex containers, and when the metadata line wraps to two lines the content no longer fits — measured at `font-scale` 1.25, three lines need 91px against the 80px the container allowed. In that layout, running out of room does not present as overflow — child items are compressed instead, so measuring scroll height reveals nothing. Row height is now 92px, and the tag line no longer shrinks
+
+### Changed
+
+- **Three CDP tools added for verifying the interface during development** (`scripts/cdp-client.mjs`, `cdp-eval.mjs`, `cdp-screenshot.mjs`): they query the real DOM of a running window and capture screenshots. Development-only; none reach the shipped runtime (the build packages `out/` alone). Writes carry two hard guards — refusing to write under `~/.claude/`, and refusing via `O_EXCL` to overwrite any existing file; connections default to accepting only targets served by the local dev server, overridable with `CDP_EXPECT_URL`
+
 ## [1.21.3] - 2026-08-14
 
 ### Security
