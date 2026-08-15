@@ -24,39 +24,41 @@ jobs:
 
       - name: Get version
         id: get_version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            RAW="$INPUT_VERSION"
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            RAW="${GITHUB_REF#refs/tags/}"
           fi
+          # 正規化成 vX.Y.Z 再往下游餵。tag push 天然帶 v（filter 是 v*），
+          # 但 workflow_dispatch 的 inputs.version 沒格式保證：不帶 v 時會建出
+          # 不帶 v 的 tag，與 notes 標題、build jobs 的 tag_name 三處不一致。
+          # 格式驗證在 release-notes.sh（下一步），非法值在 build 前就會停。
+          echo "VERSION=v${RAW#v}" >> "$GITHUB_OUTPUT"
+
+      # 說明文字從 CHANGELOG.md 抽當版段落組出來。這一步跑在 build 之前，
+      # 所以 CHANGELOG 漏寫該版本時會在這裡就停下，不會先產出 artifacts 才發現。
+      - name: Build release notes
+        id: notes
+        run: |
+          ./scripts/release-notes.sh "$VERSION" > "$RUNNER_TEMP/release-notes.md"
+          echo "本版說明文字（${VERSION}）："
+          cat "$RUNNER_TEMP/release-notes.md"
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
 
       - name: Create Release
         run: |
-          gh release delete ${{ steps.get_version.outputs.VERSION }} --yes || true
-          gh release create ${{ steps.get_version.outputs.VERSION }} \
-            --title "ccRewind ${{ steps.get_version.outputs.VERSION }}" \
-            --notes "$(cat <<'NOTES'
-          ## ccRewind ${{ steps.get_version.outputs.VERSION }}
-
-          Claude Code 對話回放與考古工具
-
-          ### macOS
-          - **DMG** (recommended): 拖曳至 Applications 即可
-          - **ZIP**: 解壓後直接執行
-
-          > ⚠️ **macOS**：首次開啟時可能顯示「無法驗證開發者」警告。
-          > 請至「系統設定 → 隱私與安全性」，找到 ccRewind 並點擊「仍要打開」即可。
-          >
-          > ⚠️ **Windows**：首次執行時會顯示 SmartScreen「Windows 已保護您的電腦」警告。
-          > 請點擊「其他資訊」→「仍要執行」即可。
-
-          System requirements: macOS 11+ / Windows 10+
-          NOTES
-          )" \
+          gh release delete "$VERSION" --yes || true
+          gh release create "$VERSION" \
+            --title "ccRewind $VERSION" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --draft=false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
 
   build-macos:
     needs: create-release
