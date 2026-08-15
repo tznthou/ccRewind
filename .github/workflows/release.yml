@@ -24,12 +24,19 @@ jobs:
 
       - name: Get version
         id: get_version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "VERSION=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            RAW="$INPUT_VERSION"
           else
-            echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+            RAW="${GITHUB_REF#refs/tags/}"
           fi
+          # 正規化成 vX.Y.Z 再往下游餵。tag push 天然帶 v（filter 是 v*），
+          # 但 workflow_dispatch 的 inputs.version 沒格式保證：不帶 v 時會建出
+          # 不帶 v 的 tag，與 notes 標題、build jobs 的 tag_name 三處不一致。
+          # 格式驗證在 release-notes.sh（下一步），非法值在 build 前就會停。
+          echo "VERSION=v${RAW#v}" >> "$GITHUB_OUTPUT"
 
       # 說明文字從 CHANGELOG.md 抽當版段落組出來。這一步跑在 build 之前，
       # 所以 CHANGELOG 漏寫該版本時會在這裡就停下，不會先產出 artifacts 才發現。

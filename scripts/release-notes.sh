@@ -31,6 +31,16 @@ fi
 
 # v1.22.0 → 1.22.0。CHANGELOG 的標題不帶 v，tag 帶。
 VERSION_NUM="${VERSION_RAW#v}"
+
+# 版本格式驗證。擋下打錯的 tag 名（v1.2、version-2）流進 CHANGELOG 比對，
+# 否則錯誤訊息會指向「CHANGELOG 沒這段」而真正的問題是版本格式。
+# release.yml 的版本閘門也靠這裡——workflow 端只做 v 前綴正規化，不另抄一份 regex。
+SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+if ! [[ "$VERSION_NUM" =~ $SEMVER_RE ]]; then
+  echo "ERROR: 不支援的版本格式: ${VERSION_RAW}（預期 X.Y.Z 或 vX.Y.Z）" >&2
+  exit 2
+fi
+
 # 顯示用的版本一律補回 v，否則傳入不帶 v 時標題會與 tag 名不一致。
 DISPLAY_VERSION="v${VERSION_NUM}"
 
