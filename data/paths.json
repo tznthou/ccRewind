@@ -928,5 +928,67 @@
       "count": 6,
       "uniques": 1
     }
+  ],
+  "2026-08-18T03:58:11Z": [
+    {
+      "path": "/tznthou/ccRewind/pulls",
+      "title": "/pulls",
+      "count": 33,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 30,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/actions",
+      "title": "/actions",
+      "count": 14,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/85",
+      "title": "/pull/85",
+      "count": 11,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/issues",
+      "title": "/issues",
+      "count": 8,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/103",
+      "title": "/pull/103",
+      "count": 7,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/issues/26",
+      "title": "/issues/26",
+      "count": 6,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/100",
+      "title": "/pull/100",
+      "count": 6,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/105",
+      "title": "/pull/105",
+      "count": 6,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/99",
+      "title": "/pull/99",
+      "count": 6,
+      "uniques": 1
+    }
   ]
 }
