@@ -1672,5 +1672,49 @@
       "count": 3,
       "uniques": 1
     }
+  ],
+  "2026-08-30T09:14:33Z": [
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 8,
+      "uniques": 4
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/107",
+      "title": "/pull/107",
+      "count": 4,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/85",
+      "title": "/pull/85",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/99",
+      "title": "/pull/99",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pulls",
+      "title": "/pulls",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/commit/25ee3ffc4e20f98fdf6421e7b26017a42f38bd3c",
+      "title": "/commit/25ee3ffc4e20f98fdf6421e7b26017a42f38bd3c",
+      "count": 1,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/commits/main",
+      "title": "/commits/main",
+      "count": 1,
+      "uniques": 1
+    }
   ]
 }
