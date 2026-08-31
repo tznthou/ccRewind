@@ -1716,5 +1716,37 @@
       "count": 1,
       "uniques": 1
     }
+  ],
+  "2026-08-31T09:45:27Z": [
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 7,
+      "uniques": 4
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/107",
+      "title": "/pull/107",
+      "count": 4,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/85",
+      "title": "/pull/85",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pull/99",
+      "title": "/pull/99",
+      "count": 2,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind/pulls",
+      "title": "/pulls",
+      "count": 2,
+      "uniques": 1
+    }
   ]
 }
