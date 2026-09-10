@@ -1964,5 +1964,19 @@
       "count": 3,
       "uniques": 1
     }
+  ],
+  "2026-09-10T08:08:25Z": [
+    {
+      "path": "/tznthou/ccRewind/releases",
+      "title": "/releases",
+      "count": 3,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 2,
+      "uniques": 2
+    }
   ]
 }
