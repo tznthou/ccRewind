@@ -1978,5 +1978,19 @@
       "count": 2,
       "uniques": 2
     }
+  ],
+  "2026-09-11T08:03:36Z": [
+    {
+      "path": "/tznthou/ccRewind/releases",
+      "title": "/releases",
+      "count": 3,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 1,
+      "uniques": 1
+    }
   ]
 }
