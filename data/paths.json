@@ -1992,5 +1992,19 @@
       "count": 1,
       "uniques": 1
     }
+  ],
+  "2026-09-12T07:55:25Z": [
+    {
+      "path": "/tznthou/ccRewind/releases",
+      "title": "/releases",
+      "count": 3,
+      "uniques": 1
+    },
+    {
+      "path": "/tznthou/ccRewind",
+      "title": "Overview",
+      "count": 1,
+      "uniques": 1
+    }
   ]
 }
