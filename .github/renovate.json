@@ -69,7 +69,6 @@
         "react",
         "react-dom",
         "vite",
-        "vitest",
         "eslint",
         "/^@eslint\\//",
         "/^@typescript-eslint\\//"
@@ -84,6 +83,28 @@
       ],
       "groupName": "safe minor dependencies",
       "automerge": false
+    },
+    {
+      "description": "vitest 家族必須同版號升級 — @vitest/coverage-v8 的 peerDependencies 是嚴格鎖版 (vitest: '4.1.11') 不是 range, 版本不同步會讓 pnpm test:coverage 壞掉而 CI 抓不到 (CI 不跑 coverage). 必含 major, 否則 major bumps 會散成 N 個 PR. 這條必須排在 safe patch/minor 兩條之後, 後定義者覆蓋前者",
+      "matchPackageNames": [
+        "vitest",
+        "/^@vitest\\//"
+      ],
+      "matchUpdateTypes": [
+        "major",
+        "minor",
+        "patch"
+      ],
+      "groupName": "vitest 家族",
+      "automerge": false
+    },
+    {
+      "description": "vitest 暫時停在 4.x — 5.0.0 是全新 major 僅一個發布版, 而本專案要修的 CVE-2026-84373 在 4.x 已修 (vulnerabilityFixStrategy: lowest 也是挑 4). 想升 5 時移除這條, group 會整組一起提",
+      "matchPackageNames": [
+        "vitest",
+        "/^@vitest\\//"
+      ],
+      "allowedVersions": "<5.0.0"
     },
     {
       "description": "GitHub Actions 獨立 group + manual review",
