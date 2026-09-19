@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.22.1] - 2026-09-19
+
+A maintenance release. No new features — the changes are dependency updates and one fix to the release process.
+
+### Security
+
+- **Vitest upgraded to 4.1.11** ([#115](https://github.com/tznthou/ccRewind/pull/115)): patches [CVE-2026-84373](https://github.com/advisories/GHSA-82fw-gwwq-j7x9) (CVSS 5.9), where `@vitest/mocker`'s redirect mock never validated paths against Vite's file-serving allowlist, letting anyone who can reach the dev server's unprotected HMR WebSocket read files outside the project root. The affected range is `>= 2.1.0 < 4.1.11`; this project had been on 3.2.7. ⚠️ **This is a development dependency and does not affect an installed application** — vitest is never bundled, so this matters only to people building from source or running the tests. `@vitest/coverage-v8` had to move in lockstep: its peer is an exact version rather than a range, so bumping vitest alone breaks `pnpm test:coverage`, and since CI does not run coverage, that mismatch is invisible there
+
+### Fixed
+
+- **Release notes are now generated from the CHANGELOG instead of a fixed template** ([#105](https://github.com/tznthou/ccRewind/pull/105)): every release previously shipped the same boilerplate, unrelated to what that version actually changed. The fix landed in main after v1.22.0 was tagged, **so v1.22.1 is the first release where it takes effect** — and generating the notes for real is what surfaced a missing blank line in the generator, which let the closing link be absorbed into the last list item as a lazy continuation rather than standing as its own paragraph; fixed here ([#115](https://github.com/tznthou/ccRewind/pull/115))
+
+### Changed
+
+- **Dependency updates**: React and React DOM to 19.3.0, `@tanstack/react-virtual` to 3.14.12, plus routine updates to eslint and type definitions ([#106](https://github.com/tznthou/ccRewind/pull/106), [#107](https://github.com/tznthou/ccRewind/pull/107), [#108](https://github.com/tznthou/ccRewind/pull/108), [#109](https://github.com/tznthou/ccRewind/pull/109), [#112](https://github.com/tznthou/ccRewind/pull/112), [#113](https://github.com/tznthou/ccRewind/pull/113), [#114](https://github.com/tznthou/ccRewind/pull/114)). The behavioural changes in React 19.3.0 concern transition scheduling and form reset events; this project uses none of those APIs, so the interface behaves exactly as before
+- **Renovate config: the vitest family is now grouped** ([#111](https://github.com/tznthou/ccRewind/pull/111)): `@vitest/coverage-v8` pins its peer to an exact version, so letting the versions drift apart breaks the local coverage command while CI notices nothing — they now move together
+
 ## [1.22.0] - 2026-08-14
 
 ### Added

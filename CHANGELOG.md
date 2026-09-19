@@ -6,6 +6,23 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.22.1] - 2026-09-19
+
+此版為維護性發布，沒有新功能，改動集中在相依套件更新與一項發版流程修正。
+
+### Security
+
+- **測試框架 vitest 升至 4.1.11**（[#115](https://github.com/tznthou/ccRewind/pull/115)）：修補 [CVE-2026-84373](https://github.com/advisories/GHSA-82fw-gwwq-j7x9)（CVSS 5.9），`@vitest/mocker` 的 redirect mock 未將路徑對照 Vite 的檔案存取允許清單，能連上開發伺服器那條未受保護的 HMR WebSocket 的人，可藉此讀取專案根目錄以外的檔案。受影響範圍為 `>= 2.1.0 < 4.1.11`，本專案先前停在 3.2.7。⚠️ **這是開發相依套件，不影響已安裝的應用程式**——vitest 不進入打包範圍，此項只對從原始碼開發或執行測試的人有意義。`@vitest/coverage-v8` 必須同步升級：它的 peer 寫的是精確版號而非範圍，單獨升 vitest 會讓 `pnpm test:coverage` 壞掉，而 CI 不跑覆蓋率，這種不同步在 CI 上看不出來
+
+### Fixed
+
+- **release notes 改由 CHANGELOG 產生，不再套用固定模板**（[#105](https://github.com/tznthou/ccRewind/pull/105)）：先前每次發版所附的說明文字都是同一份模板，與該版實際改了什麼無關。此修正在 v1.22.0 發版之後才進入 main，**因此 v1.22.1 是第一個實際生效的版本**——也因為是第一次實際產出，才發現產生器少補一個空行，使說明區結尾的連結被 Markdown 當成最後一個列表項的延續而吸進該項內，一併修正（[#115](https://github.com/tznthou/ccRewind/pull/115)）
+
+### Changed
+
+- **相依套件更新**：React 與 React DOM 升至 19.3.0，`@tanstack/react-virtual` 升至 3.14.12，另有 eslint 與型別定義等開發相依套件的例行更新（[#106](https://github.com/tznthou/ccRewind/pull/106)、[#107](https://github.com/tznthou/ccRewind/pull/107)、[#108](https://github.com/tznthou/ccRewind/pull/108)、[#109](https://github.com/tznthou/ccRewind/pull/109)、[#112](https://github.com/tznthou/ccRewind/pull/112)、[#113](https://github.com/tznthou/ccRewind/pull/113)、[#114](https://github.com/tznthou/ccRewind/pull/114)）。React 19.3.0 的行為變動集中在 transition 排程與表單重置事件，本專案未使用這些 API，介面行為不變
+- **Renovate 設定：vitest 家族綁定同一群組**（[#111](https://github.com/tznthou/ccRewind/pull/111)）：`@vitest/coverage-v8` 的 peer 鎖死精確版號，版本分家只會在本機的覆蓋率指令上炸開而 CI 無感，因此改為整組一起升
+
 ## [1.22.0] - 2026-08-14
 
 ### Added

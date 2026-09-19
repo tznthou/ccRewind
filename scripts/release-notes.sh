@@ -71,7 +71,10 @@ Claude Code 對話回放與考古工具
 ### 本版變更
 HEADER
 
-printf '%s\n' "$SECTION"
+# 尾端補一個空行：命令替換會吃掉 $SECTION 的尾隨換行，沒有這個空行時，
+# footer 的第一行會緊接在最後一個列表項後面，被 Markdown 當成該項的延續
+# （lazy continuation）吸進 bullet 裡，而不是獨立段落。
+printf '%s\n\n' "$SECTION"
 
 cat <<'FOOTER'
 完整記錄：[CHANGELOG.md](https://github.com/tznthou/ccRewind/blob/main/CHANGELOG.md)（中文）／[CHANGELOG_EN.md](https://github.com/tznthou/ccRewind/blob/main/CHANGELOG_EN.md)（English）
