@@ -92,6 +92,17 @@ async function isExcludedByRules(
   return matchesAnyRule(rules, projectId, firstTs)
 }
 
+/**
+ * 這些規則裡，哪些管得到這個 session。delete 規則一律管；rule-only 規則只管它建立當下不在 DB
+ * 裡的 session——建立當下已在的，是它承諾「保留並照常更新」的範圍（exclusion_rule_kept）。
+ * 沒有 rule-only 規則時原樣回傳，不查 DB。
+ */
+function rulesGoverning(db: Database, rules: ExclusionRule[], sessionId: string): ExclusionRule[] {
+  if (!rules.some(r => r.mode === 'rule-only')) return rules
+  const keptBy = db.getRuleIdsKeeping(sessionId)
+  return rules.filter(r => r.mode === 'delete' || !keptBy.has(r.id))
+}
+
 /** 已經知道 timestamp 時的同步版本，省下重讀檔案。空清單一律不匹配。 */
 function matchesAnyRule(
   rules: ExclusionRule[],
@@ -335,8 +346,8 @@ export async function runIndexer(
   const sessionsToIndex: SessionToIndex[] = []
   const scannedSessionIds = new Set<string>()
 
-  // Exclusion rules（v1.9.0）：防止新 session 被重建（尤其 applyExclusion 硬刪後磁碟還在的場景）
-  // 只攔截新 session（!existing），已 indexed 的保持 mtime 同步邏輯不變
+  // Exclusion rules（v1.9.0）：防止被排除的 session 被重建（尤其 applyExclusion 硬刪後磁碟還在的場景）。
+  // 已完整索引的在這裡一律不擋，保持 mtime 同步邏輯不變；其餘哪些規則管得到它見 rulesGoverning
   const exclusionRules = db.getExclusionRules()
   // 被規則擋下的 session。subagent 階段要分辨得出「使用者主動排除」與其他沒進
   // sessions 表的原因——前者連 subagent 都不該索引，後者的 subagent 是該救的。
@@ -353,9 +364,11 @@ export async function runIndexer(
         // 失敗，或 phase 4 為了接住 subagent 補寫的 metadata-only parent），語義上更
         // 接近新 session 而不是已索引。少了這一半，一個在 parent 暫時讀不到時補寫的
         // metadata parent 會因為下一輪「已 existing」而永久豁免 date rule——等權限恢復
-        // 就整段索引回來，使用者設的排除範圍等於沒設。
-        if ((!existing || existing.summaryVersion === null)
-          && await isExcludedByRules(exclusionRules, project.projectId, session.filePath)) {
+        // 就整段索引回來，使用者設的排除範圍等於沒設。rule-only 規則照樣適用這條，只是
+        // 它另外豁免建立當下就在的 session（rulesGoverning），而不是看 summary_version。
+        const alreadyIndexed = !!existing && existing.summaryVersion !== null
+        const governingRules = alreadyIndexed ? [] : rulesGoverning(db, exclusionRules, session.sessionId)
+        if (await isExcludedByRules(governingRules, project.projectId, session.filePath)) {
           excludedSessionIds.add(session.sessionId)
           continue
         }
@@ -468,7 +481,11 @@ export async function runIndexer(
     // 本來就不做這個檢查（那時的分工是交給 applyExclusion 硬刪），race 一旦發生就沒有
     // 第二道防線。用手上已解出的 startedAt，不重讀檔案；它也正是 buildExclusionWhere
     // 比對的那個欄位，比 phase 2 的 readFirstTimestamp 更貼近 SQL 端的判準。
-    if (matchesAnyRule(db.getExclusionRules(), s.projectId, startedAt)) {
+    //
+    // rule-only 規則在這裡一樣只管它建立當下不在 DB 裡的 session（rulesGoverning）。少了這層，
+    // 被保留的 session 一重新索引就被擋在這裡：內容停在建規則那一刻、mtime 不更新所以每輪重跑，
+    // 而且它進了 excludedSessionIds，phase 4 會跳過它的 subagent，封存再把它們當成磁碟上消失。
+    if (matchesAnyRule(rulesGoverning(db, db.getExclusionRules(), s.sessionId), s.projectId, startedAt)) {
       excludedSessionIds.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
       continue
@@ -554,7 +571,7 @@ export async function runIndexer(
         // 主動要它消失，補寫等於把刪掉的東西接回來。phase 2 的 excludedSessionIds 蓋不到
         // 後者——那時 session 還在表裡，走的是 existing 分支，從來沒進過那個集合。
         // 所以這裡就地重評一次規則，讓「使用者不要」贏過「補寫救資料」。
-        if (await isExcludedByRules(freshExclusionRules, project.projectId, session.filePath)) {
+        if (await isExcludedByRules(rulesGoverning(db, freshExclusionRules, session.sessionId), project.projectId, session.filePath)) {
           console.warn(`[indexer] session ${logSafe(session.sessionId)} matches an exclusion rule; not restoring it as a metadata-only parent (its ${subagents.length} subagent(s) stay out too)`)
           continue
         }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { StorageOverview, ExclusionRuleInput, ExclusionPreviewResult } from '../../../shared/types'
+import type { StorageOverview, ExclusionRuleInput, ExclusionPreviewResult, ExclusionMode } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import StorageOverviewCards from './StorageOverviewCards'
 import ProjectBreakdownList from './ProjectBreakdown'
@@ -41,23 +41,21 @@ export default function StoragePage() {
 
   const openConfirm = useCallback(async (rule: ExclusionRuleInput, title: string) => {
     try {
+      // 0 筆也要開對話框：那正是「保留資料，停止之後的索引」的情境。在這裡略過的話，
+      // 按下去畫面沒有任何反應（無對話框、無提示、無錯誤）
       const preview = await window.api.previewExclusion(rule)
-      const isProjectOnly = !!(rule.projectId && !rule.dateFrom && !rule.dateTo)
-      if (preview.sessionCount === 0 && !isProjectOnly) {
-        return
-      }
       setPending({ preview, title })
     } catch (err) {
       setError(err instanceof Error ? err.message : t('common.errorPreview'))
     }
   }, [t])
 
-  const confirmApply = useCallback(async () => {
+  const confirmApply = useCallback(async (mode: ExclusionMode) => {
     if (!pending || isApplying) return
     const snapshot = pending
     setIsApplying(true)
     try {
-      await window.api.applyExclusion(snapshot.preview.applyToken)
+      await window.api.applyExclusion(snapshot.preview.applyToken, mode)
       setPending(null)
       await refresh()
     } catch (err) {

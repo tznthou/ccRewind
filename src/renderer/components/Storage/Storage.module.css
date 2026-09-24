@@ -306,6 +306,32 @@
   white-space: nowrap;
 }
 
+.ruleBadge {
+  font-size: var(--font-size-xs);
+  padding: 1px var(--space-sm);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.ruleBadgeDelete {
+  border-color: rgba(220, 38, 38, 0.3);
+  color: var(--color-danger, #dc2626);
+}
+
+.removeConfirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
 /* ── Confirm dialog ── */
 
 .backdrop {
@@ -341,6 +367,61 @@
   font-size: var(--font-size-sm);
   color: var(--color-text-secondary);
   line-height: 1.6;
+}
+
+.modeGroup {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.modeLegend {
+  padding: 0;
+  margin-bottom: var(--space-xs);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.modeOption {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.modeOption:has(input:checked) {
+  border-color: var(--color-accent);
+  background: var(--color-bg-selected);
+}
+
+.modeOption input {
+  margin-top: 3px;
+}
+
+.modeOptionDisabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.modeTitle {
+  display: block;
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.modeHint {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
 }
 
 .warningBanner {

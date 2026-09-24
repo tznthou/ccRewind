@@ -104,7 +104,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 | 功能 | 說明 |
 |------|------|
 | **資料保全** | JSONL 被刪除時自動封存對話，不丟失任何歷史紀錄 |
-| **儲存管理** | 檢視索引資料庫佔用（DB 大小、Session/Message 數、專案佔比視覺化 bar），以排除規則釋放空間——一鍵排除整個專案、依日期範圍排除，或從規則清單移除；所有刪除走統一雙重確認（checkbox + >50% 紅色警告 banner），IPC 層 apply-token handshake 防 renderer 繞過 |
+| **儲存管理** | 檢視索引資料庫佔用（DB 大小、Session/Message 數、專案佔比視覺化 bar），以排除規則管理索引範圍——一鍵排除整個專案或依日期範圍排除，可選擇保留既有資料、只停止之後的索引，或連既有資料一起刪除以釋放空間；刪除走雙重確認（checkbox + >50% 紅色警告 banner），IPC 層 apply-token handshake 防 renderer 繞過 |
 | **DB 壓縮** | Storage 頁顯示可回收空間（freelist × page_size，PRAGMA 即時讀取），一鍵 VACUUM 釋放 SQLite DELETE 留下的 free pages，確認對話框明確標示僅重組檔案結構不刪資料 |
 | **Image block 智慧處理** | 偵測對話中的截圖/貼圖，標記含圖片訊息；儲存時精確剝除 base64 影像資料（保留結構 metadata），防止索引資料庫膨脹 |
 | **增量索引** | 首次啟動掃描所有 JSONL，後續僅處理新增/修改的檔案。Resumed session 自動 UUID 去重，不產生重複訊息 |

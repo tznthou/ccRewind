@@ -503,7 +503,7 @@
 
 > 補 exclusion 硬刪的絕對性：保留可還原的壓縮選項
 
-exclusion 目前是不可逆 hard delete，未來希望多一條「壓縮但保留原始資料、可隨時還原」的路徑。設計細節待定（可能基於 SQLite 內部壓縮或 zstd blob）。
+exclusion 的刪除模式是不可逆 hard delete。不刪資料的「保留資料，停止之後的索引」已於 schema v26 提供，但它不釋放空間；未來希望多一條「壓縮但保留原始資料、可隨時還原」的路徑，讓釋放空間不必以刪除為代價。設計細節待定（可能基於 SQLite 內部壓縮或 zstd blob）。
 
 ### In-App 自動更新（待 Apple Developer ID code signing）
 
@@ -543,4 +543,4 @@ exclusion 目前是不可逆 hard delete，未來希望多一條「壓縮但保�
 | files_touched 解析不準 | tool_use 的 input JSON 格式可能變化，parser 要寬容 |
 | 護城河侵蝕速度 | FTS5 + Token 視覺化技術門檻不高，競品可快速複製；Phase 3.5 / 4 / 6 的解讀層與體驗深度是主要護城河 |
 | Insight / 統計規則噪音 | 觸發閾值寧高勿低，中等值不出聲；定期根據實際 session 資料校準閾值 |
-| Exclusion 不可逆 | 統一 Confirm Dialog + IPC apply-token handshake 已阻擋誤刪；未來「資料壓縮功能」提供可還原備案 |
+| Exclusion 不可逆 | 預設選項為「保留資料，停止之後的索引」（schema v26），只有選刪除才不可逆；刪除走統一 Confirm Dialog + IPC apply-token handshake；未來「資料壓縮功能」提供可還原備案 |

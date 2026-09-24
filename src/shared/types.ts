@@ -320,12 +320,20 @@ export interface FileHistoryEntry {
 
 // ── 儲存管理（v1.9.0） ──
 
+/**
+ * 建規則當下對既有資料做了什麼：
+ * - delete：符合的 session 已被刪除（applyExclusion）
+ * - rule-only：既有資料保留，只擋之後新進來的 session
+ */
+export type ExclusionMode = 'delete' | 'rule-only'
+
 /** 排除規則：project_id / date_from / date_to 任一組合（至少一非空） */
 export interface ExclusionRule {
   id: number
   projectId: string | null
   dateFrom: string | null  // ISO date YYYY-MM-DD
   dateTo: string | null    // ISO date YYYY-MM-DD
+  mode: ExclusionMode
   createdAt: string
 }
 
@@ -470,8 +478,11 @@ export interface ElectronAPI {
   getStorageOverview: (thresholdDays?: number) => Promise<StorageOverview>
   /** 預覽排除規則影響（不刪任何資料，同時取得一次性 applyToken） */
   previewExclusion: (rule: ExclusionRuleInput) => Promise<ExclusionPreviewResult>
-  /** 套用排除規則（消費 preview 的 applyToken，hard delete + FTS sync + best-effort VACUUM） */
-  applyExclusion: (applyToken: string) => Promise<ApplyExclusionResult>
+  /**
+   * 套用排除規則（消費 preview 的 applyToken）。mode 必填：
+   * delete → hard delete + FTS sync + best-effort VACUUM；rule-only → 只建規則、既有資料不動
+   */
+  applyExclusion: (applyToken: string, mode: ExclusionMode) => Promise<ApplyExclusionResult>
   /** 移除指定規則 */
   removeExclusionRule: (id: number) => Promise<void>
   /** 取得 DB 維護資訊（dbBytes + 可回收空間） */

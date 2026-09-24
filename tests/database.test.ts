@@ -1617,6 +1617,92 @@ describe('removeExclusionRule does not restore data', () => {
   })
 })
 
+describe('exclusion rule mode (migration v26)', () => {
+  it('schema version is at least 26', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(26)
+  })
+
+  it('applyExclusion records mode delete — the row says its data is gone', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    const { rule } = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(rule.mode).toBe('delete')
+    expect(db.getExclusionRules()[0].mode).toBe('delete')
+  })
+
+  it('addExclusionRule records mode rule-only and leaves matching sessions in place', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    const rule = db.addExclusionRule({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(rule.mode).toBe('rule-only')
+    expect(db.getExclusionRules()[0].mode).toBe('rule-only')
+    expect(db.getStorageStats().sessionCount).toBe(1)
+    expect(db.getMessages('s-a1')).toHaveLength(3)
+  })
+
+  it('rejects any mode other than delete / rule-only at the DB level', () => {
+    // 欄位只承載一個語意：建規則當下資料有沒有被刪。第三種值沒有意義，擋在 DB 層
+    expect(() =>
+      db.rawExec("INSERT INTO exclusion_rules (date_from, mode) VALUES ('2026-01-01', 'bogus')"),
+    ).toThrow(/CHECK/)
+  })
+
+  it('upgrading from v25 marks every pre-existing rule as delete', () => {
+    // v26 之前唯一建規則的路徑是 applyExclusion（先刪資料、再建規則），所以舊規則一律是 delete。
+    // 走真的升級路徑：拿掉 v26 加的東西、退回 v25、塞一條舊規則，重開讓 v26 實際跑一次
+    db.rawExec('DROP TABLE IF EXISTS exclusion_rule_kept')
+    db.rawExec('ALTER TABLE exclusion_rules DROP COLUMN mode')
+    db.rawExec('DELETE FROM schema_version WHERE version >= 26')
+    db.rawExec("INSERT INTO exclusion_rules (date_from, date_to) VALUES ('2026-01-01', '2026-01-31')")
+    db.close()
+    db = new Database(path.join(tmpDir, 'test.db'))
+
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(26)
+    const rules = db.getExclusionRules()
+    expect(rules).toHaveLength(1)
+    expect(rules[0].mode).toBe('delete')
+    expect(db.rawAll("SELECT name FROM sqlite_master WHERE type='table' AND name='exclusion_rule_kept'")).toHaveLength(1)
+  })
+})
+
+describe('rule-only snapshot (exclusion_rule_kept)', () => {
+  it('records every main session present when the rule is created — and only those', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 2)
+    seedSession('s-b1', 'proj-b', '/b', '2026-01-20T00:00:00.000Z', 2)
+    db.indexSubagentSession({
+      id: 's-a1/sub1', parentSessionId: 's-a1', agentType: 'Explore', filePath: '/tmp/sub1.jsonl',
+      fileSize: 100, fileMtime: '2026-01-10T00:00:00.000Z', messageCount: 1,
+      startedAt: '2026-01-10T00:00:00.000Z', endedAt: '2026-01-10T00:00:00.000Z',
+    })
+    seedSession('s-a1/sub1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 1)
+
+    const rule = db.addExclusionRule({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+
+    // 快照所有主 session、不只符合規則的：SQL 的 started_at 比對跟 indexer 的讀檔比對，
+    // 會對 started_at 為 NULL 的 metadata parent 分岔
+    expect([...db.getRuleIdsKeeping('s-a1')]).toEqual([rule.id])
+    expect([...db.getRuleIdsKeeping('s-b1')]).toEqual([rule.id])
+    expect(db.getRuleIdsKeeping('s-a1/sub1').size).toBe(0)
+
+    // 建規則之後才出現的 session 不在保留範圍
+    seedSession('s-a2', 'proj-a', '/a', '2026-02-01T00:00:00.000Z', 2)
+    expect(db.getRuleIdsKeeping('s-a2').size).toBe(0)
+
+    // delete 規則不需要快照：它在建立當下就刪掉了符合的 session
+    db.applyExclusion({ projectId: 'proj-b', dateFrom: null, dateTo: null })
+    expect([...db.getRuleIdsKeeping('s-b1')]).toEqual([rule.id])
+  })
+
+  it('removing a rule removes its snapshot', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 2)
+    const rule = db.addExclusionRule({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(db.getRuleIdsKeeping('s-a1').size).toBe(1)
+
+    db.removeExclusionRule(rule.id)
+
+    expect(db.getRuleIdsKeeping('s-a1').size).toBe(0)
+    expect(db.rawAll<{ c: number }>('SELECT COUNT(*) AS c FROM exclusion_rule_kept')[0].c).toBe(0)
+  })
+})
+
 describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
   beforeEach(() => {
     seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)

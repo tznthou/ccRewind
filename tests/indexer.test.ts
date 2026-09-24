@@ -893,6 +893,7 @@ function mkRule(overrides: Partial<ExclusionRule> = {}): ExclusionRule {
     projectId: null,
     dateFrom: null,
     dateTo: null,
+    mode: 'delete',
     createdAt: '2024-06-01T00:00:00.000Z',
     ...overrides,
   }
@@ -1171,6 +1172,171 @@ describe('runIndexer exclusion rules', () => {
 
     // 被規則涵蓋 → 不該趁 summaryStale 重新索引把內容補齊
     expect(db.getMessages('sess-prov')).toEqual([])
+  })
+})
+
+describe('runIndexer — rule-only 規則（只擋新 session，保留的照常更新）', () => {
+  it('擋下從沒索引過的 session', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    db.upsertProject('-Users-ro-new', 'ro-new')
+    db.addExclusionRule({ projectId: '-Users-ro-new', dateFrom: null, dateTo: null })
+    await createProject(baseDir, '-Users-ro-new', { 'sess-ro-new': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-ro-new')).toEqual([])
+  })
+
+  it('建規則前就索引好的 session 繼續寫入時，新內容照常寫進來', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-ro-keep', { 'sess-ro-keep': sampleSession1 })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-keep')).toHaveLength(2)
+
+    db.addExclusionRule({ projectId: '-Users-ro-keep', dateFrom: null, dateTo: null })
+
+    // session 繼續寫入：追加一則訊息，mtime 設成明確不同的時間，確保這輪一定重新索引
+    await createProject(baseDir, '-Users-ro-keep', {
+      'sess-ro-keep': [...sampleSession1, {
+        type: 'user', uuid: 'keep-more', parentUuid: 'a1', timestamp: '2024-06-01T10:05:00.000Z',
+        sessionId: 'sess-ro-keep', message: { role: 'user', content: 'one more thing' },
+      }],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-keep', 'sess-ro-keep.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 規則刻意留下它，它就該跟一般 session 一樣吃到新內容。若被當成「排除中」擋在寫入前，
+    // 內容會停在建規則那一刻，而且 mtime 不更新、之後每輪都重新解析一次
+    expect(db.getMessages('sess-ro-keep')).toHaveLength(3)
+  })
+
+  it('保留下來的 session 重新索引時，它的 subagent 不會被誤封存', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-ro-sub', { 'sess-ro-sub': sampleSession1 })
+    await addSubagent(baseDir, '-Users-ro-sub', 'sess-ro-sub', 'agent-ro')
+    // 規則外另一個帶 subagent 的 session：封存只在「這輪至少掃到一個 subagent」時才跑。
+    // 少了它，被跳過的 subagent 會因為封存根本沒執行而逃過，測試就量不到這個 bug
+    await createProject(baseDir, '-Users-ro-other', {
+      'sess-ro-other': [{
+        type: 'user', uuid: 'other-u1', timestamp: '2024-06-02T10:00:00.000Z',
+        sessionId: 'sess-ro-other', message: { role: 'user', content: 'unrelated' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-ro-other', 'sess-ro-other', 'agent-other')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-sub/agent-ro')).toHaveLength(1)
+
+    db.addExclusionRule({ projectId: '-Users-ro-sub', dateFrom: null, dateTo: null })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-sub', 'sess-ro-sub.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    const rows = db.rawAll<{ archived: number }>(
+      "SELECT archived FROM sessions WHERE id = 'sess-ro-sub/agent-ro'",
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].archived).toBe(0)
+  })
+
+  it('保留的 session 即使 summary_version 被歸零，也不會被當成新的擋下', async () => {
+    // summary_version 會被外部歸零：刪除模式觸發的 requeueMetadataOnlyParents、parse 失敗時
+    // 補寫的 provisional parent。「使用者當初保留了什麼」不能拿這個會變的欄位判斷
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-ro-null', { 'sess-ro-null': sampleSession1 })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-null')).toHaveLength(2)
+
+    db.addExclusionRule({ projectId: '-Users-ro-null', dateFrom: null, dateTo: null })
+    db.rawExec("UPDATE sessions SET summary_version = NULL WHERE id = 'sess-ro-null'")
+
+    await createProject(baseDir, '-Users-ro-null', {
+      'sess-ro-null': [...sampleSession1, {
+        type: 'user', uuid: 'null-more', parentUuid: 'a1', timestamp: '2024-06-01T10:05:00.000Z',
+        sessionId: 'sess-ro-null', message: { role: 'user', content: 'one more thing' },
+      }],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-null', 'sess-ro-null.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-ro-null')).toHaveLength(3)
+  })
+
+  it('別的專案刪除資料、把保留的 replay parent 打回 summary_version NULL 後，它的 subagent 不會被誤封存', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    const shared = (sessionId: string) => [{
+      type: 'user', uuid: 'ro-shared-u1', timestamp: '2024-06-01T10:00:00.000Z', sessionId,
+      message: { role: 'user', content: 'same content in both sessions' },
+    }]
+    // origin 先索引，replay 的 entries 會被跨 session 去重成空，phase 4 只留一列
+    // metadata-only parent 接住它的 subagent
+    await createProject(baseDir, '-Users-ro-replay', {
+      'sess-ro-origin': shared('sess-ro-origin'),
+      'sess-ro-replay': shared('sess-ro-replay'),
+    })
+    await addSubagent(baseDir, '-Users-ro-replay', 'sess-ro-replay', 'agent-ro-rp')
+    // origin 也帶一個 subagent：封存只在「這輪至少掃到一個 subagent」時才跑，
+    // 少了它，被跳過的 subagent 會因為封存根本沒執行而逃過，測試就量不到這個 bug
+    await addSubagent(baseDir, '-Users-ro-replay', 'sess-ro-origin', 'agent-ro-origin')
+    const older = new Date('2024-06-01T10:00:00.000Z')
+    const newer = new Date('2024-06-02T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-replay', 'sess-ro-origin.jsonl'), older, older)
+    await utimes(path.join(baseDir, '-Users-ro-replay', 'sess-ro-replay.jsonl'), newer, newer)
+    await createProject(baseDir, '-Users-ro-elsewhere', {
+      'sess-elsewhere': [{
+        type: 'user', uuid: 'elsewhere-u1', timestamp: '2024-06-03T10:00:00.000Z', sessionId: 'sess-elsewhere',
+        message: { role: 'user', content: 'to be deleted' },
+      }],
+    })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-replay')).toEqual([])
+    expect(db.getMessages('sess-ro-replay/agent-ro-rp')).toHaveLength(1)
+
+    db.addExclusionRule({ projectId: '-Users-ro-replay', dateFrom: null, dateTo: null })
+    // 刪除模式只要真的刪到東西，就會把全庫的 metadata-only parent 歸零重排，不分專案
+    db.applyExclusion({ projectId: '-Users-ro-elsewhere', dateFrom: null, dateTo: null })
+    const sv = db.rawAll<{ summary_version: number | null }>(
+      "SELECT summary_version FROM sessions WHERE id = 'sess-ro-replay'",
+    )
+    expect(sv[0].summary_version).toBeNull()
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    const rows = db.rawAll<{ archived: number }>(
+      "SELECT archived FROM sessions WHERE id = 'sess-ro-replay/agent-ro-rp'",
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].archived).toBe(0)
+  })
+
+  it('規則建立後才出現、主檔暫時讀不到的新 session，權限回來後照樣被日期規則擋下', async (ctx) => {
+    // 主檔讀不到 → 日期比對拿不到 timestamp、保守不匹配 → phase 4 為了接住 subagent 補寫一列
+    // provisional parent。「row 在不在」若被當成「建規則時就在」，下一輪它就繞過了規則
+    const baseDir = path.join(tmpDir, 'projects')
+    db.addExclusionRule({ projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-30' })
+
+    await createProject(baseDir, '-Users-ro-late', { 'sess-ro-late': sampleSession1 })  // 2024-06-01
+    await addSubagent(baseDir, '-Users-ro-late', 'sess-ro-late', 'agent-late')
+    const latePath = path.join(baseDir, '-Users-ro-late', 'sess-ro-late.jsonl')
+    await chmod(latePath, 0o000)
+    // Windows 與 root 底下 chmod 擋不住讀取，那就沒有失敗可測 —— 明講跳過，不要假綠
+    const stillReadable = await readFile(latePath).then(() => true, () => false)
+    if (stillReadable) {
+      await chmod(latePath, 0o644)
+      ctx.skip()
+    }
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    await chmod(latePath, 0o644)
+    // 前提成立：規則建立後才出現的 session 留下了一列 provisional parent
+    expect(db.getAllSessionMtimes().get('sess-ro-late')?.summaryVersion).toBeNull()
+    expect(db.getMessages('sess-ro-late')).toEqual([])
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 權限回來、日期讀得到了：它是規則建立後才出現的，規則要照樣擋下
+    expect(db.getMessages('sess-ro-late')).toEqual([])
   })
 })
 
