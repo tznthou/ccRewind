@@ -7,6 +7,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.23.0] - 2026-09-25
+
+### Added
+
+- **Exclusion rules can now keep existing data and only stop indexing new sessions** ([#117](https://github.com/tznthou/ccRewind/pull/117)): an exclusion rule used to do two things at once — delete the matching sessions and block them from being indexed again — with no alternative. "Stop indexing this project from now on, but keep what is already indexed" was impossible: confirming always deleted. The confirm dialog now asks what to do with existing data:
+  - **Keep data, stop indexing new sessions** (the default): sessions already in the index when the rule is created are kept and keep updating (a conversation that continues, or a re-index, works as before); sessions that appear later are no longer indexed. Removing the rule lifts its block — sessions it blocked are picked up on the next index run as long as their original JSONL still exists and no other rule excludes them
+  - **Delete data and stop indexing new sessions**: the previous behaviour. The impact ratio, the red warning above 50% and the "I understand this is irreversible" checkbox now appear only for this option
+
+  A keep-data rule records which sessions were in the index when it was created, and only sessions outside that list are affected by it — this is recorded at creation, not inferred afterwards, so when a deletion elsewhere triggers a kept session to be re-indexed, it is not wrongly blocked. The rules list shows which kind each rule is; removing a "Data deleted" rule first explains that deleted sessions only come back if their original JSONL is still on disk. The main process requires an explicit mode when applying a rule; a missing or unknown value is rejected instead of defaulting to delete. ⚠️ **Rules created before this upgrade are all marked "Data deleted"**: until now the only way to create a rule was to delete, so this is a fact, not a guess
+
+### Changed
+
+- **A date-range exclusion can be created even when no sessions match** ([#117](https://github.com/tznthou/ccRewind/pull/117)): the button used to be disabled in that case. It can now be submitted, and the dialog offers only "Keep data" — useful for blocking, ahead of time, sessions whose dates fall in a range and that appear later. The form's live preview now says "matches" instead of "will delete", since whether to delete is chosen in the dialog
+- **Dependency update**: `@tanstack/react-virtual` to 3.14.13 ([#116](https://github.com/tznthou/ccRewind/pull/116))
+
 ## [1.22.1] - 2026-09-19
 
 A maintenance release. No new features — the changes are dependency updates and one fix to the release process.
