@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview,StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
 import { migrations } from './migrations'
 
 /** 安全解析 JSON 字串陣列：parse 失敗或非陣列回傳 []，過濾非字串元素 */
@@ -1827,7 +1827,24 @@ export class Database {
    * 否則會出現「標著 delete、資料其實還在」的規則。
    */
   addExclusionRule(rawRule: ExclusionRuleInput): ExclusionRule {
-    return this.insertExclusionRule(this.normalizeRule(rawRule), 'rule-only')
+    const rule = this.normalizeRule(rawRule)
+    return this.db.transaction(() => {
+      const created = this.insertExclusionRule(rule, 'rule-only')
+      // 保留範圍＝建立當下 DB 裡的所有主 session。取全部而不只符合的：SQL 的 started_at 比對
+      // 與 indexer 的讀檔比對，會對 started_at 為 NULL 的 metadata parent 分岔
+      this.db.prepare(`
+        INSERT INTO exclusion_rule_kept (session_id, rule_id)
+        SELECT id, ? FROM sessions WHERE id ${Database.EXCLUDE_SUBAGENTS}
+      `).run(created.id)
+      return created
+    })()
+  }
+
+  /** 哪些 rule-only 規則在建立當下保留了這個 session */
+  getRuleIdsKeeping(sessionId: string): Set<number> {
+    const rows = this.db.prepare('SELECT rule_id FROM exclusion_rule_kept WHERE session_id = ?')
+      .all(sessionId) as Array<{ rule_id: number }>
+    return new Set(rows.map(r => r.rule_id))
   }
 
   /** rule 必須已經過 normalizeRule */

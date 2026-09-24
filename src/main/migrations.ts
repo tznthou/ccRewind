@@ -508,14 +508,25 @@ export const migrations: Migration[] = [
   },
   {
     version: 26,
-    description: "add mode to exclusion_rules: 'delete' (matching data deleted when the rule was created) vs 'rule-only' (existing data kept, only new sessions blocked)",
+    description: "add mode to exclusion_rules: 'delete' (matching data deleted when the rule was created) vs 'rule-only' (existing data kept, only new sessions blocked); add exclusion_rule_kept snapshot",
     up: (db) => {
       // 預設 'delete' 是事實不是猜測：v26 之前唯一建規則的路徑是 applyExclusion，
       // 它先刪資料再建規則，所以既存規則當初全都刪過資料。
       // CHECK 讓這欄只承載一個語意（建規則當下資料有沒有被刪），擋掉第三種值。
+      //
+      // exclusion_rule_kept：rule-only 規則建立當下 DB 裡的主 session，也就是它「保留」的範圍——
+      // 之後才出現的 session 才受它管。這件事只能在建立當下記下來：summary_version 會被外部歸零、
+      // row 會被 phase 4 補寫，拿它們事後推都各漏一邊。
+      // session_id 刻意不設 FK：indexSession 重新索引是先 DELETE 再 INSERT，CASCADE 會把快照一起刪掉。
+      // session_id 放主鍵前段：indexer 是以 session 查它被哪些規則保留。
       db.exec(`
         ALTER TABLE exclusion_rules ADD COLUMN mode TEXT NOT NULL DEFAULT 'delete'
           CHECK (mode IN ('delete', 'rule-only'));
+        CREATE TABLE exclusion_rule_kept (
+          session_id TEXT NOT NULL,
+          rule_id INTEGER NOT NULL REFERENCES exclusion_rules(id) ON DELETE CASCADE,
+          PRIMARY KEY (session_id, rule_id)
+        );
       `)
     },
   },

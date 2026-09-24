@@ -332,12 +332,6 @@
   line-height: 1.6;
 }
 
-.removeConfirmActions {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-sm);
-}
-
 /* ── Confirm dialog ── */
 
 .backdrop {

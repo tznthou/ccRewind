@@ -57,7 +57,7 @@ export default function ExclusionRulesList({ rules, projects, onRemove }: Props)
           {confirmingId === rule.id && (
             <div className={styles.removeConfirm}>
               <span>{t('storage.rules.removeConfirm')}</span>
-              <div className={styles.removeConfirmActions}>
+              <div className={styles.dialogActions}>
                 <button className={styles.button} onClick={() => setConfirmingId(null)}>{t('common.cancel')}</button>
                 <button
                   className={styles.button}
