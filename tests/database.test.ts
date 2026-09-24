@@ -1617,6 +1617,50 @@ describe('removeExclusionRule does not restore data', () => {
   })
 })
 
+describe('exclusion rule mode (migration v26)', () => {
+  it('schema version is at least 26', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(26)
+  })
+
+  it('applyExclusion records mode delete — the row says its data is gone', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    const { rule } = db.applyExclusion({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(rule.mode).toBe('delete')
+    expect(db.getExclusionRules()[0].mode).toBe('delete')
+  })
+
+  it('addExclusionRule records mode rule-only and leaves matching sessions in place', () => {
+    seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)
+    const rule = db.addExclusionRule({ projectId: 'proj-a', dateFrom: null, dateTo: null })
+    expect(rule.mode).toBe('rule-only')
+    expect(db.getExclusionRules()[0].mode).toBe('rule-only')
+    expect(db.getStorageStats().sessionCount).toBe(1)
+    expect(db.getMessages('s-a1')).toHaveLength(3)
+  })
+
+  it('rejects any mode other than delete / rule-only at the DB level', () => {
+    // 欄位只承載一個語意：建規則當下資料有沒有被刪。第三種值沒有意義，擋在 DB 層
+    expect(() =>
+      db.rawExec("INSERT INTO exclusion_rules (date_from, mode) VALUES ('2026-01-01', 'bogus')"),
+    ).toThrow(/CHECK/)
+  })
+
+  it('upgrading from v25 marks every pre-existing rule as delete', () => {
+    // v26 之前唯一建規則的路徑是 applyExclusion（先刪資料、再建規則），所以舊規則一律是 delete。
+    // 走真的升級路徑：拿掉欄位、退回 v25、塞一條舊規則，重開讓 v26 實際跑一次
+    db.rawExec('ALTER TABLE exclusion_rules DROP COLUMN mode')
+    db.rawExec('DELETE FROM schema_version WHERE version >= 26')
+    db.rawExec("INSERT INTO exclusion_rules (date_from, date_to) VALUES ('2026-01-01', '2026-01-31')")
+    db.close()
+    db = new Database(path.join(tmpDir, 'test.db'))
+
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(26)
+    const rules = db.getExclusionRules()
+    expect(rules).toHaveLength(1)
+    expect(rules[0].mode).toBe('delete')
+  })
+})
+
 describe('getStorageStats / getProjectBreakdown / getInactiveSessions', () => {
   beforeEach(() => {
     seedSession('s-a1', 'proj-a', '/a', '2026-01-10T00:00:00.000Z', 3)

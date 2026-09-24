@@ -506,4 +506,17 @@ export const migrations: Migration[] = [
       `)
     },
   },
+  {
+    version: 26,
+    description: "add mode to exclusion_rules: 'delete' (matching data deleted when the rule was created) vs 'rule-only' (existing data kept, only new sessions blocked)",
+    up: (db) => {
+      // 預設 'delete' 是事實不是猜測：v26 之前唯一建規則的路徑是 applyExclusion，
+      // 它先刪資料再建規則，所以既存規則當初全都刪過資料。
+      // CHECK 讓這欄只承載一個語意（建規則當下資料有沒有被刪），擋掉第三種值。
+      db.exec(`
+        ALTER TABLE exclusion_rules ADD COLUMN mode TEXT NOT NULL DEFAULT 'delete'
+          CHECK (mode IN ('delete', 'rule-only'));
+      `)
+    },
+  },
 ]

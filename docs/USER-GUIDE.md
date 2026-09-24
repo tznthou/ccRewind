@@ -75,11 +75,11 @@ Claude Code 的原始 JSONL（`~/.claude/projects/`）有自己的定時清理�
 
 - **總覽卡**：DB 大小（含 WAL/SHM sidecar）、Session / Message 數、專案數、最早到最新的活動時間範圍
 - **專案佔用**：以視覺化 bar 呈現各專案相對容量，按大小降冪排序；每列附「排除此專案」一鍵按鈕
-- **依日期範圍排除**：折疊的進階面板，可同時指定專案 + 起迄日期；選完條件下方即時預覽將刪除的 session / message 數量與 MB
-- **現有規則清單**：列出所有排除規則，可隨時移除；規則被移除後 indexer 會在下次執行時重建對應的 session
-- **統一確認對話框**：所有刪除操作走同一個 dialog——需勾「我了解此操作不可復原」checkbox 才啟用「確認刪除」按鈕；影響超過 50% 會多一條紅色警告 banner。**無需打字輸入**，全程選擇式操作；apply 期間 backdrop / 按鈕 / checkbox 全部 freeze，防雙擊
+- **依日期範圍排除**：折疊的進階面板，可同時指定專案 + 起迄日期；選完條件下方即時預覽符合的 session / message 數量與 MB。沒有符合的也能送出，用來預先擋住之後的 session
+- **現有規則清單**：列出所有排除規則並標示類型（保留資料／已刪除資料），可隨時移除；移除後，原始 JSONL 還在的 session 會在下次索引時重建。移除「已刪除資料」的規則前會先說明這一點
+- **統一確認對話框**：排除時先選處理方式——「保留資料，停止之後的索引」（預設；已索引的 session 保留並照常更新，只擋之後新的 session）或「刪除資料，並停止之後的索引」。只有選刪除才需要勾「我了解此操作不可復原」、才顯示影響比例與超過 50% 的紅色警告 banner；沒有符合的 session 時只能選保留。**無需打字輸入**，全程選擇式操作；apply 期間 backdrop / 按鈕 / 選項 / checkbox 全部 freeze，防雙擊
 - **資料庫壓縮**（v1.9.1）：排除資料後，SQLite 的檔案不會立即縮小——被刪除的頁面以 free pages 形式保留在檔案內。當「可回收空間」超過閾值（10 MB）時，儲存頁會出現「壓縮資料庫」按鈕；確認後執行 `VACUUM` 重整檔案結構（典型耗時 10-30 秒）。UI 明確標示此操作**只整理檔案佈局，不會刪除任何對話、session 或 message**，避免「可回收」一詞被誤讀為「會被清除」
 
-安全機制：IPC 層採 apply-token handshake——preview 時 main process 發出一次性 UUID token（60 秒 TTL），apply 只消費對應 token 而非任意 rule。即使 renderer 被 XSS 或 devtools script 操控，也無法繞過 UI 觸發刪除。
+安全機制：IPC 層採 apply-token handshake——preview 時 main process 發出一次性 UUID token（60 秒 TTL），apply 只消費對應 token 而非任意 rule。即使 renderer 被 XSS 或 devtools script 操控，也無法繞過 UI 觸發刪除。apply 也必須明確帶上處理方式，缺漏或不認得的值一律拒絕，不會預設成刪除。
 
 Indexer 讀取規則後會自動 skip 命中的 session（避免 JSONL 還在時被 re-index 重建），只影響新 session，已索引的仍維持原有 mtime 增量更新邏輯。

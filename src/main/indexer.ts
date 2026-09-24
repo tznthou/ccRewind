@@ -329,6 +329,8 @@ export async function runIndexer(
     sessionId: string
     projectId: string
     projectDisplayName: string
+    /** 掃描當下已完整索引（有 row 且 summary_version 非 null）。phase 3 據此決定哪些規則管得到它 */
+    alreadyIndexed: boolean
   }
 
   const existingMtimes = db.getAllSessionMtimes()
@@ -354,7 +356,8 @@ export async function runIndexer(
         // 接近新 session 而不是已索引。少了這一半，一個在 parent 暫時讀不到時補寫的
         // metadata parent 會因為下一輪「已 existing」而永久豁免 date rule——等權限恢復
         // 就整段索引回來，使用者設的排除範圍等於沒設。
-        if ((!existing || existing.summaryVersion === null)
+        const alreadyIndexed = !!existing && existing.summaryVersion !== null
+        if (!alreadyIndexed
           && await isExcludedByRules(exclusionRules, project.projectId, session.filePath)) {
           excludedSessionIds.add(session.sessionId)
           continue
@@ -363,6 +366,7 @@ export async function runIndexer(
           ...session,
           projectId: project.projectId,
           projectDisplayName: project.displayName,
+          alreadyIndexed,
         })
       }
     }
@@ -468,7 +472,14 @@ export async function runIndexer(
     // 本來就不做這個檢查（那時的分工是交給 applyExclusion 硬刪），race 一旦發生就沒有
     // 第二道防線。用手上已解出的 startedAt，不重讀檔案；它也正是 buildExclusionWhere
     // 比對的那個欄位，比 phase 2 的 readFirstTimestamp 更貼近 SQL 端的判準。
-    if (matchesAnyRule(db.getExclusionRules(), s.projectId, startedAt)) {
+    //
+    // 已完整索引的 session 只受 delete 規則約束——對應的正是上面這個 race。rule-only 規則
+    // 刻意保留了既有 session，只管掃描當下還沒進來的；少了這層區分，被保留的 session 一重新
+    // 索引就被擋在這裡：內容停在建規則那一刻、mtime 不更新所以每輪重跑，而且它進了
+    // excludedSessionIds，phase 4 會跳過它的 subagent，封存再把它們當成磁碟上消失。
+    const currentRules = db.getExclusionRules()
+    const applicableRules = s.alreadyIndexed ? currentRules.filter(r => r.mode === 'delete') : currentRules
+    if (matchesAnyRule(applicableRules, s.projectId, startedAt)) {
       excludedSessionIds.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
       continue

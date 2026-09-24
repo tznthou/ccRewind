@@ -1,7 +1,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
-import type { ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
+import type { ExclusionMode, ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
 import { exportSessionAsMarkdown } from './exporter'
 import { triggerIndexer } from './indexer'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
@@ -27,6 +27,12 @@ function parseExclusionRuleInput(v: unknown): ExclusionRuleInput {
     dateFrom: field(obj.dateFrom),
     dateTo: field(obj.dateTo),
   }
+}
+
+/** 排除模式必填、沒有預設值：刪除不可逆，漏帶參數要大聲失敗而不是靜默走刪除 */
+function parseExclusionMode(v: unknown): ExclusionMode {
+  if (v === 'delete' || v === 'rule-only') return v
+  throw new Error('Invalid exclusion mode')
 }
 
 /** 將 unknown 轉為 SearchOptions（IPC 參數驗證用） */
@@ -190,7 +196,7 @@ export function registerIpcHandlers(db: Database): void {
     return { ...preview, applyToken: id }
   })
 
-  ipcMain.handle('storage:apply', (_event, token: unknown) => {
+  ipcMain.handle('storage:apply', (_event, token: unknown, mode: unknown) => {
     if (typeof token !== 'string' || token.length === 0) {
       throw new Error('Invalid apply token')
     }
@@ -198,9 +204,12 @@ export function registerIpcHandlers(db: Database): void {
       applyToken = null
       throw new Error('Apply token expired or invalid. Please preview again.')
     }
+    // 在消耗 token 之前驗：模式錯是呼叫端的 bug，不必逼使用者重新預覽
+    const exclusionMode = parseExclusionMode(mode)
     const rule = applyToken.rule
     applyToken = null // one-time consume
-    return db.applyExclusion(rule)
+    if (exclusionMode === 'delete') return db.applyExclusion(rule)
+    return { rule: db.addExclusionRule(rule), releasedBytes: 0, vacuumed: false }
   })
 
   ipcMain.handle('storage:remove-rule', (_event, id: unknown) => {

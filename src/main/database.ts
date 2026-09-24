@@ -1,7 +1,7 @@
 import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
-import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview,StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
 import { migrations } from './migrations'
 
 /** 安全解析 JSON 字串陣列：parse 失敗或非陣列回傳 []，過濾非字串元素 */
@@ -174,6 +174,26 @@ function mapMessageRow(r: MessageRow): Message {
     isSidechain: r.is_sidechain === 1,
     isAbandonedBranch: r.is_abandoned_branch === 1,
     frameUrl: r.frame_url,
+  }
+}
+
+interface ExclusionRuleRow {
+  id: number
+  project_id: string | null
+  date_from: string | null
+  date_to: string | null
+  mode: ExclusionMode
+  created_at: string
+}
+
+function mapExclusionRuleRow(r: ExclusionRuleRow): ExclusionRule {
+  return {
+    id: r.id,
+    projectId: r.project_id,
+    dateFrom: r.date_from,
+    dateTo: r.date_to,
+    mode: r.mode,
+    createdAt: r.created_at,
   }
 }
 
@@ -1762,22 +1782,10 @@ export class Database {
 
   getExclusionRules(): ExclusionRule[] {
     const rows = this.db.prepare(`
-      SELECT id, project_id, date_from, date_to, created_at
+      SELECT id, project_id, date_from, date_to, mode, created_at
       FROM exclusion_rules ORDER BY created_at DESC
-    `).all() as Array<{
-      id: number
-      project_id: string | null
-      date_from: string | null
-      date_to: string | null
-      created_at: string
-    }>
-    return rows.map(r => ({
-      id: r.id,
-      projectId: r.project_id,
-      dateFrom: r.date_from,
-      dateTo: r.date_to,
-      createdAt: r.created_at,
-    }))
+    `).all() as ExclusionRuleRow[]
+    return rows.map(mapExclusionRuleRow)
   }
 
   /** 查規則匹配的主 session ID 與 project id（apply 用；preview 走純 aggregate 路徑）*/
@@ -1813,25 +1821,22 @@ export class Database {
     }
   }
 
+  /**
+   * 只建規則、不動既有資料（mode = rule-only）：符合的 session 保留，之後新進來的才被擋。
+   * 要連既有資料一起刪請走 applyExclusion。mode 由實際做了什麼決定、不開放呼叫端指定，
+   * 否則會出現「標著 delete、資料其實還在」的規則。
+   */
   addExclusionRule(rawRule: ExclusionRuleInput): ExclusionRule {
-    const rule = this.normalizeRule(rawRule)
+    return this.insertExclusionRule(this.normalizeRule(rawRule), 'rule-only')
+  }
+
+  /** rule 必須已經過 normalizeRule */
+  private insertExclusionRule(rule: ExclusionRuleInput, mode: ExclusionMode): ExclusionRule {
     const row = this.db.prepare(`
-      INSERT INTO exclusion_rules (project_id, date_from, date_to) VALUES (?, ?, ?)
-      RETURNING id, project_id, date_from, date_to, created_at
-    `).get(rule.projectId, rule.dateFrom, rule.dateTo) as {
-      id: number
-      project_id: string | null
-      date_from: string | null
-      date_to: string | null
-      created_at: string
-    }
-    return {
-      id: row.id,
-      projectId: row.project_id,
-      dateFrom: row.date_from,
-      dateTo: row.date_to,
-      createdAt: row.created_at,
-    }
+      INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (?, ?, ?, ?)
+      RETURNING id, project_id, date_from, date_to, mode, created_at
+    `).get(rule.projectId, rule.dateFrom, rule.dateTo, mode) as ExclusionRuleRow
+    return mapExclusionRuleRow(row)
   }
 
   removeExclusionRule(id: number): void {
@@ -1862,7 +1867,7 @@ export class Database {
 
       this.deleteSessionsBatch(allIds, sessionIds)
       if (sessionIds.length > 0) this.requeueMetadataOnlyParents()
-      const createdRule = this.addExclusionRule(rule)
+      const createdRule = this.insertExclusionRule(rule, 'delete')
       for (const pid of affectedProjects) this.updateProjectStats(pid)
       deletedCount = allIds.length
       return createdRule

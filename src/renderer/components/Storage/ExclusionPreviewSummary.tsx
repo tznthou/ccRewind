@@ -4,17 +4,19 @@ import { formatBytes } from '../../utils/formatBytes'
 
 interface Props {
   preview: ExclusionPreview
+  /** matches：還沒決定怎麼處理時的中性描述；delete：使用者已選擇刪除 */
+  verb: 'matches' | 'delete'
 }
 
-export default function ExclusionPreviewSummary({ preview }: Props) {
+export default function ExclusionPreviewSummary({ preview, verb }: Props) {
   const { t } = useI18n()
   return (
     <>
-      {t('storage.preview.willDelete.start')}
+      {t(verb === 'delete' ? 'storage.preview.willDelete.start' : 'storage.preview.matches.start')}
       <strong>{preview.sessionCount}</strong>
-      {t('storage.preview.willDelete.midSession')}
+      {t('storage.preview.midSession')}
       <strong>{preview.messageCount.toLocaleString()}</strong>
-      {t('storage.preview.willDelete.midMessage')}
+      {t('storage.preview.midMessage')}
       <strong>{formatBytes(preview.estimatedBytes)}</strong>
     </>
   )

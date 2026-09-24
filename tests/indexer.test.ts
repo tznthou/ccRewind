@@ -893,6 +893,7 @@ function mkRule(overrides: Partial<ExclusionRule> = {}): ExclusionRule {
     projectId: null,
     dateFrom: null,
     dateTo: null,
+    mode: 'delete',
     createdAt: '2024-06-01T00:00:00.000Z',
     ...overrides,
   }
@@ -1171,6 +1172,71 @@ describe('runIndexer exclusion rules', () => {
 
     // 被規則涵蓋 → 不該趁 summaryStale 重新索引把內容補齊
     expect(db.getMessages('sess-prov')).toEqual([])
+  })
+})
+
+describe('runIndexer — rule-only 規則（只擋新 session，保留的照常更新）', () => {
+  it('擋下從沒索引過的 session', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    db.upsertProject('-Users-ro-new', 'ro-new')
+    db.addExclusionRule({ projectId: '-Users-ro-new', dateFrom: null, dateTo: null })
+    await createProject(baseDir, '-Users-ro-new', { 'sess-ro-new': sampleSession1 })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-ro-new')).toEqual([])
+  })
+
+  it('建規則前就索引好的 session 繼續寫入時，新內容照常寫進來', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-ro-keep', { 'sess-ro-keep': sampleSession1 })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-keep')).toHaveLength(2)
+
+    db.addExclusionRule({ projectId: '-Users-ro-keep', dateFrom: null, dateTo: null })
+
+    // session 繼續寫入：追加一則訊息，mtime 設成明確不同的時間，確保這輪一定重新索引
+    await createProject(baseDir, '-Users-ro-keep', {
+      'sess-ro-keep': [...sampleSession1, {
+        type: 'user', uuid: 'keep-more', parentUuid: 'a1', timestamp: '2024-06-01T10:05:00.000Z',
+        sessionId: 'sess-ro-keep', message: { role: 'user', content: 'one more thing' },
+      }],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-keep', 'sess-ro-keep.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 規則刻意留下它，它就該跟一般 session 一樣吃到新內容。若被當成「排除中」擋在寫入前，
+    // 內容會停在建規則那一刻，而且 mtime 不更新、之後每輪都重新解析一次
+    expect(db.getMessages('sess-ro-keep')).toHaveLength(3)
+  })
+
+  it('保留下來的 session 重新索引時，它的 subagent 不會被誤封存', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-ro-sub', { 'sess-ro-sub': sampleSession1 })
+    await addSubagent(baseDir, '-Users-ro-sub', 'sess-ro-sub', 'agent-ro')
+    // 規則外另一個帶 subagent 的 session：封存只在「這輪至少掃到一個 subagent」時才跑。
+    // 少了它，被跳過的 subagent 會因為封存根本沒執行而逃過，測試就量不到這個 bug
+    await createProject(baseDir, '-Users-ro-other', {
+      'sess-ro-other': [{
+        type: 'user', uuid: 'other-u1', timestamp: '2024-06-02T10:00:00.000Z',
+        sessionId: 'sess-ro-other', message: { role: 'user', content: 'unrelated' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-ro-other', 'sess-ro-other', 'agent-other')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-ro-sub/agent-ro')).toHaveLength(1)
+
+    db.addExclusionRule({ projectId: '-Users-ro-sub', dateFrom: null, dateTo: null })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-ro-sub', 'sess-ro-sub.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    const rows = db.rawAll<{ archived: number }>(
+      "SELECT archived FROM sessions WHERE id = 'sess-ro-sub/agent-ro'",
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].archived).toBe(0)
   })
 })
 

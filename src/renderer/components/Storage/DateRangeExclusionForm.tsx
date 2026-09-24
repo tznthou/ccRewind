@@ -58,7 +58,8 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
     return () => { cancelled = true; clearTimeout(timer) }
   }, [rule, t])
 
-  const canSubmit = rule !== null && preview !== null && preview.sessionCount > 0
+  // 0 筆也能送出：對話框會只開放「保留資料，停止之後的索引」，用來預先擋住之後符合的 session
+  const canSubmit = rule !== null && preview !== null
 
   return (
     <details className={styles.details}>
@@ -108,13 +109,13 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
           ) : preview.sessionCount === 0 ? (
             <span className={styles.previewEmpty}>{t('storage.dateRange.preview.noMatch')}</span>
           ) : (
-            <ExclusionPreviewSummary preview={preview} />
+            <ExclusionPreviewSummary preview={preview} verb="matches" />
           )}
         </div>
 
         <div>
           <button
-            className={`${styles.button} ${styles.dangerButton}`}
+            className={styles.button}
             disabled={!canSubmit}
             onClick={() => rule && onSubmit(rule)}
           >

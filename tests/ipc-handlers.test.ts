@@ -301,12 +301,50 @@ describe('IPC Handlers', () => {
       const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
 
       const applyHandler = getHandler('storage:apply')
-      const result = applyHandler(event, applyToken)
+      const result = applyHandler(event, applyToken, 'delete')
       expect(result.rule.projectId).toBe('proj-1')
+      expect(result.rule.mode).toBe('delete')
       expect(typeof result.releasedBytes).toBe('number')
       expect(typeof result.vacuumed).toBe('boolean')
       expect(db.getMessages('sess-1')).toEqual([])
       expect(db.getExclusionRules()).toHaveLength(1)
+    })
+
+    it('rule-only mode keeps the matching sessions and records a rule-only rule', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+
+      const applyHandler = getHandler('storage:apply')
+      const result = applyHandler(event, applyToken, 'rule-only')
+      expect(result.rule.mode).toBe('rule-only')
+      expect(result.releasedBytes).toBe(0)
+      expect(result.vacuumed).toBe(false)
+      expect(db.getMessages('sess-1')).toHaveLength(2)
+      expect(db.getExclusionRules()).toHaveLength(1)
+    })
+
+    it('a missing mode is rejected instead of defaulting to delete', () => {
+      // 刪除不可逆：呼叫端漏帶參數時要大聲失敗，不能靜默走刪除
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      const applyHandler = getHandler('storage:apply')
+      expect(() => applyHandler(event, applyToken)).toThrow(/Invalid exclusion mode/)
+      expect(db.getMessages('sess-1')).toHaveLength(2)
+      expect(db.getExclusionRules()).toEqual([])
+    })
+
+    it('an unknown mode is rejected without consuming the token', () => {
+      seedData(db)
+      const previewHandler = getHandler('storage:preview')
+      const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
+      const applyHandler = getHandler('storage:apply')
+      expect(() => applyHandler(event, applyToken, 'bogus')).toThrow(/Invalid exclusion mode/)
+      expect(db.getMessages('sess-1')).toHaveLength(2)
+      // 模式錯是呼叫端的 bug，不該逼使用者重新預覽：同一個 token 仍可用
+      const result = applyHandler(event, applyToken, 'rule-only')
+      expect(result.rule.mode).toBe('rule-only')
     })
 
     it('rejects a non-string / empty token', () => {
@@ -332,8 +370,8 @@ describe('IPC Handlers', () => {
       const previewHandler = getHandler('storage:preview')
       const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
       const applyHandler = getHandler('storage:apply')
-      applyHandler(event, applyToken)
-      expect(() => applyHandler(event, applyToken)).toThrow(/expired or invalid/)
+      applyHandler(event, applyToken, 'delete')
+      expect(() => applyHandler(event, applyToken, 'delete')).toThrow(/expired or invalid/)
     })
 
     it('new preview invalidates the previous token', () => {
@@ -352,7 +390,7 @@ describe('IPC Handlers', () => {
       const previewHandler = getHandler('storage:preview')
       const { applyToken } = previewHandler(event, { projectId: 'proj-1', dateFrom: null, dateTo: null })
       const applyHandler = getHandler('storage:apply')
-      const { rule } = applyHandler(event, applyToken)
+      const { rule } = applyHandler(event, applyToken, 'delete')
       expect(db.getExclusionRules()).toHaveLength(1)
 
       const removeHandler = getHandler('storage:remove-rule')
