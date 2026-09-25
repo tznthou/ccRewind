@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { ensureWellFormed, parseContent, parseLine, parseSession, stripSystemXml } from '../src/main/parser'
 import { parseTaskFile } from '../src/main/task-parser'
+import { extractThinkingBlocks, isOmittedThinking } from '../src/renderer/components/ChatView/contentBlocks'
 
 const FIXTURES = path.join(__dirname, 'fixtures')
 
@@ -813,6 +814,100 @@ describe('parseLine — base64 image stripping in contentJson', () => {
     expect(result.hasImage).toBe(false)
     const parsed = JSON.parse(result.contentJson!)
     expect(parsed[0].content).toBe(longContent)
+  })
+})
+
+describe('parseLine — payloads the UI cannot display are stripped from contentJson', () => {
+  function lineWith(content: unknown, role: 'user' | 'assistant' = 'user'): string {
+    return JSON.stringify({
+      type: role,
+      uuid: 'payload-1',
+      sessionId: 's1',
+      timestamp: '2026-09-25T00:00:00Z',
+      message: { role, content },
+    })
+  }
+
+  it('strips base64 images nested inside a tool_result (Read of an image file, MCP screenshots)', () => {
+    const result = parseLine(lineWith([
+      {
+        type: 'tool_result',
+        tool_use_id: 't1',
+        content: [
+          { type: 'text', text: 'screenshot taken' },
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'B'.repeat(5000) } },
+        ],
+      },
+    ]))!
+    const [toolResult] = JSON.parse(result.contentJson!)
+    expect(toolResult.content[0]).toEqual({ type: 'text', text: 'screenshot taken' })
+    expect(toolResult.content[1]).toEqual({
+      type: 'image',
+      source: { type: 'base64', media_type: 'image/jpeg', data: '[base64-stripped]' },
+    })
+  })
+
+  it('strips base64 PDF documents', () => {
+    const result = parseLine(lineWith([
+      { type: 'text', text: 'read this' },
+      { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBER'.repeat(1000) } },
+    ]))!
+    const [, doc] = JSON.parse(result.contentJson!)
+    expect(doc).toEqual({
+      type: 'document',
+      source: { type: 'base64', media_type: 'application/pdf', data: '[base64-stripped]' },
+    })
+  })
+
+  it('replaces a thinking signature with a marker and keeps the thinking text', () => {
+    const result = parseLine(lineWith([
+      { type: 'thinking', thinking: 'check the schema first', signature: 'EosnCkYI'.repeat(400) },
+      { type: 'text', text: 'done' },
+    ], 'assistant'))!
+    const [thinking] = JSON.parse(result.contentJson!)
+    expect(thinking).toEqual({ type: 'thinking', thinking: 'check the schema first', signature: '[signature-stripped]' })
+  })
+
+  it('keeps an omitted thinking block recognizable as omitted', () => {
+    // UI 只靠「signature 是非空字串」來宣稱這段思考是 API 省略的——標記必須保住這個判斷
+    const result = parseLine(lineWith([
+      { type: 'thinking', thinking: '', signature: 'EosnCkYI'.repeat(400) },
+    ], 'assistant'))!
+    const [block] = extractThinkingBlocks(result.contentJson)
+    expect(isOmittedThinking(block)).toBe(true)
+  })
+
+  it('leaves an empty signature empty — no signature must not turn into a claimed omission', () => {
+    const result = parseLine(lineWith([
+      { type: 'thinking', thinking: '', signature: '' },
+    ], 'assistant'))!
+    const [block] = extractThinkingBlocks(result.contentJson)
+    expect(block.signature).toBe('')
+    expect(isOmittedThinking(block)).toBe(false)
+  })
+
+  it('leaves look-alike fields outside thinking blocks and base64 sources alone', () => {
+    const input = { type: 'function', signature: 'parse(line: string): ParsedLine', data: 'not binary' }
+    const result = parseLine(lineWith([{ type: 'tool_use', id: 't1', name: 'Write', input }], 'assistant'))!
+    const [toolUse] = JSON.parse(result.contentJson!)
+    expect(toolUse.input).toEqual(input)
+  })
+
+  it('leaves tool inputs alone even when they are shaped like a base64 source or a thinking block', () => {
+    // tool_use 的 input 是工具參數、不是 API 的 content block，UI 會原樣顯示它
+    const input = {
+      file: { type: 'base64', media_type: 'application/octet-stream', data: 'SGVsbG8gd29ybGQ=' },
+      step: { type: 'thinking', thinking: 'plan', signature: 'user-provided' },
+    }
+    const result = parseLine(lineWith([{ type: 'tool_use', id: 't1', name: 'mcp__files__upload', input }], 'assistant'))!
+    const [toolUse] = JSON.parse(result.contentJson!)
+    expect(toolUse.input).toEqual(input)
+  })
+
+  it('leaves block types it does not know alone (tolerant parsing keeps unknown structures)', () => {
+    const block = { type: 'future_audio', source: { type: 'base64', media_type: 'audio/wav', data: 'UklGRiQAAABXQVZF' } }
+    const result = parseLine(lineWith([block]))!
+    expect(JSON.parse(result.contentJson!)).toEqual([block])
   })
 })
 

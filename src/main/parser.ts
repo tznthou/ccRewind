@@ -145,17 +145,38 @@ function parseUsage(message: Record<string, unknown>): {
   }
 }
 
-/** Strip base64 data from image content blocks before storage, preserving block structure for UI placeholder */
-function stripImageBase64(content: unknown): unknown {
+/**
+ * 存進 contentJson 前，把 UI 顯示不了、只佔空間的酬載換成標記（欄位本身保留，看得出這裡原本有東西）。
+ * 只動 API 定義的 content block：tool_use 的 input 是工具參數、UI 會原樣顯示，
+ * 不認得的 block 照寬容模式原樣保留，兩者就算長得像也不碰。
+ * - image／document block 的 base64 source：頂層，以及 tool_result 裡的（Read 圖檔、MCP 截圖）。
+ *   只看頂層 image 的舊寫法漏了 tool_result 與 PDF，2026-09-25 實測漏掉 195MB。
+ * - thinking block 的 signature：API 的加密簽章，不可解析也不顯示。UI 只看它是不是非空字串
+ *   （isOmittedThinking），所以換成非空標記；空字串原樣保留，免得「沒有簽章」被說成「API 省略」。
+ */
+function stripUnrenderablePayloads(content: unknown): unknown {
   if (!Array.isArray(content)) return content
   return content.map(block => {
     if (block == null || typeof block !== 'object') return block
     const b = block as Record<string, unknown>
-    if (b.type !== 'image') return block
-    const source = b.source as Record<string, unknown> | undefined
-    if (!source || typeof source !== 'object' || source.type !== 'base64') return block
-    return { ...b, source: { ...source, data: '[base64-stripped]' } }
+    if (b.type === 'thinking' && typeof b.signature === 'string' && b.signature !== '') {
+      return { ...b, signature: '[signature-stripped]' }
+    }
+    if (b.type === 'tool_result' && Array.isArray(b.content)) {
+      return { ...b, content: b.content.map(stripBase64Source) }
+    }
+    return stripBase64Source(block)
   })
+}
+
+/** image／document block 的 base64 source 只留標記，其他原樣回傳 */
+function stripBase64Source(block: unknown): unknown {
+  if (block == null || typeof block !== 'object') return block
+  const b = block as Record<string, unknown>
+  if (b.type !== 'image' && b.type !== 'document') return block
+  const source = b.source as Record<string, unknown> | undefined
+  if (!source || typeof source !== 'object' || source.type !== 'base64' || typeof source.data !== 'string') return block
+  return { ...b, source: { ...source, data: '[base64-stripped]' } }
 }
 
 /** 解析單行 JSONL，失敗回傳 null */
@@ -213,9 +234,8 @@ export function parseLine(line: string): ParsedLine | null {
     toolNames = result.toolNames
     isCommandWrapped = result.isCommandWrapped
     toolErrorCount = result.toolErrorCount
-    const strippedContent = hasImage ? stripImageBase64(message.content) : message.content
-    contentJson = strippedContent != null
-      ? JSON.stringify(strippedContent, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
+    contentJson = message.content != null
+      ? JSON.stringify(stripUnrenderablePayloads(message.content), (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
       : null
 
     // Token usage（僅 assistant 訊息有值）
