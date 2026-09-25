@@ -2273,16 +2273,27 @@ describe('migration v27: strip payloads the UI cannot display from message_conte
   const plainRow = JSON.stringify([{ type: 'text', text: 'nothing to strip here' }])
   const stringContentRow = JSON.stringify('plain string content')
   const brokenRow = '{not json'
+  // 以下刻意用非標準空白寫：列只要被重新序列化，空白就會被正規化，「沒改寫」與「改寫成一樣的內容」才分得出來
+  const looseAlreadyStrippedRow = '[{"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "[base64-stripped]"}}]'
+  const looseEmptySignatureRow = '[{"type": "thinking", "thinking": "", "signature": ""}]'
+  const looseLookAlikeRow = '[{"type": "tool_use", "id": "t1", "name": "Write", "input": {"type": "function", "signature": "f(x)", "data": "not binary"}}]'
+  // tool_use 的 input 是工具參數，UI 原樣顯示；形狀像 base64 source 或 thinking block 也不能動
+  const looseToolInputRow = '[{"type": "tool_use", "id": "t2", "name": "mcp__files__upload", "input": {"file": {"type": "base64", "data": "SGVsbG8="}, "step": {"type": "thinking", "signature": "user-provided"}}}]'
+  // 不認得的 block 照寬容模式原樣保留
+  const looseUnknownBlockRow = '[{"type": "future_audio", "source": {"type": "base64", "media_type": "audio/wav", "data": "UklGRiQAAABXQVZF"}}]'
 
-  const rows = [thinkingRow, omittedThinkingRow, legacyImageRow, nestedImageRow, pdfRow, plainRow, stringContentRow, brokenRow]
+  const rows = [
+    thinkingRow, omittedThinkingRow, legacyImageRow, nestedImageRow, pdfRow, plainRow, stringContentRow, brokenRow,
+    looseAlreadyStrippedRow, looseEmptySignatureRow, looseLookAlikeRow, looseToolInputRow, looseUnknownBlockRow,
+  ]
 
   /** 以 v27 之前的形狀寫進 DB（indexSession 原樣存 contentJson、不經 parser），再退回 v26 重開，讓 v27 真的跑一次 */
-  function seedAndUpgradeFromV26(): void {
+  function seedAndUpgradeFromV26(seedRows: Array<string | null> = rows): void {
     db.indexSession({
       sessionId: 'v27-seed', projectId: 'p27', projectDisplayName: 'Project 27',
-      title: 'v27 seed', messageCount: rows.length, filePath: '/tmp/v27-seed.jsonl', fileSize: 1,
+      title: 'v27 seed', messageCount: seedRows.length, filePath: '/tmp/v27-seed.jsonl', fileSize: 1,
       fileMtime: '2026-03-10T00:00:00Z', startedAt: '2026-03-10T00:00:00Z', endedAt: '2026-03-10T01:00:00Z',
-      messages: rows.map((contentJson, i) =>
+      messages: seedRows.map((contentJson, i) =>
         msg({ type: 'assistant', role: 'assistant', contentText: `text ${i}`, contentJson, sequence: i })),
     })
     db.rawExec('DELETE FROM schema_version WHERE version >= 27')
@@ -2335,12 +2346,43 @@ describe('migration v27: strip payloads the UI cannot display from message_conte
     expect(stored[5].content_json).toBe(plainRow)
     expect(stored[6].content_json).toBe(stringContentRow)
     expect(stored[7].content_json).toBe(brokenRow)
+    expect(stored[8].content_json).toBe(looseAlreadyStrippedRow)
+    expect(stored[9].content_json).toBe(looseEmptySignatureRow)
+    expect(stored[10].content_json).toBe(looseLookAlikeRow)
+  })
+
+  it('leaves tool inputs and unknown block types alone even when they look like payloads', () => {
+    seedAndUpgradeFromV26()
+    const stored = storedRows()
+    expect(stored[11].content_json).toBe(looseToolInputRow)
+    expect(stored[12].content_json).toBe(looseUnknownBlockRow)
+  })
+
+  it('survives a deeply nested row — one bad row must not make every launch fail', () => {
+    // JSON.parse 撐得住的深度，帶 replacer 的 JSON.stringify 約一萬層就 RangeError；
+    // migration 一拋錯就回滾，版本號不前進，下次啟動撞上同一列——app 從此開不起來
+    const deep = '{"a":'.repeat(20_000) + '1' + '}'.repeat(20_000)
+    const deepRow = `[{"type":"thinking","thinking":"deep","signature":"${SIGNATURE}"},{"type":"tool_use","id":"t3","name":"X","input":${deep}}]`
+    seedAndUpgradeFromV26([deepRow])
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(27)
+    expect(storedRows()[0].content_json).toBe(deepRow.replace(SIGNATURE, '[signature-stripped]'))
+  })
+
+  it('keeps a row it cannot re-serialize as it is, and still finishes', () => {
+    // 物件帶整數 key 時 JSON.stringify 走遞迴路徑，不帶 replacer 也是五千層就 RangeError。
+    // 這種列只能原樣留著，但不能讓它擋住整個 migration
+    const deep = '{"0":0,"a":'.repeat(20_000) + '1' + '}'.repeat(20_000)
+    const deepRow = `[{"type":"thinking","thinking":"deep","signature":"${SIGNATURE}"},{"type":"tool_use","id":"t4","name":"X","input":${deep}}]`
+    seedAndUpgradeFromV26([deepRow])
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(27)
+    expect(storedRows()[0].content_json).toBe(deepRow)
   })
 
   it('touches only message_content — every row survives and content_text is unchanged', () => {
     seedAndUpgradeFromV26()
     const stored = storedRows()
     expect(stored).toHaveLength(rows.length)
+    expect(stored.every(r => r.content_json !== null)).toBe(true)
     expect(stored.map(r => r.content_text)).toEqual(rows.map((_, i) => `text ${i}`))
   })
 })

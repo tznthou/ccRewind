@@ -892,6 +892,23 @@ describe('parseLine — payloads the UI cannot display are stripped from content
     const [toolUse] = JSON.parse(result.contentJson!)
     expect(toolUse.input).toEqual(input)
   })
+
+  it('leaves tool inputs alone even when they are shaped like a base64 source or a thinking block', () => {
+    // tool_use 的 input 是工具參數、不是 API 的 content block，UI 會原樣顯示它
+    const input = {
+      file: { type: 'base64', media_type: 'application/octet-stream', data: 'SGVsbG8gd29ybGQ=' },
+      step: { type: 'thinking', thinking: 'plan', signature: 'user-provided' },
+    }
+    const result = parseLine(lineWith([{ type: 'tool_use', id: 't1', name: 'mcp__files__upload', input }], 'assistant'))!
+    const [toolUse] = JSON.parse(result.contentJson!)
+    expect(toolUse.input).toEqual(input)
+  })
+
+  it('leaves block types it does not know alone (tolerant parsing keeps unknown structures)', () => {
+    const block = { type: 'future_audio', source: { type: 'base64', media_type: 'audio/wav', data: 'UklGRiQAAABXQVZF' } }
+    const result = parseLine(lineWith([block]))!
+    expect(JSON.parse(result.contentJson!)).toEqual([block])
+  })
 })
 
 describe('parseLine — attribution fields', () => {

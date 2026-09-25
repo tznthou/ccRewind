@@ -217,8 +217,9 @@ END;
   - type: "tool_use" → 標記 has_tool_use，記錄 tool name，content_json 保留完整結構
   - type: "tool_result" → 標記 has_tool_result，content_json 保留完整結構
   - 其他 type → content_json 保留，不納入 content_text
-  - 例外：UI 顯示不了的酬載只留標記——任何深度的 base64 source（圖片、PDF）→ "[base64-stripped]"，
-    thinking 的 signature → "[signature-stripped]"（空字串原樣保留）。既有資料由 migration v27 清
+  - 例外：UI 顯示不了的酬載只留標記——image／document block 的 base64 source（頂層與 tool_result 內）
+    → "[base64-stripped]"，thinking block 的 signature → "[signature-stripped]"（空字串原樣保留）；
+    tool_use input 與未知 block 不動。既有資料由 migration v27 清
 ```
 
 ### UUID 語義與 Resumed Session

@@ -1,4 +1,5 @@
 import type BetterSqlite3 from 'better-sqlite3'
+import { logSafeError } from './logSafe'
 
 /** Migration 定義 */
 export interface Migration {
@@ -44,39 +45,66 @@ export const BACKFILL_HAS_REMOTE_CONTROL_SQL = `
 `
 
 /**
- * v27：把 UI 顯示不了的酬載從既有 content_json 剝掉——任何深度的 base64 source（圖片、PDF）
- * 與 thinking 的 signature。規則是撰寫當下 parser 序列化規則的快照；照 v17 的慣例不 import
- * parser：migration 是歷史紀錄，parser 日後再改，這裡不該跟著變。
+ * v27：把 UI 顯示不了的酬載從既有 content_json 剝掉——image／document block 的 base64 source
+ * （頂層與 tool_result 裡）、thinking block 的 signature。tool_use 的 input 與不認得的 block 不碰。
+ * 規則是撰寫當下 parser 規則的快照；照 v17 的慣例不 import parser：migration 是歷史紀錄，
+ * parser 日後再改，這裡不該跟著變。
  *
  * 必須就地改寫而不是 force reindex：原檔已被 Claude Code 30 天清理掉的 session 永遠不會再被
  * indexSession 碰到，而可剝除的 577MB 有 71% 就在這類 session 裡（2026-09-25 實測）。
  *
  * 只改寫真的剝到東西的列，其餘一個 byte 都不動；壞 JSON 原樣保留（寬容模式）。
+ * 重新序列化失敗的列也原樣保留：JSON.parse 撐得住的深度，JSON.stringify 不一定撐得住——帶 replacer
+ * 約一萬層、物件帶整數 key 時不帶 replacer 也是五千層就 RangeError。migration 一拋錯就整批回滾、
+ * 版本號不前進，下次啟動又撞同一列，app 從此開不起來；一列留著不剝，代價小得多。
+ * 寫入失敗（磁碟滿等）則照樣往外拋：那是環境問題，整批回滾、下次重試才對。
  * 不在這裡 VACUUM：騰出的空間（實測約 0.6GB）留給 Storage 頁的「壓縮資料庫」，理由見 runMigrations。
  */
 function stripUnrenderablePayloadsV27(db: BetterSqlite3.Database): void {
   const BASE64_STRIPPED = '[base64-stripped]'
   const SIGNATURE_STRIPPED = '[signature-stripped]'
 
-  /** 有剝到東西才回傳改寫後的 JSON，否則回 null（該列不動） */
-  function strip(parsed: unknown): string | null {
-    let stripped = false
-    const out = JSON.stringify(parsed, function (this: unknown, key: string, value: unknown): unknown {
-      if (key === 'signature' && typeof value === 'string' && value !== '' && value !== SIGNATURE_STRIPPED
-        && (this as { type?: unknown }).type === 'thinking') {
-        stripped = true
-        return SIGNATURE_STRIPPED
+  /** image／document block 的 base64 source 換成標記；沒動到就回 null */
+  function stripSource(block: unknown): Record<string, unknown> | null {
+    if (block == null || typeof block !== 'object' || Array.isArray(block)) return null
+    const b = block as Record<string, unknown>
+    if (b.type !== 'image' && b.type !== 'document') return null
+    const source = b.source
+    if (source == null || typeof source !== 'object' || Array.isArray(source)) return null
+    const s = source as Record<string, unknown>
+    if (s.type !== 'base64' || typeof s.data !== 'string' || s.data === BASE64_STRIPPED) return null
+    return { ...b, source: { ...s, data: BASE64_STRIPPED } }
+  }
+
+  /** 有剝到東西才回傳改寫後的 blocks，否則回 null（該列不動） */
+  function strip(content: unknown): unknown[] | null {
+    if (!Array.isArray(content)) return null
+    let changed = false
+    const out = content.map((block) => {
+      if (block == null || typeof block !== 'object' || Array.isArray(block)) return block
+      const b = block as Record<string, unknown>
+      if (b.type === 'thinking' && typeof b.signature === 'string' && b.signature !== '' && b.signature !== SIGNATURE_STRIPPED) {
+        changed = true
+        return { ...b, signature: SIGNATURE_STRIPPED }
       }
-      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
-        const v = value as Record<string, unknown>
-        if (v.type === 'base64' && typeof v.data === 'string' && v.data !== BASE64_STRIPPED) {
-          stripped = true
-          return { ...v, data: BASE64_STRIPPED }
-        }
+      if (b.type === 'tool_result' && Array.isArray(b.content)) {
+        let innerChanged = false
+        const inner = b.content.map((item) => {
+          const stripped = stripSource(item)
+          if (stripped == null) return item
+          innerChanged = true
+          return stripped
+        })
+        if (!innerChanged) return block
+        changed = true
+        return { ...b, content: inner }
       }
-      return value
+      const stripped = stripSource(block)
+      if (stripped == null) return block
+      changed = true
+      return stripped
     })
-    return stripped ? out : null
+    return changed ? out : null
   }
 
   // 先取 id 清單再逐列讀寫：better-sqlite3 不允許在 iterate() 途中對同一連線寫入，
@@ -94,7 +122,15 @@ function stripUnrenderablePayloadsV27(db: BetterSqlite3.Database): void {
       continue
     }
     const out = strip(parsed)
-    if (out != null) write.run(out, id)
+    if (out == null) continue
+    let serialized: string
+    try {
+      serialized = JSON.stringify(out)
+    } catch (err) {
+      console.warn(`[migration v27] message ${id} kept as is (could not re-serialize): ${logSafeError(err)}`)
+      continue
+    }
+    write.run(serialized, id)
   }
 }
 
