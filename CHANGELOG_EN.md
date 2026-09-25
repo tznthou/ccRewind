@@ -7,6 +7,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.25.0] - 2026-09-25
+
+### Added
+
+- **Jump-to-top and jump-to-bottom buttons in the conversation view** ([#122](https://github.com/tznthou/ccRewind/pull/122)): previously there were no dedicated jump-to-top or jump-to-bottom buttons. Two buttons in the bottom-right corner of the conversation now jump to the very top, or to the very end (below the related-sessions panel when one is shown); one click reaches the end even while message heights are still being measured (tested on one of the maintainer's sessions, with 1,257 displayed messages). The buttons stay hidden so they do not cover what you are reading: they appear when you scroll or move the mouse over the conversation and fade out after 2 seconds of inactivity, and they stay visible while the pointer rests on one or while one has keyboard focus
+
 ## [1.24.0] - 2026-09-25
 
 ### Changed

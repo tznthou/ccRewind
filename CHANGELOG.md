@@ -6,6 +6,12 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.25.0] - 2026-09-25
+
+### Added
+
+- **對話檢視新增「跳到最上面／跳到最下面」按鈕**（[#122](https://github.com/tznthou/ccRewind/pull/122)）：原本沒有專用的跳頂／跳底按鈕。現在對話區右下角有兩顆按鈕，一鍵回到最上面，或跳到最底端（有相關 session 區塊時會捲到它下方）；訊息高度還沒量完也能一次到底（維護者一個顯示 1,257 則訊息的 session 實測）。按鈕平時隱藏、不擋閱讀，在對話區捲動或移動滑鼠時浮現，閒置 2 秒後淡出；游標停在按鈕上、或用鍵盤移到按鈕上時會保持顯示
+
 ## [1.24.0] - 2026-09-25
 
 ### Changed
