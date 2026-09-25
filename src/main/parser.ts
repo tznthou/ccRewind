@@ -145,16 +145,28 @@ function parseUsage(message: Record<string, unknown>): {
   }
 }
 
-/** Strip base64 data from image content blocks before storage, preserving block structure for UI placeholder */
-function stripImageBase64(content: unknown): unknown {
-  if (!Array.isArray(content)) return content
-  return content.map(block => {
-    if (block == null || typeof block !== 'object') return block
-    const b = block as Record<string, unknown>
-    if (b.type !== 'image') return block
-    const source = b.source as Record<string, unknown> | undefined
-    if (!source || typeof source !== 'object' || source.type !== 'base64') return block
-    return { ...b, source: { ...source, data: '[base64-stripped]' } }
+/**
+ * message.content 序列化成 contentJson，並把 UI 顯示不了、只佔空間的酬載換成標記
+ * （欄位本身保留，看得出這裡原本有東西）：
+ * - 任何深度的 base64 source：頂層圖片、PDF、tool_result 裡的圖（Read 圖檔、MCP 截圖）。
+ *   只剝頂層圖片的舊寫法漏了 tool_result 與 PDF，2026-09-25 實測漏掉 195MB。
+ * - thinking 的 signature：API 的加密簽章，不可解析也不顯示。UI 只看它是不是非空字串
+ *   （isOmittedThinking），所以換成非空標記；空字串原樣保留，免得「沒有簽章」被說成「API 省略」。
+ * 每個字串同時做 ensureWellFormed。
+ */
+function serializeContent(content: unknown): string {
+  return JSON.stringify(content, function (this: unknown, key: string, value: unknown) {
+    if (typeof value === 'string') {
+      if (key === 'signature' && value !== '' && (this as { type?: unknown }).type === 'thinking') {
+        return '[signature-stripped]'
+      }
+      return ensureWellFormed(value)
+    }
+    if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+      const v = value as Record<string, unknown>
+      if (v.type === 'base64' && typeof v.data === 'string') return { ...v, data: '[base64-stripped]' }
+    }
+    return value
   })
 }
 
@@ -213,10 +225,7 @@ export function parseLine(line: string): ParsedLine | null {
     toolNames = result.toolNames
     isCommandWrapped = result.isCommandWrapped
     toolErrorCount = result.toolErrorCount
-    const strippedContent = hasImage ? stripImageBase64(message.content) : message.content
-    contentJson = strippedContent != null
-      ? JSON.stringify(strippedContent, (_k, v) => typeof v === 'string' ? ensureWellFormed(v) : v)
-      : null
+    contentJson = message.content != null ? serializeContent(message.content) : null
 
     // Token usage（僅 assistant 訊息有值）
     const tokenData = parseUsage(message)

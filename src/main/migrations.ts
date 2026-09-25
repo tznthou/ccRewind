@@ -43,6 +43,61 @@ export const BACKFILL_HAS_REMOTE_CONTROL_SQL = `
     AND id IN (SELECT DISTINCT session_id FROM messages WHERE type = 'bridge-session')
 `
 
+/**
+ * v27：把 UI 顯示不了的酬載從既有 content_json 剝掉——任何深度的 base64 source（圖片、PDF）
+ * 與 thinking 的 signature。規則是撰寫當下 parser 序列化規則的快照；照 v17 的慣例不 import
+ * parser：migration 是歷史紀錄，parser 日後再改，這裡不該跟著變。
+ *
+ * 必須就地改寫而不是 force reindex：原檔已被 Claude Code 30 天清理掉的 session 永遠不會再被
+ * indexSession 碰到，而可剝除的 577MB 有 71% 就在這類 session 裡（2026-09-25 實測）。
+ *
+ * 只改寫真的剝到東西的列，其餘一個 byte 都不動；壞 JSON 原樣保留（寬容模式）。
+ * 不在這裡 VACUUM：騰出的空間（實測約 0.6GB）留給 Storage 頁的「壓縮資料庫」，理由見 runMigrations。
+ */
+function stripUnrenderablePayloadsV27(db: BetterSqlite3.Database): void {
+  const BASE64_STRIPPED = '[base64-stripped]'
+  const SIGNATURE_STRIPPED = '[signature-stripped]'
+
+  /** 有剝到東西才回傳改寫後的 JSON，否則回 null（該列不動） */
+  function strip(parsed: unknown): string | null {
+    let stripped = false
+    const out = JSON.stringify(parsed, function (this: unknown, key: string, value: unknown): unknown {
+      if (key === 'signature' && typeof value === 'string' && value !== '' && value !== SIGNATURE_STRIPPED
+        && (this as { type?: unknown }).type === 'thinking') {
+        stripped = true
+        return SIGNATURE_STRIPPED
+      }
+      if (value !== null && typeof value === 'object' && !Array.isArray(value)) {
+        const v = value as Record<string, unknown>
+        if (v.type === 'base64' && typeof v.data === 'string' && v.data !== BASE64_STRIPPED) {
+          stripped = true
+          return { ...v, data: BASE64_STRIPPED }
+        }
+      }
+      return value
+    })
+    return stripped ? out : null
+  }
+
+  // 先取 id 清單再逐列讀寫：better-sqlite3 不允許在 iterate() 途中對同一連線寫入，
+  // 而一次 all() 會把 1GB+ 的內容全載進記憶體
+  const ids = db.prepare('SELECT message_id FROM message_content').pluck().all() as number[]
+  const read = db.prepare('SELECT content_json FROM message_content WHERE message_id = ?').pluck()
+  const write = db.prepare('UPDATE message_content SET content_json = ? WHERE message_id = ?')
+  for (const id of ids) {
+    const json = read.get(id) as string | null
+    if (json == null) continue
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(json)
+    } catch {
+      continue
+    }
+    const out = strip(parsed)
+    if (out != null) write.run(out, id)
+  }
+}
+
 /** 所有 migrations，依 version 遞增排列 */
 export const migrations: Migration[] = [
   {
@@ -528,6 +583,13 @@ export const migrations: Migration[] = [
           PRIMARY KEY (session_id, rule_id)
         );
       `)
+    },
+  },
+  {
+    version: 27,
+    description: 'strip payloads the UI cannot display from message_content: base64 sources (images, PDFs, including inside tool results) and thinking signatures',
+    up: (db) => {
+      stripUnrenderablePayloadsV27(db)
     },
   },
 ]
