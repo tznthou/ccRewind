@@ -8,7 +8,7 @@ on:
 
 jobs:
   lint-typecheck:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned, not ubuntu-latest: that label moves to Ubuntu 26 from 2026-10-19 (actions/runner-images#14748)
     timeout-minutes: 5
 
     steps:
@@ -31,7 +31,7 @@ jobs:
         run: pnpm eslint .
 
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # pinned, not ubuntu-latest: that label moves to Ubuntu 26 from 2026-10-19 (actions/runner-images#14748)
     timeout-minutes: 10
 
     steps:
