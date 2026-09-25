@@ -12,6 +12,7 @@ import SubagentPanel from './SubagentPanel'
 import TasksPanel from './TasksPanel'
 import { useTokenHeat } from './TokenHeatGutter'
 import { isDisplayableMessage } from './contentBlocks'
+import { watchIdle } from './idleWatcher'
 import ErrorBoundary from '../ErrorBoundary/ErrorBoundary'
 import { MessageErrorFallback } from '../ErrorBoundary/ErrorFallback'
 import styles from './ChatView.module.css'
@@ -30,6 +31,8 @@ interface ChatViewProps {
 const MAX_LOCATE_MS = 5000
 /** 捲動安定的兜底時間；沒有實際捲動時 scrollend 不會發生 */
 const SCROLL_SETTLE_MS = 800
+/** 跳頂 / 跳底按鈕在最後一次捲動或滑鼠移動後多久淡出 */
+const JUMP_IDLE_MS = 2000
 
 export default function ChatView({ sessionId }: ChatViewProps) {
   const { messages, loading, error } = useSession(sessionId)
@@ -152,6 +155,29 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     }
     requestAnimationFrame(locate)
   }, [targetMessageId, loading, dispatch, displayMessages, virtualizer, getScrollElement])
+
+  // 跳頂 / 跳底都走 virtualizer 而非直接 scrollTo：virtual-core 捲動後會逐幀重算落點（最長 5 秒），
+  // 且使用者自己捲動不會取消它。前一次跳轉若還在追落點，量測一變動就會把畫面拉回去；
+  // 新的 scrollToOffset / scrollToEnd 會取代那份追蹤狀態。同時作廢進行中的搜尋跳轉，免得它事後捲走畫面。
+  // scrollToEnd 的落點是捲動容器的真正底端（含列表下方的 RelatedSessionsPanel）。
+  const jumpToTop = useCallback(() => {
+    navTokenRef.current += 1
+    virtualizer.scrollToOffset(0)
+  }, [virtualizer])
+
+  const jumpToBottom = useCallback(() => {
+    navTokenRef.current += 1
+    virtualizer.scrollToEnd()
+  }, [virtualizer])
+
+  // 按鈕平時隱藏、不擋閱讀；在對話區捲動或移動滑鼠時浮現，閒置後淡出。
+  // watchIdle 只在顯示狀態翻轉時回呼，捲動中每秒幾十個事件不會讓 ChatView 跟著重繪。
+  const [jumpActive, setJumpActive] = useState(false)
+  useEffect(() => {
+    const scroller = getScrollElement()
+    if (!scroller) return
+    return watchIdle(scroller, ['scroll', 'mousemove'], JUMP_IDLE_MS, setJumpActive)
+  }, [getScrollElement])
 
   const [exporting, setExporting] = useState(false)
   const [sessionFiles, setSessionFiles] = useState<SessionFile[]>([])
@@ -299,6 +325,30 @@ export default function ChatView({ sessionId }: ChatViewProps) {
             })}
           </div>
           <RelatedSessionsPanel sessionId={sessionId} />
+          {displayMessages.length > 0 && (
+            <div className={styles.jumpDock} data-active={jumpActive}>
+              <div className={styles.jumpButtons}>
+                <button
+                  type="button"
+                  className={styles.jumpButton}
+                  onClick={jumpToTop}
+                  title={t('chatView.jump.top')}
+                  aria-label={t('chatView.jump.top')}
+                >
+                  {'↑'}
+                </button>
+                <button
+                  type="button"
+                  className={styles.jumpButton}
+                  onClick={jumpToBottom}
+                  title={t('chatView.jump.bottom')}
+                  aria-label={t('chatView.jump.bottom')}
+                >
+                  {'↓'}
+                </button>
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
