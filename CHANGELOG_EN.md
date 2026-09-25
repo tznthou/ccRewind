@@ -7,6 +7,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.24.0] - 2026-09-25
+
+### Changed
+
+- **Image and PDF blocks and thinking signatures are now stored with markers in place of their payloads, and upgrading does the same for existing data** ([#119](https://github.com/tznthou/ccRewind/pull/119)): the app never renders this data as images or PDFs and never shows signatures, yet it took up a large share of the index. The previous version stripped only images at the top level of a message; images inside tool results, PDFs and thinking signatures were stored in full, and older indexes may still hold top-level image data as well (the maintainer's had 286 such images, all in sessions started between March and May 2026). In the maintainer's own 1,894 MB index, signatures and base64 together took 577 MB — 47% of all stored message content (1,218 MB). Image and PDF blocks at the top level of a message and inside tool result content now keep their other fields (type, media type and so on), and only their base64 data is replaced by `[base64-stripped]`; thinking text stays as it was, a non-empty signature becomes `[signature-stripped]` (an empty one stays empty), and thinking the API omitted is still labelled as omitted. The stripping leaves tool call arguments, and blocks the parser does not recognise, alone; during the upgrade, rows that cannot be parsed as JSON or re-serialized are kept unchanged, and a failed database write rolls the whole upgrade back so it can retry on the next launch (on the maintainer's index, no base64 data or signatures were left afterwards)
+  - ⚠️ **Replaced data cannot be restored from the markers**: for sessions whose original JSONL is gone, the index may be the only copy you have. If you want to keep those images, copy `~/.ccrewind/index.db` somewhere safe, with the app closed, before upgrading
+  - **The first launch after upgrading waits for this processing**: it runs before the window appears, and how long it takes depends on the data and the machine — about 8 seconds of processing on the maintainer's 1.9 GB index. Once it has succeeded, it does not run again
+  - **Upgrading does not shrink the database file by itself**: to reclaim the space, press "Compact database" on the Storage page; after compacting, the maintainer's index went from 1,894 MB to 1,274 MB
+
+### Fixed
+
+- **Base64 images inside tool results now show a marker instead of a long run of base64 text** ([#119](https://github.com/tznthou/ccRewind/pull/119)): the previous version did not strip image blocks inside tool result content (for example from reading an image file or from MCP screenshots), so expanding a tool output containing such an image showed the entire base64 string. Their base64 data now gets the same marker as top-level images
+
 ## [1.23.0] - 2026-09-25
 
 ### Added

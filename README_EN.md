@@ -103,12 +103,12 @@ Built for depth, not breadth.
 
 | Feature | Description |
 |---------|-------------|
-| **Data Preservation** | Automatically archives conversations when JSONL files are deleted. No history is ever lost |
+| **Data Preservation** | Automatically archives conversations when JSONL files are deleted — text, tool calls and results, and thinking all stay in the index; the base64 data in image and PDF blocks and thinking signatures are replaced with markers |
 | **Storage Management** | Inspect index DB footprint (size, session/message counts, per-project breakdown with visual bars) and manage what gets indexed via exclusion rules — exclude an entire project in one click or a date range, choosing either to keep existing data and only stop indexing new sessions, or to delete it and reclaim space. Deleting requires a checkbox acknowledgement (plus a red banner above 50% impact), with an apply-token IPC handshake closing the renderer trust-boundary gap |
 | **DB Compaction** | Storage page surfaces reclaimable space (`freelist × page_size` from live PRAGMA reads) with a one-click VACUUM button that releases pages left behind by SQLite DELETE. The confirm dialog spells out that compaction only reorganizes file structure and never deletes conversations |
-| **Image Block Handling** | Detects screenshots and pasted images in conversations, flagging messages that contain images. Precisely strips base64 image data during storage (preserving structural metadata), preventing index database bloat |
+| **Image & Signature Slimming** | Flags messages that include an image directly, such as a pasted screenshot. The app never renders the base64 data of image and PDF blocks (including screenshots inside tool results) as images or documents, and never shows the encrypted signatures on thinking blocks, so that data is stored as a marker while the other fields stay, cutting the space it used to take. The v1.24.0 upgrade applies this to existing data too |
 | **Incremental Indexing** | Scans all JSONL on first launch, processes only new/modified files afterwards. Resumed sessions are automatically UUID-deduplicated, preventing duplicate messages |
-| **Auto DB Migration** | Schema changes applied automatically on startup, seamless upgrades for large databases |
+| **Auto DB Migration** | Schema changes applied automatically on startup. Upgrades that rewrite existing data make the first launch take longer, depending on the data and the machine (v1.24.0: about 8 seconds of processing on the maintainer's 1.9 GB index) |
 
 </details>
 
