@@ -39,22 +39,29 @@ export interface Insight {
 type Turn = SessionTokenStats['turns'][number]
 type Compactions = SessionTokenStats['compactions']
 
-/** 兩次相鄰呼叫之間有沒有夾著壓縮摘要（以 JSONL sequence 判斷位置） */
-function makeCompactionBetween(compactions: Compactions): (prev: Turn, cur: Turn) => boolean {
-  return (prev, cur) => compactions.some(c => c.sequence > prev.sequence && c.sequence < cur.sequence)
+/**
+ * 壓縮摘要後面第一次呼叫的位置 i（turns[i - 1] 與 turns[i] 之間夾著壓縮），以 JSONL sequence 判斷。
+ * 同一對呼叫之間有好幾則摘要只算一次。session 開頭的摘要（上一段對話帶進來的）不算這段對話的壓縮；
+ * 最後一次呼叫之後的摘要沒有「壓縮後」的呼叫可以量，也不列。兩個陣列都依 sequence 由小到大（SQL 已排序）。
+ */
+function compactedCallIndexes(turns: Turn[], compactions: Compactions): Set<number> {
+  const result = new Set<number>()
+  let t = 0
+  for (const c of compactions) {
+    while (t < turns.length && turns[t].sequence < c.sequence) t++
+    if (t > 0 && t < turns.length) result.add(t)
+  }
+  return result
 }
 
 // ── Rule 1: Context Spike Detection ──
 
-function detectContextSpikes(
-  turns: Turn[],
-  compactionBetween: (prev: Turn, cur: Turn) => boolean,
-): Insight[] {
+function detectContextSpikes(turns: Turn[], compacted: ReadonlySet<number>): Insight[] {
   const insights: Insight[] = []
   for (let i = 1; i < turns.length; i++) {
     const prev = turns[i - 1]
     // 壓縮後 context 從摘要重新長起來，不是工具輸出
-    if (compactionBetween(prev, turns[i])) continue
+    if (compacted.has(i)) continue
 
     const delta = turns[i].inputTokens - prev.inputTokens
     const ratio = prev.inputTokens > 0 ? turns[i].inputTokens / prev.inputTokens : 0
@@ -151,25 +158,21 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
 
 // ── Rule 3: Compactions ──
 
-function assessCompactions(turns: Turn[], compactions: Compactions): Insight[] {
-  // 每個壓縮 = 它前面最後一次呼叫 → 它後面第一次呼叫；同一對呼叫之間只算一次
-  const seen = new Set<number>()
-  const events: Array<{ turn: number; before: number; after: number }> = []
-  for (const c of compactions) {
-    const next = turns.findIndex(t => t.sequence > c.sequence)
-    // -1: 壓縮之後沒有呼叫；0: 壓縮之前沒有呼叫（session 開頭就是上一段對話的摘要）——都不是這段對話裡發生的壓縮
-    if (next <= 0 || seen.has(next)) continue
-    seen.add(next)
-    events.push({ turn: next + 1, before: turns[next - 1].contextTotal, after: turns[next].contextTotal })
-  }
-  if (events.length === 0) return []
-
-  const last = events[events.length - 1]
+function assessCompactions(turns: Turn[], compacted: ReadonlySet<number>): Insight[] {
+  if (compacted.size === 0) return []
+  // 每個壓縮 = 它前面最後一次呼叫 → 它後面第一次呼叫；細節描述最近一次
+  const last = Math.max(...compacted)
   return [{
     id: 'compactions',
     severity: 'info',
     icon: '📦',
-    data: { type: 'compaction', count: events.length, turn: last.turn, before: last.before, after: last.after },
+    data: {
+      type: 'compaction',
+      count: compacted.size,
+      turn: last + 1,
+      before: turns[last - 1].contextTotal,
+      after: turns[last].contextTotal,
+    },
   }]
 }
 
@@ -189,14 +192,10 @@ const IDLE_EXPIRED_MINUTES = 60
 const SHORT_TTL_MINUTES = 5
 const MAX_LISTED_IDLE = 3
 
-type BreakCause = 'idle_expired' | 'model_switch' | 'unknown'
-
-interface CacheBreak {
-  turn: number
-  cause: BreakCause
-  gapMinutes: number | null
-  rewrittenTokens: number
-}
+/** 閒置過期一定量得到間隔；其他原因的間隔可能不知道（缺時間戳） */
+type CacheBreak =
+  | { turn: number; cause: 'idle_expired'; gapMinutes: number; rewrittenTokens: number }
+  | { turn: number; cause: 'model_switch' | 'unknown'; gapMinutes: number | null; rewrittenTokens: number }
 
 function minutesBetween(from: string | null, to: string | null): number | null {
   if (!from || !to) return null
@@ -206,10 +205,7 @@ function minutesBetween(from: string | null, to: string | null): number | null {
   return (b - a) / 60_000
 }
 
-function findCacheBreaks(
-  turns: Turn[],
-  compactionBetween: (prev: Turn, cur: Turn) => boolean,
-): CacheBreak[] {
+function findCacheBreaks(turns: Turn[], compacted: ReadonlySet<number>): CacheBreak[] {
   const breaks: CacheBreak[] = []
   for (let i = 1; i < turns.length; i++) {
     const prev = turns[i - 1]
@@ -217,27 +213,28 @@ function findCacheBreaks(
     // 沒有快取可以斷：上一次沒用到快取（不支援 prompt caching 的供應商）、或這次沒寫入任何東西（prompt 太短沒法快取）
     if (prev.cacheReadTokens + prev.cacheCreationTokens === 0 || cur.cacheCreationTokens === 0) continue
     // 壓縮後的第一次呼叫本來就要整段重寫
-    if (compactionBetween(prev, cur)) continue
+    if (compacted.has(i)) continue
 
     const rewrote = cur.cacheReadTokens < prev.contextTotal * REWRITE_READ_RATIO
       && cur.contextTotal >= prev.contextTotal * REWRITE_KEEP_RATIO
     if (!rewrote) continue
 
+    const turn = i + 1
     const gap = minutesBetween(prev.timestamp, cur.timestamp)
-    let cause: BreakCause = 'unknown'
-    if (prev.model && cur.model && prev.model !== cur.model) cause = 'model_switch'
-    else if (gap != null && gap >= IDLE_EXPIRED_MINUTES) cause = 'idle_expired'
-
-    breaks.push({ turn: i + 1, cause, gapMinutes: gap, rewrittenTokens: cur.cacheCreationTokens })
+    const rewrittenTokens = cur.cacheCreationTokens
+    if (prev.model && cur.model && prev.model !== cur.model) {
+      breaks.push({ turn, cause: 'model_switch', gapMinutes: gap, rewrittenTokens })
+    } else if (gap != null && gap >= IDLE_EXPIRED_MINUTES) {
+      breaks.push({ turn, cause: 'idle_expired', gapMinutes: gap, rewrittenTokens })
+    } else {
+      breaks.push({ turn, cause: 'unknown', gapMinutes: gap, rewrittenTokens })
+    }
   }
   return breaks
 }
 
-function assessCacheBreaks(
-  turns: Turn[],
-  compactionBetween: (prev: Turn, cur: Turn) => boolean,
-): Insight[] {
-  const breaks = findCacheBreaks(turns, compactionBetween)
+function assessCacheBreaks(turns: Turn[], compacted: ReadonlySet<number>): Insight[] {
+  const breaks = findCacheBreaks(turns, compacted)
   if (breaks.length === 0) return []
 
   const idle = breaks.filter(b => b.cause === 'idle_expired')
@@ -272,7 +269,7 @@ function assessCacheBreaks(
       data: {
         type: 'cache_idle_expired',
         turn: b.turn,
-        gapMinutes: Math.round(b.gapMinutes ?? IDLE_EXPIRED_MINUTES),
+        gapMinutes: Math.round(b.gapMinutes),
         rewrittenTokens: b.rewrittenTokens,
       },
       turnRef: b.turn,
@@ -318,10 +315,7 @@ function detectOutputHotSpots(turns: SessionTokenStats['turns']): Insight[] {
 
 // ── Rule 6: Growth Rate Analysis ──
 
-function analyzeGrowthRate(
-  turns: Turn[],
-  compactionBetween: (prev: Turn, cur: Turn) => boolean,
-): Insight[] {
+function analyzeGrowthRate(turns: Turn[], compacted: ReadonlySet<number>): Insight[] {
   if (turns.length < 10) return []
 
   const mid = Math.floor(turns.length / 2)
@@ -332,7 +326,7 @@ function analyzeGrowthRate(
   let secondHalfCount = 0
   for (let i = 1; i < turns.length; i++) {
     // 壓縮造成的下降不是「負成長」：不排除的話倍率會變負（實測 9/26 的 8bbffb1d 顯示「減慢（-0.2x）」）
-    if (compactionBetween(turns[i - 1], turns[i])) continue
+    if (compacted.has(i)) continue
     const delta = turns[i].inputTokens - turns[i - 1].inputTokens
     if (i <= mid) {
       firstHalfSum += delta
@@ -386,9 +380,10 @@ const EVENT_TYPES: ReadonlySet<InsightData['type']> = new Set(['compaction', 'ca
 
 /**
  * 面板預設只顯示前 3 條，其餘收在「顯示其他 N 筆」後面。長 session 的「context 暴增」動輒好幾條（warning），
- * 只照嚴重度排的話，壓縮與快取中斷（info）會被擠到後面——9/26 那場「對話被壓縮」排第 4 條、預設看不到，
- * 正好違背「看得出有沒有 compact」。所以：快撞到 context 上限（critical）最急，其次是發生過的事，
- * 最後才是各種觀察，各層內再照嚴重度。顏色仍由 severity 決定，不為了排序把 info 升成 warning。
+ * 只照嚴重度排的話，壓縮（info）與原因不明的快取中斷（info）會被擠到後面——9/26 那場「對話被壓縮」排第 4 條、
+ * 預設看不到，正好違背「看得出有沒有 compact」。所以：快撞到 context 上限（critical）最急，其次是發生過的事，
+ * 最後才是各種觀察。發生過的事之間照產生順序（壓縮 → 快取中斷 → 閒置過期，見 generateInsights），
+ * 觀察之間照嚴重度。顏色仍由 severity 決定，不為了排序把 info 升成 warning。
  */
 function displayRank(insight: Insight): number {
   if (insight.severity === 'critical') return 0
@@ -399,15 +394,15 @@ function displayRank(insight: Insight): number {
 // ── Public API ──
 
 export function generateInsights(stats: SessionTokenStats): Insight[] {
-  const compactionBetween = makeCompactionBetween(stats.compactions)
+  const compacted = compactedCallIndexes(stats.turns, stats.compactions)
   // 同一層內保持這個順序（sort 是穩定的）：壓縮在快取中斷前面
   const insights: Insight[] = [
-    ...assessCompactions(stats.turns, stats.compactions),
-    ...assessCacheBreaks(stats.turns, compactionBetween),
-    ...detectContextSpikes(stats.turns, compactionBetween),
+    ...assessCompactions(stats.turns, compacted),
+    ...assessCacheBreaks(stats.turns, compacted),
+    ...detectContextSpikes(stats.turns, compacted),
     ...assessContextLimit(stats.turns),
     ...detectOutputHotSpots(stats.turns),
-    ...analyzeGrowthRate(stats.turns, compactionBetween),
+    ...analyzeGrowthRate(stats.turns, compacted),
   ]
 
   insights.sort((a, b) => displayRank(a) - displayRank(b))

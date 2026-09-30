@@ -2424,8 +2424,6 @@ describe('getSessionTokenStats', () => {
       msg({ type: 'user', role: 'user', sequence: 6, contentText: SUMMARY }),
       // tool_result 剛好引用那句話：不是壓縮
       msg({ type: 'user', role: 'user', sequence: 7, hasToolResult: true, contentText: SUMMARY }),
-      // rewind 棄用分支上的 assistant 列：它的工具不該算進任何一次呼叫
-      msg({ type: 'assistant', role: 'assistant', sequence: 8, isAbandonedBranch: true, hasToolUse: true, toolNames: ['Edit'] }),
       // <synthetic>：Claude Code 本機寫的 thinking，usage 全 0，不是 API 呼叫
       msg({ type: 'assistant', role: 'assistant', sequence: 9, model: '<synthetic>', inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }),
       // 呼叫 C：壓縮之後
@@ -2456,6 +2454,43 @@ describe('getSessionTokenStats', () => {
     expect(stats.turns.map(t => t.contextTotal)).toEqual([100, 220, 400])
     expect(stats.totalInputTokens).toBe(720)
     expect(stats.compactions).toEqual([])
+  })
+
+  // 索引時已照 requestId 去重的 session(同一次回應只有最後一列帶 usage，前面的列是 NULL)不收合：
+  // rewind 後換一句 token 數相同的話重送，棄用分支那次呼叫會跟新分支第一次呼叫三欄全等、又相鄰
+  it('does not collapse a session the indexer already deduplicated — equal calls on both sides of a rewind stay two calls', () => {
+    indexRows('tok-rewind', [
+      msg({ type: 'user', role: 'user', sequence: 0, contentText: 'pick one' }),
+      // 呼叫 A：回應拆成兩列，去重後只有最後一列帶 usage
+      msg({ type: 'assistant', role: 'assistant', sequence: 1, model: OPUS }),
+      apiRow(2, 1000, 600, 400, 20),
+      msg({ type: 'user', role: 'user', sequence: 3, contentText: '1' }),
+      // 呼叫 B：之後被 rewind 棄用的分支
+      apiRow(4, 1200, 1000, 200, 30),
+      msg({ type: 'user', role: 'user', sequence: 5, contentText: '2' }),
+      // 呼叫 C：rewind 後的新分支，prompt 長度與快取讀寫剛好跟 B 一樣
+      apiRow(6, 1200, 1000, 200, 35),
+    ])
+    const stats = db.getSessionTokenStats('tok-rewind')
+    expect(stats.turns.map(t => t.sequence)).toEqual([2, 4, 6])
+    expect(stats.totalOutputTokens).toBe(85)
+  })
+
+  // v1.18.0(schema v22)起索引的 session 都有 parent_uuid，那時 requestId 去重早已上線(v1.7.2)。
+  // 每次回應都只有一列時沒有 NULL 列可認，但一樣不能收合
+  it('does not collapse a session indexed with parent_uuid, even when no response was split', () => {
+    indexRows('tok-rewind-v22', [
+      msg({ type: 'user', role: 'user', sequence: 0, uuid: 'u0', contentText: 'pick one' }),
+      apiRow(1, 1000, 600, 400, 20, { uuid: 'a1', parentUuid: 'u0' }),
+      msg({ type: 'user', role: 'user', sequence: 2, uuid: 'u2', parentUuid: 'a1', contentText: '1' }),
+      apiRow(3, 1200, 1000, 200, 30, { uuid: 'a3', parentUuid: 'u2' }),
+      // rewind：新訊息跟「1」掛在同一個 parent 底下
+      msg({ type: 'user', role: 'user', sequence: 4, uuid: 'u4', parentUuid: 'a1', contentText: '2' }),
+      apiRow(5, 1200, 1000, 200, 35, { uuid: 'a5', parentUuid: 'u4' }),
+    ])
+    const stats = db.getSessionTokenStats('tok-rewind-v22')
+    expect(stats.turns.map(t => t.sequence)).toEqual([1, 3, 5])
+    expect(stats.totalOutputTokens).toBe(85)
   })
 
   it('does not merge consecutive calls that used no cache, even with identical numbers', () => {

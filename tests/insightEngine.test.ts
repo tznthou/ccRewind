@@ -408,20 +408,17 @@ describe('insightEngine', () => {
       expect(summary.data).toMatchObject({ modelSwitch: 0, unknown: 1 })
     })
 
-    it('counts an unexplained rewrite, and flags the ones after a gap of 5+ minutes (short TTL possible)', () => {
-      const mk = (gap: number | null) => [
-        call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
-        call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500, minute: gap ?? undefined }),
-      ]
-      const cases: Array<[number | null, number]> = [[3, 0], [10, 1], [null, 0]]
-      for (const [gap, unknownLong] of cases) {
-        const p = gap == null
-          ? [call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000 }), call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500 })]
-          : mk(gap)
-        const summary = generateInsights(makeStats(p)).find(i => i.id === 'cache-breaks')!
+    it.each<[number | null, number]>([[3, 0], [10, 1], [null, 0]])(
+      'counts an unexplained rewrite after a gap of %s minutes (unknownLong = %s: 5+ minutes may be a short TTL)',
+      (gap, unknownLong) => {
+        const turns = [
+          call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
+          call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500, minute: gap ?? undefined }),
+        ]
+        const summary = generateInsights(makeStats(turns)).find(i => i.id === 'cache-breaks')!
         expect(summary.data).toMatchObject({ unknown: 1, unknownLong })
-      }
-    })
+      },
+    )
 
     it('is not a rewrite when at least half of the previous prompt was still read', () => {
       const turns = [
@@ -658,7 +655,7 @@ describe('insightEngine', () => {
   })
 
   describe('Sorting', () => {
-    it('sorts by severity: critical > warning > info > good', () => {
+    it('puts a critical insight ahead of warnings', () => {
       const turns = [
         makeTurn({ sequence: 1, inputTokens: 10_000, outputTokens: 500, contextTotal: 10_000 }),
         makeTurn({
@@ -666,7 +663,7 @@ describe('insightEngine', () => {
           hasToolUse: true, toolNames: ['Edit'],
         }),
       ]
-      const stats = makeStats(turns, { cacheHitRate: 0.8 })
+      const stats = makeStats(turns)
       const insights = generateInsights(stats)
       expect(insights.length).toBeGreaterThan(1)
 
@@ -690,7 +687,6 @@ describe('insightEngine', () => {
       const order = ids(makeStats(turns, { compactions: [{ sequence: 55 }] }))
       expect(order.filter(id => id.startsWith('spike-'))).toHaveLength(4)
       expect(order[0]).toBe('compactions')
-      expect(order.slice(0, 3)).toContain('compactions')
     })
 
     it('puts cache breaks ahead of spikes even when the cause is unknown and the severity is only info', () => {
@@ -718,19 +714,16 @@ describe('insightEngine', () => {
       expect(order.slice(0, 2)).toEqual(['ctx-limit-200k', 'compactions'])
     })
 
-    it('keeps ordering the observations by severity after the events', () => {
-      const turns = [
-        call({ sequence: 1, ctx: 10_000, output: 500 }),
-        call({ sequence: 2, ctx: 12_000, output: 600 }),
-        call({ sequence: 3, ctx: 40_000, output: 8_000 }),
-        call({ sequence: 4, ctx: 41_000, output: 400 }),
-      ]
-      const insights = generateInsights(makeStats(turns))
-      const order = ['critical', 'warning', 'info', 'good']
-      for (let i = 1; i < insights.length; i++) {
-        expect(order.indexOf(insights[i - 1].severity)).toBeLessThanOrEqual(order.indexOf(insights[i].severity))
-      }
-      expect(insights.map(i => i.id)).toEqual(['spike-3', 'hotspot-3'])
+    // 規則的產生順序是熱點(info)在前、成長(warning)在後：排完要倒過來，才驗得到「觀察照嚴重度排」
+    it('orders the observations by severity, not by the order the rules run in', () => {
+      const turns = Array.from({ length: 12 }, (_, i) => call({
+        sequence: i + 1,
+        // 前半每次 +1K、後半每次 +4K：成長加速(warning)
+        ctx: 10_000 + Math.min(i, 6) * 1_000 + Math.max(0, i - 6) * 4_000,
+        // 第 3 次呼叫輸出特別多：產出熱點(info)
+        output: i === 2 ? 8_000 : 100,
+      }))
+      expect(generateInsights(makeStats(turns)).map(i => i.id)).toEqual(['growth-accel', 'hotspot-3'])
     })
   })
 
@@ -743,7 +736,7 @@ describe('insightEngine', () => {
 
     it('single turn → no spike, no growth rate', () => {
       const turns = [makeTurn({ sequence: 1, inputTokens: 50_000, contextTotal: 50_000 })]
-      const stats = makeStats(turns, { cacheHitRate: 0.5 })
+      const stats = makeStats(turns)
       const insights = generateInsights(stats)
       expect(insights.find(i => i.id.startsWith('spike-'))).toBeUndefined()
       expect(insights.find(i => i.id === 'growth-accel')).toBeUndefined()

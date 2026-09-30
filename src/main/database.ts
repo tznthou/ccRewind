@@ -1109,11 +1109,23 @@ export class Database {
       cache_creation_tokens: number
       model: string | null
     }>
-    const calls = collapseDuplicateUsageRows(rows)
+    // 只收合「證明不了索引時做過 requestId 去重」的 session。去重過的再收合只會多出誤判——rewind 後換一句
+    // token 數相同的話重送，棄用分支那次呼叫會跟新分支第一次呼叫三欄全等又相鄰。去重過的證據：
+    // - 有 parent_uuid：v1.18.0（schema v22）起索引的都有，去重在 v1.7.2 就上線了
+    // - 有 NULL 用量列：去重把同一次回應前面的列設成 NULL
+    // 兩者都沒有的是 v1.18.0 前索引、原檔已清、不會再重索引的舊資料（2026-09-30 實測 92 個，
+    // 其中 47 個帶著全部 5,150 組相鄰全等；這些組之間都沒有夾著新的真人訊息，不是 rewind）。
+    const { deduplicated } = this.db.prepare(`
+      SELECT EXISTS (
+        SELECT 1 FROM messages WHERE session_id = ?
+          AND (parent_uuid IS NOT NULL OR (role = 'assistant' AND input_tokens IS NULL))
+      ) AS deduplicated
+    `).get(sessionId) as { deduplicated: number }
+    const calls = deduplicated ? rows : collapseDuplicateUsageRows(rows)
 
     const toolRows = this.db.prepare(`
       SELECT sequence, tool_names FROM messages
-      WHERE session_id = ? AND role = 'assistant' AND is_abandoned_branch = 0
+      WHERE session_id = ? AND role = 'assistant'
         AND tool_names IS NOT NULL AND tool_names <> ''
       ORDER BY sequence
     `).all(sessionId) as ToolRow[]

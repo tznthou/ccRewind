@@ -20,7 +20,9 @@ export interface UsageRow {
  * 去重上線前索引的 47 個 session 因此還留著重複列（2026-09-30 實測 5,146 列、顯示值約實際的 1.65 倍）。
  *
  * 讀取時把相鄰、三欄全等的列收合成最後一列：與 indexer 的 deduplicateTokensByRequestId 同語意，
- * 留最後一列輸出量才是完整值。乾淨資料上是 no-op（相鄰兩次真實呼叫的 context 一定會長）。
+ * 留最後一列輸出量才是完整值。這是規則不是證明：相鄰兩次真實呼叫的 context 通常會長，但 rewind 後換一句
+ * token 數相同的話重送，棄用分支那次呼叫會跟新分支第一次呼叫三欄全等又相鄰——所以呼叫端只對證明不了
+ * 做過去重的舊 session 收合（判斷方式見 getSessionTokenStats）。
  *
  * read + creation = 0 的列不收合：沒有快取的小呼叫（opus-4-8 的 input=10）兩次撞同一組數字是巧合，
  * 不是同一次回應（2026-07 有 11 列）。
@@ -52,6 +54,10 @@ export interface ToolRow {
  * token 列只帶該回應最後一個 content block 的 tool_names，前面的 block 各自是別的列；
  * 被收合掉的重複列也在這個區間內，所以要用區間而不是只看 token 列。
  * 第一次呼叫之前的列歸第一次，最後一次呼叫之後的列不歸任何人。
+ *
+ * 這假設區間裡沒有用量的列都屬於本次回應：去重把同一回應前面的列設成 NULL；MiniMax 只在最後一個 chunk
+ * 回報用量、前面的 chunk 是 0（2026-09-30 實測：用量為 0 又叫了工具的列全是這種，緊接著就是同一回應帶用量的列）。
+ * 若是另一個完全不回報用量的回應，它的工具會被算到下一次呼叫——實測沒有這種資料，沒有 requestId 也分不出來。
  */
 export function toolNamesPerCall(
   calls: ReadonlyArray<{ sequence: number }>,
