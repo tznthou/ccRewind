@@ -338,8 +338,8 @@ describe('insightEngine', () => {
       const prev = ctx
       ctx += 1_000
       if (i === 15) {
-        // 離開 90 分鐘回來: 整段重寫
-        rewritten = ctx
+        // 離開 90 分鐘回來: 上一次的整段 prompt 都得重寫(多出來的 1K 是新內容，本來就要寫)
+        rewritten = prev
         turns.push(call({ sequence: i + 1, ctx, read: 0, write: ctx, minute: i + 90 }))
       } else {
         // 其餘每次都讀到上一次的整段 prompt
@@ -372,11 +372,28 @@ describe('insightEngine', () => {
       ]
       const insights = generateInsights(makeStats(turns))
       const summary = insights.find(i => i.id === 'cache-breaks')!
+      // 寫入 105K，但只有上一次的 100K 是因為過期才重寫；多出的 5K 是這次新增的
       expect(summary.data).toEqual({
-        type: 'cache_breaks', total: 1, idle: 1, modelSwitch: 0, unknown: 0, unknownLong: 0, rewrittenTokens: 105_000,
+        type: 'cache_breaks', total: 1, idle: 1, modelSwitch: 0, unknown: 0, unknownLong: 0, rewrittenTokens: 100_000,
       })
       const idle = insights.find(i => i.id === 'cache-idle-2')!
-      expect(idle.data).toEqual({ type: 'cache_idle_expired', turn: 2, gapMinutes: 75, rewrittenTokens: 105_000 })
+      expect(idle.data).toEqual({ type: 'cache_idle_expired', turn: 2, gapMinutes: 75, rewrittenTokens: 100_000 })
+    })
+
+    // 重寫量＝快取沒斷的話本來讀得到的舊內容(上一次的 prompt 這次沒讀到的部分)。
+    // 這次新增的內容本來就要寫入，不是中斷的代價；也不會超過這次實際寫入的量
+    it.each<[string, { ctx: number; read: number; write: number }, { ctx: number; read: number; write: number }, number]>([
+      ['a large paste on return is new content, not rewritten', { ctx: 10_000, read: 9_000, write: 1_000 }, { ctx: 100_000, read: 0, write: 100_000 }, 10_000],
+      ['what was still read is not rewritten', { ctx: 100_000, read: 90_000, write: 10_000 }, { ctx: 105_000, read: 20_000, write: 85_000 }, 80_000],
+      ['no more than was actually written', { ctx: 100_000, read: 90_000, write: 10_000 }, { ctx: 90_000, read: 0, write: 85_000 }, 85_000],
+    ])('counts only the previous prompt as rewritten: %s', (_label, before, after, rewritten) => {
+      const turns = [
+        call({ sequence: 1, ...before, minute: 0 }),
+        call({ sequence: 2, ...after, minute: 120 }),
+      ]
+      const insights = generateInsights(makeStats(turns))
+      expect(insights.find(i => i.id === 'cache-breaks')!.data).toMatchObject({ total: 1, idle: 1, rewrittenTokens: rewritten })
+      expect(insights.find(i => i.id === 'cache-idle-2')!.data).toMatchObject({ rewrittenTokens: rewritten })
     })
 
     it('draws the idle line at 60 minutes (>= 60 expired, 59 is not)', () => {

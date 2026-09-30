@@ -221,7 +221,9 @@ function findCacheBreaks(turns: Turn[], compacted: ReadonlySet<number>): CacheBr
 
     const turn = i + 1
     const gap = minutesBetween(prev.timestamp, cur.timestamp)
-    const rewrittenTokens = cur.cacheCreationTokens
+    // 中斷的代價是快取沒斷的話本來讀得到的舊內容：上一次的 prompt 這次沒讀到的部分（rewrote 保證它是正的）。
+    // 這次新增的內容（回來後貼上的大段文字、上一次的輸出與工具結果）本來就要寫入，不算；也不超過實際寫入的量
+    const rewrittenTokens = Math.min(cur.cacheCreationTokens, prev.contextTotal - cur.cacheReadTokens)
     if (prev.model && cur.model && prev.model !== cur.model) {
       breaks.push({ turn, cause: 'model_switch', gapMinutes: gap, rewrittenTokens })
     } else if (gap != null && gap >= IDLE_EXPIRED_MINUTES) {
