@@ -140,6 +140,10 @@ export interface SessionTokenStats {
   cacheHitRate: number
   models: string[]
   primaryModel: string | null
+  /**
+   * 每個元素是一次 API 呼叫：全 0 的列（`<synthetic>` 等）已排除、同一次回應被拆成多列的重複列已收合。
+   * `toolNames` / `hasToolUse` 是「這次回應」叫的所有工具，不是最後一列的。
+   */
   turns: Array<{
     sequence: number
     timestamp: string | null
@@ -152,6 +156,8 @@ export interface SessionTokenStats {
     toolNames: string[]
     model: string | null
   }>
+  /** 壓縮摘要在 JSONL 的位置（sequence，由小到大）；以旗標或摘要開頭文字偵測，舊資料的旗標多半沒補 */
+  compactions: Array<{ sequence: number }>
 }
 
 /** 訊息上下文（搜尋結果預覽用） */

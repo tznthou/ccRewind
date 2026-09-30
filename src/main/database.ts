@@ -3,6 +3,7 @@ import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
 import { migrations } from './migrations'
+import { COMPACT_SUMMARY_PREFIX, collapseDuplicateUsageRows, toolNamesPerCall, type ToolRow } from './tokenStats'
 
 /** 安全解析 JSON 字串陣列：parse 失敗或非陣列回傳 []，過濾非字串元素 */
 function safeParseStringArray(json: string | null | undefined): string[] {
@@ -1090,13 +1091,14 @@ export class Database {
   // ── Token Stats ──
 
   getSessionTokenStats(sessionId: string): SessionTokenStats {
+    // input_tokens > 0：`<synthetic>`（Claude Code 本機寫的 thinking）與不回報 usage 的供應商是全 0 的列，
+    // 不是 API 呼叫——留著會讓模型欄多一個、圖掉到 0、下一輪被算成「暴增」
     const rows = this.db.prepare(`
       SELECT sequence, timestamp,
              input_tokens, output_tokens,
-             cache_read_tokens, cache_creation_tokens,
-             has_tool_use, tool_names, model
+             cache_read_tokens, cache_creation_tokens, model
       FROM messages
-      WHERE session_id = ? AND input_tokens IS NOT NULL
+      WHERE session_id = ? AND input_tokens > 0
       ORDER BY sequence
     `).all(sessionId) as Array<{
       sequence: number
@@ -1105,10 +1107,26 @@ export class Database {
       output_tokens: number
       cache_read_tokens: number
       cache_creation_tokens: number
-      has_tool_use: number
-      tool_names: string | null
       model: string | null
     }>
+    const calls = collapseDuplicateUsageRows(rows)
+
+    const toolRows = this.db.prepare(`
+      SELECT sequence, tool_names FROM messages
+      WHERE session_id = ? AND role = 'assistant' AND is_abandoned_branch = 0
+        AND tool_names IS NOT NULL AND tool_names <> ''
+      ORDER BY sequence
+    `).all(sessionId) as ToolRow[]
+    const toolsPerCall = toolNamesPerCall(calls, toolRows)
+
+    // 舊資料（v22 加旗標前索引、原檔已清）的壓縮摘要沒有旗標，只能靠固定的開頭文字認；
+    // 限 user 的真人列，tool_result 裡剛好引用這句話的不算。前綴沒有 LIKE 的萬用字元（% 或 _）。
+    const compactions = this.db.prepare(`
+      SELECT sequence FROM messages
+      WHERE session_id = ? AND type = 'user' AND role = 'user'
+        AND (is_compact_summary = 1 OR (has_tool_result = 0 AND content_text LIKE ?))
+      ORDER BY sequence
+    `).all(sessionId, `${COMPACT_SUMMARY_PREFIX}%`) as Array<{ sequence: number }>
 
     let totalInput = 0
     let totalOutput = 0
@@ -1116,7 +1134,7 @@ export class Database {
     let totalCacheCreation = 0
     const modelCounts = new Map<string, number>()
 
-    const turns: SessionTokenStats['turns'] = rows.map(r => {
+    const turns: SessionTokenStats['turns'] = calls.map((r, i) => {
       totalInput += r.input_tokens
       totalOutput += r.output_tokens
       totalCacheRead += r.cache_read_tokens
@@ -1131,8 +1149,8 @@ export class Database {
         cacheReadTokens: r.cache_read_tokens,
         cacheCreationTokens: r.cache_creation_tokens,
         contextTotal: r.input_tokens,
-        hasToolUse: r.has_tool_use === 1,
-        toolNames: r.tool_names ? r.tool_names.split(',') : [],
+        hasToolUse: toolsPerCall[i].length > 0,
+        toolNames: toolsPerCall[i],
         model: r.model,
       }
     })
@@ -1153,6 +1171,7 @@ export class Database {
       models,
       primaryModel,
       turns,
+      compactions,
     }
   }
 

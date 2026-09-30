@@ -82,19 +82,49 @@ const cases: Case[] = [
     },
   },
   {
-    insight: { id: 'cache-good', severity: 'good', icon: '✅', data: { type: 'cache_efficiency_good', rate: 0.85 } },
+    insight: { id: 'cb-mixed', severity: 'warning', icon: '⏰', data: { type: 'cache_breaks', total: 3, idle: 2, modelSwitch: 1, unknown: 0, unknownLong: 0, rewrittenTokens: 250_000 } },
     expected: {
-      titleKey: 'tokenBudget.insights.cacheGood.title',
-      titleParams: { percent: 85 },
+      titleKey: 'tokenBudget.insights.cacheBreaks.title',
+      titleParams: { count: 3, tokens: '250.0K' },
+      detailKey: 'tokenBudget.insights.cacheBreaks.detail',
+      detailParams: { idle: 2, modelSwitch: 1, unknown: 0 },
     },
   },
   {
-    insight: { id: 'cache-poor', severity: 'warning', icon: '⚠️', data: { type: 'cache_efficiency_poor', rate: 0.15 } },
+    // 原因不明且間隔 5 分鐘以上: 補一句 API key / 超額時快取只保留 5 分鐘
+    insight: { id: 'cb-short-ttl', severity: 'info', icon: '🔄', data: { type: 'cache_breaks', total: 2, idle: 0, modelSwitch: 0, unknown: 2, unknownLong: 1, rewrittenTokens: 80_000 } },
     expected: {
-      titleKey: 'tokenBudget.insights.cachePoor.title',
-      titleParams: { percent: 15 },
-      detailKey: 'tokenBudget.insights.cachePoor.detail',
-      detailParams: undefined,
+      titleKey: 'tokenBudget.insights.cacheBreaks.title',
+      titleParams: { count: 2, tokens: '80.0K' },
+      detailKey: 'tokenBudget.insights.cacheBreaks.detailShortTtl',
+      detailParams: { idle: 0, modelSwitch: 0, unknown: 2 },
+    },
+  },
+  {
+    insight: { id: 'cache-idle-123', severity: 'warning', icon: '⏰', data: { type: 'cache_idle_expired', turn: 123, gapMinutes: 637, rewrittenTokens: 95_757 } },
+    expected: {
+      titleKey: 'tokenBudget.insights.cacheIdle.title',
+      titleParams: { gap: '10h37m', tokens: '95.8K' },
+      detailKey: 'tokenBudget.insights.cacheIdle.detail',
+      detailParams: { turn: 123 },
+    },
+  },
+  {
+    insight: { id: 'comp-single', severity: 'info', icon: '📦', data: { type: 'compaction', count: 1, turn: 159, before: 412_645, after: 85_466 } },
+    expected: {
+      titleKey: 'tokenBudget.insights.compaction.title',
+      titleParams: { count: 1 },
+      detailKey: 'tokenBudget.insights.compaction.detail.single',
+      detailParams: { turn: 159, before: '412.6K', after: '85.5K' },
+    },
+  },
+  {
+    insight: { id: 'comp-many', severity: 'info', icon: '📦', data: { type: 'compaction', count: 76, turn: 7098, before: 165_661, after: 30_000 } },
+    expected: {
+      titleKey: 'tokenBudget.insights.compaction.title',
+      titleParams: { count: 76 },
+      detailKey: 'tokenBudget.insights.compaction.detail.last',
+      detailParams: { turn: 7098, before: '165.7K', after: '30.0K' },
     },
   },
   {

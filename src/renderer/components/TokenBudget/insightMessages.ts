@@ -1,5 +1,6 @@
 import type { MessageKey, TranslateParams } from '../../i18n/messages'
 import { formatTokens } from '../../utils/formatTokens'
+import { formatDuration } from '../../utils/formatTime'
 import type { Insight, SpikeCause } from './insightEngine'
 
 export interface RenderedInsight {
@@ -52,16 +53,31 @@ export function mapInsightToMessages(insight: Insight): RenderedInsight {
         detailKey: limitDetailKey(data.limit, insight.severity),
       }
     }
-    case 'cache_efficiency_good':
+    case 'cache_breaks':
       return {
-        titleKey: 'tokenBudget.insights.cacheGood.title',
-        titleParams: { percent: Math.round(data.rate * 100) },
+        titleKey: 'tokenBudget.insights.cacheBreaks.title',
+        titleParams: { count: data.total, tokens: formatTokens(data.rewrittenTokens) },
+        // 有原因不明、且間隔 5 分鐘以上的: 補一句 API key／超額時快取只保留 5 分鐘
+        detailKey: data.unknownLong > 0
+          ? 'tokenBudget.insights.cacheBreaks.detailShortTtl'
+          : 'tokenBudget.insights.cacheBreaks.detail',
+        detailParams: { idle: data.idle, modelSwitch: data.modelSwitch, unknown: data.unknown },
       }
-    case 'cache_efficiency_poor':
+    case 'cache_idle_expired':
       return {
-        titleKey: 'tokenBudget.insights.cachePoor.title',
-        titleParams: { percent: Math.round(data.rate * 100) },
-        detailKey: 'tokenBudget.insights.cachePoor.detail',
+        titleKey: 'tokenBudget.insights.cacheIdle.title',
+        titleParams: { gap: formatDuration(data.gapMinutes * 60), tokens: formatTokens(data.rewrittenTokens) },
+        detailKey: 'tokenBudget.insights.cacheIdle.detail',
+        detailParams: { turn: data.turn },
+      }
+    case 'compaction':
+      return {
+        titleKey: 'tokenBudget.insights.compaction.title',
+        titleParams: { count: data.count },
+        detailKey: data.count === 1
+          ? 'tokenBudget.insights.compaction.detail.single'
+          : 'tokenBudget.insights.compaction.detail.last',
+        detailParams: { turn: data.turn, before: formatTokens(data.before), after: formatTokens(data.after) },
       }
     case 'output_hotspot': {
       const hasTools = data.tools.length > 0

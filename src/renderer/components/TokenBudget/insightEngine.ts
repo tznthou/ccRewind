@@ -8,11 +8,22 @@ export type SpikeCause =
   | { kind: 'read' }
   | { kind: 'tool'; tools: string[] }
 
+/** `turn` 一律是「第幾次 API 呼叫」（從 1 起算），不是 JSONL 的 sequence */
 export type InsightData =
   | { type: 'context_spike'; turn: number; deltaTokens: number; cause: SpikeCause }
   | { type: 'context_limit'; limit: '200k' | '1m'; percent: number; tokens: number }
-  | { type: 'cache_efficiency_good'; rate: number }
-  | { type: 'cache_efficiency_poor'; rate: number }
+  | {
+    type: 'cache_breaks'
+    total: number
+    idle: number
+    modelSwitch: number
+    unknown: number
+    /** 原因不明、且與上一次呼叫相隔 5 分鐘以上的次數（API key／超額時 TTL 只有 5 分鐘，這類可能是真的過期） */
+    unknownLong: number
+    rewrittenTokens: number
+  }
+  | { type: 'cache_idle_expired'; turn: number; gapMinutes: number; rewrittenTokens: number }
+  | { type: 'compaction'; count: number; turn: number; before: number; after: number }
   | { type: 'output_hotspot'; turn: number; tokens: number; tools: string[] }
   | { type: 'growth_accel'; ratio: number }
   | { type: 'growth_decel'; ratio: number }
@@ -25,40 +36,54 @@ export interface Insight {
   turnRef?: number
 }
 
+type Turn = SessionTokenStats['turns'][number]
+type Compactions = SessionTokenStats['compactions']
+
+/** 兩次相鄰呼叫之間有沒有夾著壓縮摘要（以 JSONL sequence 判斷位置） */
+function makeCompactionBetween(compactions: Compactions): (prev: Turn, cur: Turn) => boolean {
+  return (prev, cur) => compactions.some(c => c.sequence > prev.sequence && c.sequence < cur.sequence)
+}
+
 // ── Rule 1: Context Spike Detection ──
 
-function detectContextSpikes(turns: SessionTokenStats['turns']): Insight[] {
+function detectContextSpikes(
+  turns: Turn[],
+  compactionBetween: (prev: Turn, cur: Turn) => boolean,
+): Insight[] {
   const insights: Insight[] = []
   for (let i = 1; i < turns.length; i++) {
-    const delta = turns[i].inputTokens - turns[i - 1].inputTokens
-    const ratio = turns[i - 1].inputTokens > 0
-      ? turns[i].inputTokens / turns[i - 1].inputTokens
-      : 0
+    const prev = turns[i - 1]
+    // 壓縮後 context 從摘要重新長起來，不是工具輸出
+    if (compactionBetween(prev, turns[i])) continue
+
+    const delta = turns[i].inputTokens - prev.inputTokens
+    const ratio = prev.inputTokens > 0 ? turns[i].inputTokens / prev.inputTokens : 0
 
     if (delta > 20_000 || (ratio > 1.5 && delta > 5_000)) {
-      const turn = turns[i]
+      // 這次呼叫的輸入是在它自己叫工具「之前」送出的：多出來的內容是「上一次回應」叫的工具的結果
       let cause: SpikeCause = { kind: 'user_input' }
-      if (turn.hasToolUse) {
-        if (turn.toolNames.some(t => t.toLowerCase().includes('bash'))) {
+      if (prev.hasToolUse) {
+        if (prev.toolNames.some(t => t.toLowerCase().includes('bash'))) {
           cause = { kind: 'bash' }
-        } else if (turn.toolNames.some(t => t.toLowerCase().includes('read'))) {
+        } else if (prev.toolNames.some(t => t.toLowerCase().includes('read'))) {
           cause = { kind: 'read' }
         } else {
-          cause = { kind: 'tool', tools: turn.toolNames.slice(0, 3) }
+          cause = { kind: 'tool', tools: prev.toolNames.slice(0, 3) }
         }
       }
 
+      const call = i + 1
       insights.push({
-        id: `spike-${turn.sequence}`,
+        id: `spike-${call}`,
         severity: 'warning',
         icon: '⚡',
         data: {
           type: 'context_spike',
-          turn: turn.sequence,
+          turn: call,
           deltaTokens: delta,
           cause,
         },
-        turnRef: turn.sequence,
+        turnRef: call,
       })
     }
   }
@@ -124,85 +149,203 @@ function assessContextLimit(turns: SessionTokenStats['turns']): Insight[] {
   return []
 }
 
-// ── Rule 3: Cache Efficiency Assessment ──
+// ── Rule 3: Compactions ──
 
-function assessCacheEfficiency(stats: SessionTokenStats): Insight[] {
-  if (stats.totalInputTokens === 0) return []
-  const rate = stats.cacheHitRate
-
-  if (rate > 0.7) {
-    return [{
-      id: 'cache-good',
-      severity: 'good',
-      icon: '✅',
-      data: { type: 'cache_efficiency_good', rate },
-    }]
+function assessCompactions(turns: Turn[], compactions: Compactions): Insight[] {
+  // 每個壓縮 = 它前面最後一次呼叫 → 它後面第一次呼叫；同一對呼叫之間只算一次
+  const seen = new Set<number>()
+  const events: Array<{ turn: number; before: number; after: number }> = []
+  for (const c of compactions) {
+    const next = turns.findIndex(t => t.sequence > c.sequence)
+    // -1: 壓縮之後沒有呼叫；0: 壓縮之前沒有呼叫（session 開頭就是上一段對話的摘要）——都不是這段對話裡發生的壓縮
+    if (next <= 0 || seen.has(next)) continue
+    seen.add(next)
+    events.push({ turn: next + 1, before: turns[next - 1].contextTotal, after: turns[next].contextTotal })
   }
+  if (events.length === 0) return []
 
-  if (rate < 0.3) {
-    return [{
-      id: 'cache-poor',
-      severity: 'warning',
-      icon: '⚠️',
-      data: { type: 'cache_efficiency_poor', rate },
-    }]
-  }
-
-  // Middle range: stay silent (noise < signal)
-  return []
+  const last = events[events.length - 1]
+  return [{
+    id: 'compactions',
+    severity: 'info',
+    icon: '📦',
+    data: { type: 'compaction', count: events.length, turn: last.turn, before: last.before, after: last.after },
+  }]
 }
 
-// ── Rule 4: Output Hot Spot ──
+// ── Rule 4: Cache Breaks ──
+//
+// 取代舊的「命中率 >70% 運作良好 / <30% 僅 N%」：命中率吃對話長度（每次呼叫重讀整段前綴，越長越接近 100%），
+// 分不出快取有沒有壞掉——2026-09-30 實測 1,707 個 session 有 93.3% 被判良好，整段重寫 0–9 次的全部判良好。
+// 有鑑別力的是「這次呼叫幾乎沒讀到上一次的整段 prompt」＝前綴斷了、整段重寫。
+
+/** 讀到的不到上一次 prompt 的這個比例 → 整段重寫 */
+const REWRITE_READ_RATIO = 0.5
+/** 且 prompt 沒縮到上一次的這個比例以下（縮了是 rewind 或壓縮，沒有東西被重送） */
+const REWRITE_KEEP_RATIO = 0.8
+/** 間隔達此分鐘數視為閒置過期（2026-09-30 實測：<40 分鐘重寫 ≤5%、≥60 分鐘 91–94%；訂閱額度內主對話 TTL 1 小時） */
+const IDLE_EXPIRED_MINUTES = 60
+/** API key／超額時主對話 TTL 只有 5 分鐘 */
+const SHORT_TTL_MINUTES = 5
+const MAX_LISTED_IDLE = 3
+
+type BreakCause = 'idle_expired' | 'model_switch' | 'unknown'
+
+interface CacheBreak {
+  turn: number
+  cause: BreakCause
+  gapMinutes: number | null
+  rewrittenTokens: number
+}
+
+function minutesBetween(from: string | null, to: string | null): number | null {
+  if (!from || !to) return null
+  const a = Date.parse(from)
+  const b = Date.parse(to)
+  if (Number.isNaN(a) || Number.isNaN(b) || b < a) return null
+  return (b - a) / 60_000
+}
+
+function findCacheBreaks(
+  turns: Turn[],
+  compactionBetween: (prev: Turn, cur: Turn) => boolean,
+): CacheBreak[] {
+  const breaks: CacheBreak[] = []
+  for (let i = 1; i < turns.length; i++) {
+    const prev = turns[i - 1]
+    const cur = turns[i]
+    // 沒有快取可以斷：上一次沒用到快取（不支援 prompt caching 的供應商）、或這次沒寫入任何東西（prompt 太短沒法快取）
+    if (prev.cacheReadTokens + prev.cacheCreationTokens === 0 || cur.cacheCreationTokens === 0) continue
+    // 壓縮後的第一次呼叫本來就要整段重寫
+    if (compactionBetween(prev, cur)) continue
+
+    const rewrote = cur.cacheReadTokens < prev.contextTotal * REWRITE_READ_RATIO
+      && cur.contextTotal >= prev.contextTotal * REWRITE_KEEP_RATIO
+    if (!rewrote) continue
+
+    const gap = minutesBetween(prev.timestamp, cur.timestamp)
+    let cause: BreakCause = 'unknown'
+    if (prev.model && cur.model && prev.model !== cur.model) cause = 'model_switch'
+    else if (gap != null && gap >= IDLE_EXPIRED_MINUTES) cause = 'idle_expired'
+
+    breaks.push({ turn: i + 1, cause, gapMinutes: gap, rewrittenTokens: cur.cacheCreationTokens })
+  }
+  return breaks
+}
+
+function assessCacheBreaks(
+  turns: Turn[],
+  compactionBetween: (prev: Turn, cur: Turn) => boolean,
+): Insight[] {
+  const breaks = findCacheBreaks(turns, compactionBetween)
+  if (breaks.length === 0) return []
+
+  const idle = breaks.filter(b => b.cause === 'idle_expired')
+  const modelSwitch = breaks.filter(b => b.cause === 'model_switch')
+  const unknown = breaks.filter(b => b.cause === 'unknown')
+  const unknownLong = unknown.filter(b => b.gapMinutes != null && b.gapMinutes >= SHORT_TTL_MINUTES).length
+  const rewrittenTokens = breaks.reduce((sum, b) => sum + b.rewrittenTokens, 0)
+
+  const insights: Insight[] = [{
+    id: 'cache-breaks',
+    // 閒置過期與換模型是使用者做得了什麼的；原因不明的只是事實
+    severity: idle.length + modelSwitch.length > 0 ? 'warning' : 'info',
+    icon: idle.length > 0 ? '⏰' : '🔄',
+    data: {
+      type: 'cache_breaks',
+      total: breaks.length,
+      idle: idle.length,
+      modelSwitch: modelSwitch.length,
+      unknown: unknown.length,
+      unknownLong,
+      rewrittenTokens,
+    },
+  }]
+
+  // 逐筆只列閒置過期（唯一有具體建議的原因），依重寫量取前幾；完整清單留給事件時間軸
+  const biggestIdle = [...idle].sort((a, b) => b.rewrittenTokens - a.rewrittenTokens).slice(0, MAX_LISTED_IDLE)
+  for (const b of biggestIdle) {
+    insights.push({
+      id: `cache-idle-${b.turn}`,
+      severity: 'warning',
+      icon: '⏰',
+      data: {
+        type: 'cache_idle_expired',
+        turn: b.turn,
+        gapMinutes: Math.round(b.gapMinutes ?? IDLE_EXPIRED_MINUTES),
+        rewrittenTokens: b.rewrittenTokens,
+      },
+      turnRef: b.turn,
+    })
+  }
+  return insights
+}
+
+// ── Rule 5: Output Hot Spot ──
 
 function detectOutputHotSpots(turns: SessionTokenStats['turns']): Insight[] {
   if (turns.length < 3) return []
 
   let totalOutput = 0
-  let max = turns[0]
-  for (const t of turns) {
+  let maxIdx = 0
+  turns.forEach((t, i) => {
     totalOutput += t.outputTokens
-    if (t.outputTokens > max.outputTokens) max = t
-  }
+    if (t.outputTokens > turns[maxIdx].outputTokens) maxIdx = i
+  })
+  const max = turns[maxIdx]
 
   const avgOutput = totalOutput / turns.length
   if (avgOutput === 0) return []
 
   if (max.outputTokens > avgOutput * 3 && max.outputTokens > 2_000) {
+    const call = maxIdx + 1
     return [{
-      id: `hotspot-${max.sequence}`,
+      id: `hotspot-${call}`,
       severity: 'info',
       icon: '🔥',
       data: {
         type: 'output_hotspot',
-        turn: max.sequence,
+        turn: call,
         tokens: max.outputTokens,
         tools: max.toolNames.slice(0, 4),
       },
-      turnRef: max.sequence,
+      turnRef: call,
     }]
   }
 
   return []
 }
 
-// ── Rule 5: Growth Rate Analysis ──
+// ── Rule 6: Growth Rate Analysis ──
 
-function analyzeGrowthRate(turns: SessionTokenStats['turns']): Insight[] {
+function analyzeGrowthRate(
+  turns: Turn[],
+  compactionBetween: (prev: Turn, cur: Turn) => boolean,
+): Insight[] {
   if (turns.length < 10) return []
 
   const mid = Math.floor(turns.length / 2)
 
   let firstHalfSum = 0
-  for (let i = 1; i <= mid; i++) {
-    firstHalfSum += turns[i].inputTokens - turns[i - 1].inputTokens
-  }
+  let firstHalfCount = 0
   let secondHalfSum = 0
-  for (let i = mid + 1; i < turns.length; i++) {
-    secondHalfSum += turns[i].inputTokens - turns[i - 1].inputTokens
+  let secondHalfCount = 0
+  for (let i = 1; i < turns.length; i++) {
+    // 壓縮造成的下降不是「負成長」：不排除的話倍率會變負（實測 9/26 的 8bbffb1d 顯示「減慢（-0.2x）」）
+    if (compactionBetween(turns[i - 1], turns[i])) continue
+    const delta = turns[i].inputTokens - turns[i - 1].inputTokens
+    if (i <= mid) {
+      firstHalfSum += delta
+      firstHalfCount++
+    } else {
+      secondHalfSum += delta
+      secondHalfCount++
+    }
   }
+  if (firstHalfCount === 0 || secondHalfCount === 0) return []
 
-  const avgFirst = firstHalfSum / mid
-  const avgSecond = secondHalfSum / (turns.length - mid - 1)
+  const avgFirst = firstHalfSum / firstHalfCount
+  const avgSecond = secondHalfSum / secondHalfCount
 
   if (avgFirst <= 0) return []
 
@@ -229,7 +372,7 @@ function analyzeGrowthRate(turns: SessionTokenStats['turns']): Insight[] {
   return []
 }
 
-// ── Severity ordering ──
+// ── Display order ──
 
 const SEVERITY_ORDER: Record<InsightSeverity, number> = {
   critical: 0,
@@ -238,17 +381,35 @@ const SEVERITY_ORDER: Record<InsightSeverity, number> = {
   good: 3,
 }
 
+/** 「這場對話發生過的事」，相對於各種對數字的觀察（暴增、熱點、成長） */
+const EVENT_TYPES: ReadonlySet<InsightData['type']> = new Set(['compaction', 'cache_breaks', 'cache_idle_expired'])
+
+/**
+ * 面板預設只顯示前 3 條，其餘收在「顯示其他 N 筆」後面。長 session 的「context 暴增」動輒好幾條（warning），
+ * 只照嚴重度排的話，壓縮與快取中斷（info）會被擠到後面——9/26 那場「對話被壓縮」排第 4 條、預設看不到，
+ * 正好違背「看得出有沒有 compact」。所以：快撞到 context 上限（critical）最急，其次是發生過的事，
+ * 最後才是各種觀察，各層內再照嚴重度。顏色仍由 severity 決定，不為了排序把 info 升成 warning。
+ */
+function displayRank(insight: Insight): number {
+  if (insight.severity === 'critical') return 0
+  if (EVENT_TYPES.has(insight.data.type)) return 1
+  return 2 + SEVERITY_ORDER[insight.severity]
+}
+
 // ── Public API ──
 
 export function generateInsights(stats: SessionTokenStats): Insight[] {
+  const compactionBetween = makeCompactionBetween(stats.compactions)
+  // 同一層內保持這個順序（sort 是穩定的）：壓縮在快取中斷前面
   const insights: Insight[] = [
-    ...detectContextSpikes(stats.turns),
+    ...assessCompactions(stats.turns, stats.compactions),
+    ...assessCacheBreaks(stats.turns, compactionBetween),
+    ...detectContextSpikes(stats.turns, compactionBetween),
     ...assessContextLimit(stats.turns),
-    ...assessCacheEfficiency(stats),
     ...detectOutputHotSpots(stats.turns),
-    ...analyzeGrowthRate(stats.turns),
+    ...analyzeGrowthRate(stats.turns, compactionBetween),
   ]
 
-  insights.sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity])
+  insights.sort((a, b) => displayRank(a) - displayRank(b))
   return insights
 }

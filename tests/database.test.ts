@@ -2386,3 +2386,101 @@ describe('migration v27: strip payloads the UI cannot display from message_conte
     expect(stored.map(r => r.content_text)).toEqual(rows.map((_, i) => `text ${i}`))
   })
 })
+
+describe('getSessionTokenStats', () => {
+  const SUMMARY = 'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier part of the conversation.'
+  const OPUS = 'claude-opus-4-6'
+
+  function indexRows(sessionId: string, messages: MessageInput[]): void {
+    db.indexSession({
+      sessionId, projectId: 'proj-tok', projectDisplayName: '/test/tok',
+      title: 'token stats', messageCount: messages.length, filePath: `/tmp/${sessionId}.jsonl`, fileSize: 0,
+      fileMtime: '2026-03-01T00:00:00.000Z',
+      startedAt: '2026-03-01T10:00:00.000Z', endedAt: '2026-03-01T12:00:00.000Z',
+      messages,
+    })
+  }
+
+  /** 一次 API 回應的一列。input 是整段 prompt(未快取 + 讀 + 寫)，與 parser 存的一致 */
+  function apiRow(sequence: number, input: number, read: number, creation: number, output: number, extra: Partial<MessageInput> = {}): MessageInput {
+    return msg({
+      type: 'assistant', role: 'assistant', sequence, model: OPUS,
+      inputTokens: input, cacheReadTokens: read, cacheCreationTokens: creation, outputTokens: output,
+      ...extra,
+    })
+  }
+
+  it('turns each API call into one turn: drops zero-usage rows, collapses split responses, collects the tools of the whole response', () => {
+    indexRows('tok-1', [
+      msg({ type: 'user', role: 'user', sequence: 0, contentText: 'hi' }),
+      // 呼叫 A：同一次回應被拆成兩列(前一列輸出是串流中途值)，工具在第二列
+      apiRow(1, 1000, 600, 400, 5),
+      apiRow(2, 1000, 600, 400, 20, { hasToolUse: true, toolNames: ['Bash'] }),
+      msg({ type: 'user', role: 'user', sequence: 3, hasToolResult: true, contentText: 'ok' }),
+      // 呼叫 B：只有一列，叫了兩個工具
+      apiRow(4, 1500, 1000, 500, 30, { hasToolUse: true, toolNames: ['Read', 'Grep'] }),
+      // 壓縮：一則有旗標、一則(舊資料)只有開頭文字
+      msg({ type: 'user', role: 'user', sequence: 5, isCompactSummary: true, contentText: SUMMARY }),
+      msg({ type: 'user', role: 'user', sequence: 6, contentText: SUMMARY }),
+      // tool_result 剛好引用那句話：不是壓縮
+      msg({ type: 'user', role: 'user', sequence: 7, hasToolResult: true, contentText: SUMMARY }),
+      // rewind 棄用分支上的 assistant 列：它的工具不該算進任何一次呼叫
+      msg({ type: 'assistant', role: 'assistant', sequence: 8, isAbandonedBranch: true, hasToolUse: true, toolNames: ['Edit'] }),
+      // <synthetic>：Claude Code 本機寫的 thinking，usage 全 0，不是 API 呼叫
+      msg({ type: 'assistant', role: 'assistant', sequence: 9, model: '<synthetic>', inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheCreationTokens: 0 }),
+      // 呼叫 C：壓縮之後
+      apiRow(10, 300, 0, 300, 40),
+    ])
+
+    const stats = db.getSessionTokenStats('tok-1')
+    expect(stats.turns.map(t => t.sequence)).toEqual([2, 4, 10])
+    expect(stats.turns.map(t => t.outputTokens)).toEqual([20, 30, 40])
+    expect(stats.turns.map(t => t.toolNames)).toEqual([['Bash'], ['Read', 'Grep'], []])
+    expect(stats.turns.map(t => t.hasToolUse)).toEqual([true, true, false])
+    expect(stats.totalInputTokens).toBe(2800)
+    expect(stats.totalOutputTokens).toBe(90)
+    expect(stats.totalCacheReadTokens).toBe(1600)
+    expect(stats.totalCacheCreationTokens).toBe(1200)
+    expect(stats.models).toEqual([OPUS])
+    expect(stats.primaryModel).toBe(OPUS)
+    expect(stats.compactions).toEqual([{ sequence: 5 }, { sequence: 6 }])
+  })
+
+  it('leaves a clean session exactly as it was — collapsing is a no-op when nothing repeats', () => {
+    indexRows('tok-clean', [
+      apiRow(1, 100, 0, 100, 10),
+      apiRow(2, 220, 100, 120, 12),
+      apiRow(3, 400, 220, 180, 14),
+    ])
+    const stats = db.getSessionTokenStats('tok-clean')
+    expect(stats.turns.map(t => t.contextTotal)).toEqual([100, 220, 400])
+    expect(stats.totalInputTokens).toBe(720)
+    expect(stats.compactions).toEqual([])
+  })
+
+  it('does not merge consecutive calls that used no cache, even with identical numbers', () => {
+    indexRows('tok-nocache', [apiRow(1, 10, 0, 0, 3), apiRow(2, 10, 0, 0, 3)])
+    expect(db.getSessionTokenStats('tok-nocache').turns).toHaveLength(2)
+  })
+
+  it('reads only the requested session — tools and compactions of another session do not leak in', () => {
+    indexRows('tok-a', [apiRow(1, 100, 0, 100, 10)])
+    indexRows('tok-b', [
+      apiRow(1, 500, 0, 500, 10, { hasToolUse: true, toolNames: ['Write'] }),
+      msg({ type: 'user', role: 'user', sequence: 2, isCompactSummary: true, contentText: SUMMARY }),
+    ])
+    const stats = db.getSessionTokenStats('tok-a')
+    expect(stats.turns.map(t => t.toolNames)).toEqual([[]])
+    expect(stats.compactions).toEqual([])
+  })
+
+  it('returns an empty, well-formed result for a session with no usage', () => {
+    indexRows('tok-empty', [msg({ type: 'user', role: 'user', sequence: 0, contentText: 'hi' })])
+    const stats = db.getSessionTokenStats('tok-empty')
+    expect(stats.turns).toEqual([])
+    expect(stats.compactions).toEqual([])
+    expect(stats.totalInputTokens).toBe(0)
+    expect(stats.cacheHitRate).toBe(0)
+    expect(stats.primaryModel).toBeNull()
+  })
+})
