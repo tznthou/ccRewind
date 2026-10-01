@@ -16,22 +16,26 @@ export default function CostHeatBar({ turns }: Props) {
     const max = turns.reduce((m, turn) => Math.max(m, turn.outputTokens), 0)
     const denom = max || 1
 
-    // Bin turns when exceeding MAX_CELLS to limit DOM nodes
+    // Bin turns when exceeding MAX_CELLS to limit DOM nodes; each bin shows its biggest output (first on ties)
     const binSize = turns.length > MAX_CELLS ? Math.ceil(turns.length / MAX_CELLS) : 1
-    const binned: typeof turns = []
-    for (let i = 0; i < turns.length; i += binSize) {
-      const slice = turns.slice(i, i + binSize)
-      const best = slice.reduce((a, b) => a.outputTokens >= b.outputTokens ? a : b)
-      binned.push(best)
+    const bestIndexes: number[] = []
+    for (let start = 0; start < turns.length; start += binSize) {
+      const end = Math.min(start + binSize, turns.length)
+      let best = start
+      for (let i = start + 1; i < end; i++) {
+        if (turns[i].outputTokens > turns[best].outputTokens) best = i
+      }
+      bestIndexes.push(best)
     }
 
     return {
-      cells: binned.map(turn => ({
-        sequence: turn.sequence,
-        output: turn.outputTokens,
-        intensity: turn.outputTokens / denom,
-        hasToolUse: turn.hasToolUse,
-        model: turn.model,
+      cells: bestIndexes.map(i => ({
+        // 第幾次呼叫（不是 JSONL 的 sequence），照分箱前的位置算才跟圖表對得上
+        turn: i + 1,
+        output: turns[i].outputTokens,
+        intensity: turns[i].outputTokens / denom,
+        hasToolUse: turns[i].hasToolUse,
+        model: turns[i].model,
       })),
       maxOutput: max,
     }
@@ -48,14 +52,14 @@ export default function CostHeatBar({ turns }: Props) {
       <div className={styles.heatBar}>
         {cells.map(cell => {
           const base = t('tokenBudget.intensity.cellTitle', {
-            sequence: cell.sequence,
+            turn: cell.turn,
             tokens: formatTokens(cell.output),
           })
           const toolSuffix = cell.hasToolUse ? t('tokenBudget.intensity.toolUseSuffix') : ''
           const modelSuffix = cell.model ? t('tokenBudget.intensity.modelSuffix', { model: cell.model }) : ''
           return (
             <div
-              key={cell.sequence}
+              key={cell.turn}
               className={styles.heatCell}
               style={{
                 backgroundColor: `rgba(245, 158, 11, ${0.1 + cell.intensity * 0.9})`,

@@ -24,8 +24,9 @@ export default function ContextGrowthChart({ turns }: Props) {
   const [limitIdx, setLimitIdx] = useState(() => detectContextPlan(turns) === '1m' ? 1 : 0)
   const limit = CONTEXT_LIMITS[limitIdx]
 
-  const data = useMemo(() => turns.map(turn => ({
-    turn: turn.sequence,
+  const data = useMemo(() => turns.map((turn, i) => ({
+    // 第幾次呼叫，不是 JSONL 的 sequence：218 次呼叫的 session 不該寫「第 3332 輪」
+    turn: i + 1,
     newInput: turn.inputTokens - turn.cacheReadTokens - turn.cacheCreationTokens,
     cacheCreation: turn.cacheCreationTokens,
     cacheRead: turn.cacheReadTokens,
