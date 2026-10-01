@@ -92,7 +92,7 @@ Built for depth, not breadth.
 | Feature | Description |
 |---------|-------------|
 | **Context Budget** | Token breakdown (input/output/cache), context growth chart, output intensity heat bar — see at a glance how many tokens each session burned and how well cache hit |
-| **Token Insights** | Auto-interpret the charts: detect context spikes and attribute them, evaluate cache efficiency, mark output hotspots, analyse growth trends — so the charts aren't just pretty, they're readable |
+| **Token Insights** | Auto-interpret the charts: detect context spikes and attribute them, flag compactions and cache breaks (idle expiry, model switch or unknown), mark output hotspots, analyse growth trends — so the charts aren't just pretty, they're readable |
 | **Token Heat Indicators** | Color bar on the left of assistant messages (green = good cache hit, red = high cost). Session list shows total tokens and supports token-based sorting |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
 

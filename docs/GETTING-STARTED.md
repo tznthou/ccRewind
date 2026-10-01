@@ -73,7 +73,7 @@ ChatView 工具列點「匯出」會開系統儲存對話框，存成 `.md` 檔�
 
 ### 打開 Token Budget 面板
 
-對話頂部的 **Show Token Budget** 按鈕會展開 Context Budget 面板，包含 Summary Cards、Context Growth 面積圖、Token Breakdown 圓餅圖、Output Intensity 熱力條，以及自動解讀的 Insights。第一次打開可以直接看 Insights，它會用白話告訴你「這個 Session 的 token 怎麼燒的、cache 有沒有命中」。
+對話頂部的 **Show Token Budget** 按鈕會展開 Context Budget 面板，包含 Summary Cards、Context Growth 面積圖、Token Breakdown 圓餅圖、Output Intensity 熱力條，以及自動解讀的 Insights。第一次打開可以直接看 Insights，它會用白話告訴你「這個 Session 的 token 怎麼燒的、有沒有被壓縮、快取有沒有中斷」。
 
 ---
 

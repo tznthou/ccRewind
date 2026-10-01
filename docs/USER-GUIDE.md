@@ -41,7 +41,7 @@ ccRewind 提供兩種搜尋模式，在搜尋列右側的 radio 按鈕切換：
 - **Context Growth 面積圖**：逐 turn 的 context 大小堆疊圖（New Input / Cache Creation / Cache Read），可切換 200K / 1M 參考線
 - **Token Breakdown 圓餅圖**：整個 Session 的 token 類型佔比
 - **Output Intensity 熱力條**：每個 turn 的 output token 強度，快速辨識「哪個 turn 讓 Claude 寫最多東西」
-- **Insights 洞察面板**：自動解讀上方圖表，告訴你「這數字好不好、為什麼、該怎麼做」——偵測 context spike 並歸因到具體 tool、評估 cache 命中效率、標記 output 最密集的 turn、分析前後半段成長趨勢
+- **Insights 洞察面板**：自動解讀上方圖表，告訴你「這數字好不好、為什麼、該怎麼做」——偵測 context spike 並歸因（上一次回應叫的工具，或大量使用者輸入）、標出對話壓縮與快取中斷（閒置過期、換模型、原因不明）、標記 output 最密集的 turn、分析前後半段成長趨勢
 
 訊息列表中，每個 assistant 訊息左側會顯示色碼指示：綠色代表 cache 命中良好，紅色代表該 turn 灌入大量新 context（預算殺手），不用展開面板就能直覺發現高成本回合。
 

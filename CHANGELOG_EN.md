@@ -7,6 +7,40 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.26.0] - 2026-10-01
+
+### Added
+
+- **Token Budget insights now point out compactions and prompt cache breaks** ([#128](https://github.com/tznthou/ccRewind/pull/128)): the panel never said that a conversation had been compacted, or which call lost the cache and had to write the whole conversation into it again. Two new kinds of insight:
+  - **Compactions**: how many times the conversation was compacted, and for the most recent one, at which call it happened and how far the context dropped. The count is of gaps between two calls that contain a compaction, so a summary carried over from a previous conversation at the start of the session does not count. Rows carrying the compaction flag are recognised by it; older rows without the flag are recognised by the fixed opening line of the summary in a user message (not a tool result)
+  - **Cache breaks**: a call counts as a break when it read less than half of the previous prompt from the cache even though the prompt did not shrink (it is still at least 80% of the previous one), provided the previous call used the cache, this call wrote to it, and the call is not the first one after a compaction. Breaks are split into model switch, idle expiry (60 minutes or more since the previous call) and unknown cause, and the three largest idle expiries by rewritten size are also listed on their own. "Rewritten" counts only the part of the previous prompt that the call did not read, so a large paste on your return is not blamed on the break. How long the cache lasts depends on how you are billed — an hour within a subscription plan's usage, five minutes with an API key or beyond the plan's usage — so when a break of unknown cause comes 5 minutes or more after the previous call, the insight says so instead of guessing a cause
+
+  The panel shows the first three insights by default. These two kinds, things that happened in the conversation, now rank ahead of observations such as context spikes, output hotspots and growth trends, so a run of spikes no longer pushes a long session's compaction behind "Show more"
+
+### Removed
+
+- **The two cache hit rate verdicts** ([#128](https://github.com/tznthou/ccRewind/pull/128)): "prompt caching working well" above 70%, and "Cache hit rate only N%" below 30%. The hit rate follows conversation length and cannot tell whether anything went wrong with the cache: in the maintainer's index, 93.3% of 1,707 sessions were rated as working well, including sessions whose whole prompt had been rewritten, and 27 of the 28 rated low had only one or two calls. The summary card still shows the hit rate
+
+### Fixed
+
+- **Several numbers in the Token Budget panel were wrong** ([#128](https://github.com/tznthou/ccRewind/pull/128)):
+  - Rows without usage (`<synthetic>`, and chunks from providers that report no usage) no longer count as calls. They put `<synthetic>` in the model list, dropped the chart to zero and made the next call look like a context spike
+  - Calls are numbered in order everywhere (chart axis and tooltip, heat bar, insights) instead of by JSONL sequence, which had a 218-call session talking about "Turn 3332"
+  - A context spike is now attributed to the tools of the previous response: a call's input is sent before its own tools run, so those tools cannot be why it grew. When a response is split across several rows, its tools are collected from all of them, not just the last
+  - A drop caused by compaction is no longer read as slowing growth (one session showed "Context growth slowed in second half (-0.2x)")
+  - **Duplicate rows in old sessions are now collapsed when read**: Claude Code writes one row per content block of a response, each carrying the same usage. Indexing has deduplicated these by requestId since v1.7.2, but sessions indexed before then whose source files Claude Code's 30-day cleanup removed before they could be re-indexed still hold the duplicates. The maintainer's index has 47 such sessions, showing about 1.65 times the usage they really had. Adjacent rows with identical input, cache read and cache creation, and with some cache use (read plus creation above zero), are now collapsed into one call when the stats are read; the database is not modified and there is no migration
+    - ⚠️ The collapse is a rule, not a proof: the database does not store requestId, and resending a message of the same token length after a rewind also produces two adjacent real calls with identical usage. So it only applies to sessions with no sign of index-time deduplication — no `parent_uuid` (every session indexed since v1.18.0 has one) and no rows with NULL usage (deduplication blanks the usage of a response's earlier rows). In the maintainer's index, 92 sessions qualify and none still has its source file; all the duplicates are in 47 of them, and no duplicate pair has a new user message between its two rows
+    - ⚠️ Only the Token Budget panel collapses them: the session list's token counts and sorting, and the dashboard's statistics, use per-session totals, which for those 47 sessions still include the duplicates (about 1.7% of all input in the maintainer's index)
+  - ⚠️ The token heat bar beside messages in the conversation view has not been changed yet: the message after a row without usage, such as `<synthetic>`, can still be marked as expensive
+
+### Security
+
+- **Electron updated to 41.10.6** ([#127](https://github.com/tznthou/ccRewind/pull/127)): patches five advisories — [CVE-2026-102676](https://nvd.nist.gov/vuln/detail/CVE-2026-102676) (CVSS 8.3: `<webview>` can enable Node.js integration in Web Workers despite the embedder's restrictions), [CVE-2026-102673](https://nvd.nist.gov/vuln/detail/CVE-2026-102673) (8.2: popups opened through a link from a sandboxed iframe do not inherit the iframe's sandbox restrictions), [CVE-2026-102674](https://nvd.nist.gov/vuln/detail/CVE-2026-102674) (8.2: windows opened from a sandboxed top-level document do not inherit its sandbox restrictions), [CVE-2026-102675](https://nvd.nist.gov/vuln/detail/CVE-2026-102675) (7.4: file and HTTP protocol handlers allow cross-origin reads without `corsEnabled`) and [CVE-2026-102672](https://nvd.nist.gov/vuln/detail/CVE-2026-102672) (6.7: a local race condition in Squirrel.Mac update installation on macOS). **This application meets none of their conditions**: it embeds no iframe or webview, its window runs with `sandbox: true`, `setWindowOpenHandler` denies every new window (`src/main/index.ts:36`), it registers no custom protocol, and it does not use auto-updates. The update ships anyway, for the same reason as last time: "not affected" describes the code as it stands today, not a guarantee that holds forever
+
+### Changed
+
+- **Development and CI dependency updates**: typescript-eslint 8.71.0 ([#126](https://github.com/tznthou/ccRewind/pull/126)), and Node.js 22.23.3 for CI and release builds ([#125](https://github.com/tznthou/ccRewind/pull/125)). Both are used only for development, testing and building, and neither is packaged into the app
+
 ## [1.25.0] - 2026-09-25
 
 ### Added
