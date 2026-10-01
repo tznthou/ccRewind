@@ -6,6 +6,40 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.26.0] - 2026-10-01
+
+### Added
+
+- **Token Budget 的洞察會標出對話被壓縮、以及快取中斷的地方**（[#128](https://github.com/tznthou/ccRewind/pull/128)）：以前面板不會告訴你一段對話被壓縮過，也不會指出哪一次呼叫因為快取失效，得把前面的對話整段重新寫進快取。現在多了兩種洞察：
+  - **對話被壓縮**：被壓縮了幾次，以及最近一次發生在第幾次呼叫、context 從多少降到多少。次數以「兩次呼叫之間夾著壓縮」來算，所以 session 開頭從上一段對話帶進來的摘要不算。帶有壓縮旗標的資料直接看旗標；較舊、沒有旗標的資料，改認使用者訊息（不含工具結果）開頭那句固定的摘要開場白
+  - **快取中斷**：某次呼叫從快取讀到的不到上一次 prompt 的一半，prompt 卻沒有縮小（仍有上一次的八成以上），就算一次中斷；前提是上一次呼叫有用到快取、這次也有寫入快取，而且不是壓縮後的第一次呼叫。原因分成換模型、閒置過期（距離上一次呼叫 60 分鐘以上）與原因不明，閒置過期另外依重寫量列出最大的三筆。「重寫量」只算上一次 prompt 這次沒讀到的部分，回來時新貼上的大段內容不會算在中斷頭上。快取能留多久要看計費方式（訂閱方案的額度內是 1 小時，用 API key 或超出方案額度時是 5 分鐘），所以原因不明、但距離上一次呼叫已經 5 分鐘以上的中斷，會附上這項說明，不替它猜原因
+
+  面板預設只顯示前三則洞察。這兩種「對話裡發生過的事」現在排在 context 暴增、產出熱點、成長趨勢這類觀察的前面，長對話的壓縮不會再被一連串暴增擠進「顯示其他」裡
+
+### Removed
+
+- **拿掉快取命中率的兩則評語**（[#128](https://github.com/tznthou/ccRewind/pull/128)）：高於 70% 時的「prompt caching 運作良好」，和低於 30% 時的「快取命中率僅 N%」。命中率跟著對話長度走，看不出快取有沒有出問題：在維護者的索引裡，1,707 個 session 有 93.3% 被評為運作良好，整段 prompt 被重寫過的也在其中；被評為偏低的 28 個，有 27 個只有一到兩次呼叫。Summary 卡片上的快取命中率照常顯示
+
+### Fixed
+
+- **Token Budget 面板有幾個數字算錯了**（[#128](https://github.com/tznthou/ccRewind/pull/128)）：
+  - 沒有用量的列（`<synthetic>`，以及不回報用量的供應商送來的片段）不再算成一次呼叫。這些列會讓模型欄多出 `<synthetic>`、讓圖表掉到 0，還讓下一次呼叫看起來像 context 暴增
+  - 呼叫一律照順序編號（圖表的軸與提示、熱力條、洞察），不再沿用 JSONL 的序號；以前一個只有 218 次呼叫的 session 會冒出「第 3332 輪」
+  - context 暴增改歸因到上一次回應叫的工具：一次呼叫的輸入在它自己的工具執行之前就送出了，它叫的工具不可能是它變大的原因。一個回應被拆成好幾列時，工具會從每一列收集，不再只看最後一列
+  - 壓縮造成的下降不再被當成成長減慢（以前出現過「Context 成長在後半段減慢（-0.2x）」）
+  - **舊 session 的重複列改在讀取時收合**：Claude Code 會把一個回應的每個內容區塊各寫成一列，每列都帶同一份用量。v1.7.2 起，索引時會依 requestId 去重；但在那之前索引、原始檔又在重新索引前就被 Claude Code 的 30 天清理刪掉的 session，至今仍留著重複列。維護者的索引裡有 47 個這樣的 session，顯示的用量約是實際的 1.65 倍。現在讀取時，會把相鄰、輸入／快取讀取／快取寫入三欄都相同，而且有用到快取（快取讀取加寫入大於 0）的列收合成一次呼叫；資料庫不動，也沒有 migration
+    - ⚠️ 收合靠的是規則，不是證明：資料庫沒有存 requestId，而 rewind 後重送一句 token 數相同的話，也會產生兩次相鄰、用量相同的真實呼叫。所以只有看不出索引時去重過的 session 才會收合，也就是沒有 `parent_uuid`（v1.18.0 起索引的 session 都有）、也沒有用量為 NULL 的列（去重會把同一回應前面幾列的用量清成 NULL）。維護者的索引裡符合條件的有 92 個，原始檔都已經不在；重複列全落在其中 47 個，而且沒有任何一組中間夾著新的使用者訊息
+    - ⚠️ 只有 Token Budget 面板會收合：session 列表的 token 數與排序、儀表板的各項統計用的是 session 總量，這 47 個 session 在那些地方仍含重複（約佔維護者索引全部輸入的 1.7%）
+  - ⚠️ 對話檢視左側的 token 熱度色條還沒改：`<synthetic>` 這類沒有用量的列後面那則訊息，仍可能被標成高成本
+
+### Security
+
+- **Electron 更新至 41.10.6**（[#127](https://github.com/tznthou/ccRewind/pull/127)）：修補五個 advisory——[CVE-2026-102676](https://nvd.nist.gov/vuln/detail/CVE-2026-102676)（CVSS 8.3，`<webview>` 能無視嵌入方的限制，在 Web Worker 裡啟用 Node.js 整合）、[CVE-2026-102673](https://nvd.nist.gov/vuln/detail/CVE-2026-102673)（8.2，從沙箱化 iframe 經由連結開出的 popup 不繼承它的沙箱限制）、[CVE-2026-102674](https://nvd.nist.gov/vuln/detail/CVE-2026-102674)（8.2，從沙箱化頂層文件開出的視窗不繼承它的沙箱限制）、[CVE-2026-102675](https://nvd.nist.gov/vuln/detail/CVE-2026-102675)（7.4，file 與 HTTP protocol handler 在沒設 `corsEnabled` 時允許跨來源讀取）、[CVE-2026-102672](https://nvd.nist.gov/vuln/detail/CVE-2026-102672)（6.7，macOS 上 Squirrel.Mac 安裝更新時的本機競態條件）。**此程式沒有符合任何一個的觸發條件**：不嵌入 iframe 或 webview，視窗開著 `sandbox: true`，新視窗一律由 `setWindowOpenHandler` 拒絕（`src/main/index.ts:36`），沒有註冊自訂 protocol，也沒有使用自動更新。仍隨上游更新，理由跟上次一樣：「不受影響」是對現在這份程式碼的判斷，不是永遠成立的保證
+
+### Changed
+
+- **開發與 CI 相依更新**：typescript-eslint 8.71.0（[#126](https://github.com/tznthou/ccRewind/pull/126)），以及 CI 與發版建置用的 Node.js 22.23.3（[#125](https://github.com/tznthou/ccRewind/pull/125)）。兩者都只用在開發、測試與建置，不會打包進 app
+
 ## [1.25.0] - 2026-09-25
 
 ### Added

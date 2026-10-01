@@ -92,7 +92,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 | 功能 | 說明 |
 |------|------|
 | **Context Budget 視覺化** | Token 用量追蹤：堆疊面積圖、圓餅圖、熱力條，一眼看出每個 Session 燒了多少 token、cache 命中率多高 |
-| **Token Insights** | 自動解讀圖表：偵測 context spike 並歸因、評估 cache 效率、標記 output 熱點、分析成長趨勢，讓圖表不只好看還能看懂 |
+| **Token Insights** | 自動解讀圖表：偵測 context spike 並歸因、標出對話壓縮與快取中斷（閒置過期、換模型、原因不明）、標記 output 熱點、分析成長趨勢，讓圖表不只好看還能看懂 |
 | **Token 熱力指示** | Assistant 訊息左側色碼條（綠=cache 命中佳、紅=高成本），Session 列表顯示 token 總量並可依 token 排序 |
 | **精確 Token 統計** | 自動偵測同一 API response 被拆成多個 JSONL entries 的情況，透過 requestId 去重避免 token 重複計算（修正 ~2.3x 膨脹） |
 
