@@ -511,6 +511,50 @@ describe('parseLine rawJson preservation (parseFailed fallback)', () => {
   })
 })
 
+describe('parseLine request-replay records (Claude Code 2.1.300+)', () => {
+  const HASH = 'a'.repeat(64)
+
+  it('api-request → returns null', () => {
+    const line = JSON.stringify({
+      type: 'api-request', sessionId: 's1', id: 'req-1', timestamp: '2026-10-15T00:00:01.000Z', version: '2.1.300',
+      querySource: 'repl_main_thread', shapeHash: HASH,
+      params: { model: 'claude-opus-5-5', max_tokens: 64000, thinking: { type: 'adaptive', display: 'summarized' } },
+      tail: [HASH], requestDigest: HASH,
+    })
+    expect(parseLine(line)).toBeNull()
+  })
+
+  it('api-request-shape → returns null (built-in instructions and tool definitions, not conversation)', () => {
+    const line = JSON.stringify({
+      type: 'api-request-shape', sessionId: 's1', shapeHash: HASH, timestamp: '2026-10-15T00:00:01.000Z', version: '2.1.300',
+      shape: {
+        system: [{ type: 'text', text: 'You are Claude Code.' }],
+        tools: [{ name: 'Bash', description: 'Run a shell command', input_schema: { type: 'object' } }],
+      },
+    })
+    expect(parseLine(line)).toBeNull()
+  })
+
+  it('api-request-blob with user message → returns null (copy of a transcript message)', () => {
+    const line = JSON.stringify({
+      type: 'api-request-blob', sessionId: 's1', hash: HASH,
+      message: { role: 'user', content: [{ type: 'text', text: '把 parser 修好' }] },
+    })
+    expect(parseLine(line)).toBeNull()
+  })
+
+  it('api-request-blob with assistant thinking → returns null', () => {
+    const line = JSON.stringify({
+      type: 'api-request-blob', sessionId: 's1', hash: HASH,
+      message: {
+        role: 'assistant',
+        content: [{ type: 'thinking', thinking: '先看 parseLine', signature: 'sig' }, { type: 'text', text: '好' }],
+      },
+    })
+    expect(parseLine(line)).toBeNull()
+  })
+})
+
 describe('parseSession', () => {
   it('sample.jsonl → full parse with correct structure', async () => {
     const result = await parseSession(path.join(FIXTURES, 'sample.jsonl'), 'test-session-001')
@@ -550,6 +594,14 @@ describe('parseSession', () => {
     expect(result.messages).toEqual([])
     expect(result.totalLines).toBe(0)
     expect(result.title).toBe('empty-session')
+  })
+
+  it('api-request-records.jsonl → all request-replay records skipped, nothing archived from them', async () => {
+    const result = await parseSession(path.join(FIXTURES, 'api-request-records.jsonl'), 'test-api-request')
+    expect(result.messages.map(m => m.type)).toEqual(['user', 'assistant'])
+    expect(result.totalLines).toBe(7)
+    expect(result.skippedLines).toBe(5)
+    expect(result.messages.every(m => m.rawJson === null)).toBe(true)
   })
 
   it('title skips system-only messages and uses next real user message', async () => {

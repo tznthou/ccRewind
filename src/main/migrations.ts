@@ -628,4 +628,33 @@ export const migrations: Migration[] = [
       stripUnrenderablePayloadsV27(db)
     },
   },
+  {
+    version: 28,
+    description: 'remove request-replay records (api-request / api-request-blob / api-request-shape, written by Claude Code 2.1.300+) that older parsers indexed as messages; recount and force reindex the affected sessions',
+    up: (db) => {
+      // 舊 parser 把這三種當成訊息寫進來：blob 是送出訊息的副本，對話、FTS、工具與檔案統計都會重複。
+      // 類型名稱 2.1.300 才出現，這些列全是誤收，按類型刪不會碰到別的資料。
+      // 類型清單寫死、不 import parser 常數：migration 是歷史紀錄（同 v17）。
+      const types = ['api-request', 'api-request-blob', 'api-request-shape']
+      const placeholders = types.map(() => '?').join(',')
+      const affected = db.prepare(`SELECT DISTINCT session_id FROM messages WHERE type IN (${placeholders})`)
+        .pluck().all(...types) as string[]
+      if (affected.length === 0) return
+      // message_content / message_archive 靠 ON DELETE CASCADE（foreign_keys 在 runMigrations 之前已開），FTS 靠 messages_ad trigger
+      db.prepare(`DELETE FROM messages WHERE type IN (${placeholders})`).run(...types)
+      // message_count 就是寫進 messages 的列數，刪完照實重數；subagent 在 sessions 與 subagent_sessions 各有一列。
+      // file_mtime 清空讓下一輪重新索引：摘要、tools_used、session_files 是從訊息算出來的，刪列修不到。
+      // 原始檔已被清掉的 session 不會再重新索引，只修得到上面的列與計數。
+      const recountSession = db.prepare(
+        'UPDATE sessions SET message_count = (SELECT COUNT(*) FROM messages WHERE session_id = ?), file_mtime = NULL WHERE id = ?',
+      )
+      const recountSubagent = db.prepare(
+        'UPDATE subagent_sessions SET message_count = (SELECT COUNT(*) FROM messages WHERE session_id = ?), file_mtime = NULL WHERE id = ?',
+      )
+      for (const id of affected) {
+        recountSession.run(id, id)
+        recountSubagent.run(id, id)
+      }
+    },
+  },
 ]
