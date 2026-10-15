@@ -39,8 +39,8 @@ export default function InsightsPanel({ title, subtitle, items, emptyText, summa
       className={`${styles.insightsPanel} ${prominentDetail ? styles.insightsProminent : ''}`}
       aria-labelledby={headingId}
     >
-      <div className={styles.insightsHeader} id={headingId}>
-        {title}
+      <div className={styles.insightsHeader}>
+        <h3 className={styles.insightsTitle} id={headingId}>{title}</h3>
         {subtitle && <small className={styles.insightsSubtitle}>{subtitle}</small>}
       </div>
       {items.length === 0

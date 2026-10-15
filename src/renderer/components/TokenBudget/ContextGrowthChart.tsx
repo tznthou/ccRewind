@@ -95,7 +95,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
   return (
     <section className={styles.chartContainer} aria-labelledby={titleId}>
       <div className={styles.chartHeader}>
-        <span className={styles.chartTitle} id={titleId}>{t('tokenBudget.contextGrowth.title')}</span>
+        <h3 className={styles.chartTitle} id={titleId}>{t('tokenBudget.contextGrowth.title')}</h3>
         <div className={styles.limitToggle} role="group" aria-label={t('tokenBudget.chart.limitLabel')}>
           {(['none', '200k', '1m'] as const).map(id => (
             <button

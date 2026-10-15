@@ -42,7 +42,7 @@ export interface CauseTally {
 
 export interface SessionFacts {
   calls: number
-  /** 最早到最晚一次呼叫（含中間離開的時間）；有效時間戳不到兩個就是 null，不寫成「不到 1 分鐘」 */
+  /** 最早到最晚一次呼叫（含中間離開的時間）；只有一次呼叫、或第一次／最後一次的時間不明就是 null，不寫成「不到 1 分鐘」 */
   durationMinutes: number | null
   maxContext: number
   /** 最先到達最長 context 的那次呼叫；沒有呼叫就是 null */
@@ -66,23 +66,25 @@ function parseTime(timestamp: string | null): number | null {
 }
 
 /**
- * 每次呼叫距最早一次呼叫幾分鐘（時間戳無效的是 null），以及整場的時長。
+ * 每次呼叫距最早一次呼叫幾分鐘，以及整場的時長。
  * 取最早與最晚而不是第一次與最後一次：時間倒退（03-07 那場 DB 有重複片段）時，時長不會縮短、也不會出現負的「開始後」。
+ * 第一次呼叫的時間不明就不知道這場何時開始：最早一個有效時間戳不是開始，所以「開始後」全部是 null；
+ * 第一次或最後一次的時間不明，「從第一次到最後一次呼叫」也量不出來。不把未知寫成 0。
  */
 function callTimes(turns: Turn[]): { sinceStart: Array<number | null>; durationMinutes: number | null } {
   const times = turns.map(t => parseTime(t.timestamp))
+  const startKnown = times.length > 0 && times[0] != null
+  const endKnown = times.length > 0 && times[times.length - 1] != null
   let earliest = Infinity
   let latest = -Infinity
-  let valid = 0
   for (const ms of times) {
     if (ms == null) continue
-    valid++
     if (ms < earliest) earliest = ms
     if (ms > latest) latest = ms
   }
   return {
-    sinceStart: times.map(ms => (ms == null ? null : (ms - earliest) / 60_000)),
-    durationMinutes: valid >= 2 ? (latest - earliest) / 60_000 : null,
+    sinceStart: times.map(ms => (!startKnown || ms == null ? null : (ms - earliest) / 60_000)),
+    durationMinutes: turns.length >= 2 && startKnown && endKnown ? (latest - earliest) / 60_000 : null,
   }
 }
 
@@ -537,6 +539,8 @@ export interface ChartRow {
   context: number
   cacheRead: number
   cacheWrite: number
+  /** 沒經過快取的輸入：讀 + 寫 + 這個 = context（不支援 prompt caching 的供應商讀寫都是 0，全在這裡） */
+  uncached: number
   output: number
   minutesFromStart: number | null
   /** 這次呼叫的所有事件（含沒被畫成標記的），tooltip 用 */
@@ -556,6 +560,7 @@ export function chartRows(stats: SessionTokenStats, facts: SessionFacts): ChartR
     context: turn.contextTotal,
     cacheRead: turn.cacheReadTokens,
     cacheWrite: turn.cacheCreationTokens,
+    uncached: Math.max(0, turn.contextTotal - turn.cacheReadTokens - turn.cacheCreationTokens),
     output: turn.outputTokens,
     minutesFromStart: sinceStart[i],
     eventIds: byCall.get(i + 1) ?? [],
@@ -575,7 +580,10 @@ export function tooltipContent(row: ChartRow, eventTitles: ReadonlyMap<string, s
     head: t('tokenBudget.chart.tooltipHead', { call: formatCount(row.call), since: sinceText(row.minutesFromStart, t) }),
     length: t('tokenBudget.chart.tooltipLength', { tokens: formatTokens(row.context) }),
     breakdown: t('tokenBudget.chart.tooltipBreakdown', {
-      read: formatTokens(row.cacheRead), write: formatTokens(row.cacheWrite), output: formatTokens(row.output),
+      read: formatTokens(row.cacheRead),
+      write: formatTokens(row.cacheWrite),
+      fresh: formatTokens(row.uncached),
+      output: formatTokens(row.output),
     }),
     events: row.eventIds.flatMap(id => {
       const title = eventTitles.get(id)

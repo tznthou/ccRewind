@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { translate } from '../src/renderer/i18n/messages'
+import { messages, translate } from '../src/renderer/i18n/messages'
 import {
   buildSessionFacts,
   chartRows,
@@ -32,8 +32,15 @@ const tEn: Translate = (key, params) => translate('en', key, params)
 const text = (parts: TextPart[]) => parts.map(p => p.text).join('')
 const bold = (parts: TextPart[]) => parts.filter(p => p.strong).map(p => p.text)
 
-const factsOf = (turns: Turn[], compactions: SessionTokenStats['compactions'] = []) =>
-  buildSessionFacts(makeStats(turns, { compactions }))
+/** facts 是從哪份 stats 算出來的（i18n 覆蓋測試要畫 tooltip） */
+const statsOf = new WeakMap<SessionFacts, SessionTokenStats>()
+
+const factsOf = (turns: Turn[], compactions: SessionTokenStats['compactions'] = []) => {
+  const stats = makeStats(turns, { compactions })
+  const facts = buildSessionFacts(stats)
+  statsOf.set(facts, stats)
+  return facts
+}
 
 type BreakSpec = { cause: 'idle' | 'switch' | 'unknown'; rewritten: number; gap?: number }
 
@@ -151,13 +158,31 @@ describe('buildSessionFacts', () => {
     expect(facts.compactions[0].minutesFromStart).toBeNull()
   })
 
-  it('has no duration with fewer than two usable timestamps', () => {
+  it('has no duration for a single call, or when the first or the last call has no usable time', () => {
     expect(factsOf([call({ sequence: 1, ctx: 5_000, minute: 0 })]).durationMinutes).toBeNull()
     expect(factsOf([call({ sequence: 1, ctx: 5_000, minute: 0 }), call({ sequence: 2, ctx: 6_000 })]).durationMinutes).toBeNull()
     expect(factsOf([
       makeTurn({ sequence: 1, contextTotal: 5_000, timestamp: 'not-a-date' }),
       makeTurn({ sequence: 2, contextTotal: 6_000, timestamp: ts(10) }),
     ]).durationMinutes).toBeNull()
+    // two usable timestamps, but the session's start is unknown: "first to last call" cannot be measured
+    expect(factsOf([
+      call({ sequence: 1, ctx: 5_000 }),
+      call({ sequence: 2, ctx: 6_000, minute: 5 }),
+      call({ sequence: 3, ctx: 7_000, minute: 30 }),
+    ]).durationMinutes).toBeNull()
+  })
+
+  // 第一次呼叫的時間不明，就不知道這場從什麼時候開始：最早一個有效時間戳不是開始，不能拿來寫「開始時」「開始後 D」
+  it('does not say “since start” when the first call’s time is unknown', () => {
+    const facts = factsOf([
+      call({ sequence: 10, ctx: 150_000, read: 0, write: 150_000 }),
+      call({ sequence: 20, ctx: 151_000, read: 150_000, write: 1_000 }),
+      call({ sequence: 30, ctx: 152_000, read: 151_000, write: 1_000 }),
+      call({ sequence: 50, ctx: 30_000, read: 0, write: 30_000, minute: 400 }),
+    ], [{ sequence: 40 }])
+    expect(facts.compactions[0]).toMatchObject({ call: 4, minutesFromStart: null })
+    expect(eventItems(facts, tZh)[0].detail).toBe('第 4 次呼叫前')
   })
 
   it('finds the longest context and the first call that reached it', () => {
@@ -335,6 +360,16 @@ describe('storyParts', () => {
     const facts = busyNoEvidence()
     expect(text(storyParts(facts, tZh))).toBe('這場對話 3 小時 23 分、11 次呼叫，內容最多累積到 171.0K token，看不出這場的視窗是 200K 還是 1M。對話被壓縮 2 次。快取中斷 3 次，共重寫 85.0K，其中 2 次是離開超過 1 小時後回來。')
     expect(text(storyParts(facts, tEn))).toBe('This session ran 3 h 23 min over 11 calls, and the context peaked at 171.0K tokens; there\'s no telling whether the window was 200K or 1M. The conversation was compacted 2 times. The cache broke 3 times, rewriting 85.0K in total; 2 of those came after more than an hour away.')
+  })
+
+  // 故事句只點名閒置（它有建議可給）；其他原因只報次數與重寫量，句子照樣收尾
+  it('breaks without an idle expiry still end the sentence', () => {
+    const unknownOnly = factsOf(withBreaks([{ cause: 'unknown', rewritten: 10_000 }, { cause: 'unknown', rewritten: 20_000 }]))
+    expect(text(storyParts(unknownOnly, tZh))).toBe('這場對話 6 分鐘、5 次呼叫，內容最多累積到 104.0K token。快取中斷 2 次，共重寫 30.0K。')
+    expect(text(storyParts(unknownOnly, tEn))).toBe('This session ran 6 min over 5 calls, and the context peaked at 104.0K tokens. The cache broke 2 times, rewriting 30.0K in total.')
+    const switchOnce = factsOf(withBreaks([{ cause: 'switch', rewritten: 30_000 }]))
+    expect(text(storyParts(switchOnce, tZh))).toBe('這場對話 3 分鐘、3 次呼叫，內容最多累積到 102.0K token。快取中斷 1 次，共重寫 30.0K。')
+    expect(text(storyParts(switchOnce, tEn))).toBe('This session ran 3 min over 3 calls, and the context peaked at 102.0K tokens. The cache broke once, rewriting 30.0K.')
   })
 
   it('leaves the duration out when there is none, instead of writing “under 1 min”', () => {
@@ -553,6 +588,19 @@ describe('adviceItems', () => {
     expect(adviceItems(facts, tZh)[0].detail).toContain('這場第 2 次呼叫回來時重寫了 99.0K。要離開')
   })
 
+  it('counts several model switches and a single unexplained break', () => {
+    const facts = factsOf(withBreaks([
+      { cause: 'switch', rewritten: 30_000 },
+      { cause: 'switch', rewritten: 20_000 },
+      { cause: 'unknown', rewritten: 10_000 },
+    ]))
+    expect(adviceItems(facts, tZh).map(a => [a.title, a.detail])).toEqual([
+      ['換模型會讓快取從頭寫', '這場換了 2 次，共重寫 50.0K。模型和 effort 盡量在對話開頭選好。'],
+      ['有 1 次快取中斷找不出原因', '共重寫 10.0K。進行中的對話可以用 Claude Code 的 /usage 看最近一次快取失效的可能原因。'],
+    ])
+    expect(adviceItems(facts, tEn)[0].detail).toBe('This session switched 2 times, rewriting 50.0K. Pick the model and effort at the start of the conversation when you can.')
+  })
+
   it('uses the singular in English', () => {
     const facts = factsOf(withBreaks([{ cause: 'switch', rewritten: 30_000 }, { cause: 'unknown', rewritten: 10_000 }]))
     expect(adviceItems(facts, tEn).map(a => [a.title, a.detail])).toEqual([
@@ -622,7 +670,7 @@ describe('chartRows / tooltipContent', () => {
     expect(rows).toHaveLength(13)
     expect(timelineMarkers(facts).breaks.map(b => b.call)).not.toContain(2)
     expect(rows[1]).toEqual({
-      call: 2, context: 101_000, cacheRead: 0, cacheWrite: 10_000, output: 0, minutesFromStart: 2, eventIds: ['unknown-2'],
+      call: 2, context: 101_000, cacheRead: 0, cacheWrite: 10_000, uncached: 91_000, output: 0, minutesFromStart: 2, eventIds: ['unknown-2'],
     })
     expect(rows[0].eventIds).toEqual([])
   })
@@ -635,9 +683,18 @@ describe('chartRows / tooltipContent', () => {
     expect(tooltipContent(rows[1], titles, tZh)).toEqual({
       head: '第 2 次呼叫 · 開始後 2 小時 38 分',
       length: '對話長度 101.0K',
-      breakdown: '快取讀取 0 · 寫入 99.0K · 輸出 0',
+      breakdown: '快取讀取 0 · 寫入 99.0K · 新輸入 2.0K · 輸出 0',
       events: ['離開約 2 小時 38 分後回來，快取已過期，重寫 99.0K'],
     })
+  })
+
+  // 不支援 prompt caching 的供應商讀寫都是 0：只列讀寫的話，100K 的對話長度看起來像資料不見了
+  it('accounts for the whole prompt: cache read + write + new input = length', () => {
+    const turns = [call({ sequence: 1, ctx: 100_000, minute: 0 }), call({ sequence: 2, ctx: 101_000, minute: 1, output: 500 })]
+    const rows = chartRows(makeStats(turns), factsOf(turns))
+    expect(rows.map(r => r.cacheRead + r.cacheWrite + r.uncached)).toEqual(rows.map(r => r.context))
+    expect(tooltipContent(rows[1], new Map(), tZh).breakdown).toBe('快取讀取 0 · 寫入 0 · 新輸入 101.0K · 輸出 500')
+    expect(tooltipContent(rows[1], new Map(), tEn).breakdown).toBe('Cache read 0 · write 0 · new 101.0K · output 500')
   })
 })
 
@@ -648,7 +705,7 @@ describe('i18n coverage', () => {
   const LEFTOVER = /\{[^}]*\}|tokenBudget\./
 
   /** 每種事件都有：壓縮 1、閒置 2、換模型 1、原因不明 2（含一筆 ≥5 分） */
-  function everything(): { stats: SessionTokenStats; facts: SessionFacts } {
+  function everything(): SessionFacts {
     const turns = withBreaks([
       { cause: 'idle', rewritten: 50_000 },
       { cause: 'switch', rewritten: 30_000 },
@@ -659,14 +716,35 @@ describe('i18n coverage', () => {
     // 最後一次之後補一次壓縮，讓壓縮與中斷同時出現
     const last = turns[turns.length - 1]
     turns.push(call({ sequence: last.sequence + 2, ctx: 20_000, read: 0, write: 20_000, minute: 999, model: last.model }))
-    const stats = makeStats(turns, { compactions: [{ sequence: last.sequence + 1 }] })
-    return { stats, facts: buildSessionFacts(stats) }
+    return factsOf(turns, [{ sequence: last.sequence + 1 }])
   }
 
-  function allStrings(facts: SessionFacts, stats: SessionTokenStats, t: Translate): string[] {
+  /** 走遍 builder 的每個分支：單複數、有無時長、三種視窗子句、事件彙總、圖例超過 5 個、不到 1 分鐘、開始時 */
+  const fixtures = (): Array<[string, SessionFacts]> => [
+    ['quiet', quiet()],
+    ['compacted once', compactedOnce()],
+    ['idle then unknown', idleThenUnknown()],
+    ['every cause', everyCause()],
+    ['busy, no evidence', busyNoEvidence()],
+    ['single call', maxOnly(5_000)],
+    ['single idle', factsOf(withBreaks([{ cause: 'idle', rewritten: 99_000, gap: 75 }]))],
+    ['switches and one unknown', factsOf(withBreaks([
+      { cause: 'switch', rewritten: 30_000 },
+      { cause: 'switch', rewritten: 20_000 },
+      { cause: 'unknown', rewritten: 10_000 },
+    ]))],
+    ['six breaks', factsOf(withBreaks([10_000, 60_000, 30_000, 50_000, 20_000, 40_000].map(rewritten => ({ cause: 'unknown' as const, rewritten }))))],
+    ['seven compactions', factsOf(compactedSession(7).turns, compactedSession(7).compactions)],
+    ['under a minute', factsOf(withBreaks([{ cause: 'unknown', rewritten: 10_000, gap: 0.5 }]))],
+    ['at the start', factsOf([call({ sequence: 10, ctx: 150_000, minute: 0 }), call({ sequence: 30, ctx: 20_000, minute: 0.5 })], [{ sequence: 20 }])],
+    ['everything', everything()],
+  ]
+
+  function allStrings(facts: SessionFacts, t: Translate): string[] {
+    const stats = statsOf.get(facts)!
     const items = [...eventItems(facts, t), ...eventSummaryRows(facts, t), ...adviceItems(facts, t)]
     const titles = new Map(eventItems(facts, t).map(e => [e.id, e.title]))
-    const tips = chartRows(stats, facts).filter(r => r.eventIds.length > 0).map(r => tooltipContent(r, titles, t))
+    const tips = chartRows(stats, facts).filter(r => r.eventIds.length > 0 || r.call === 1).map(r => tooltipContent(r, titles, t))
     const listText = eventListText(facts, t)
     return [
       text(storyParts(facts, t)),
@@ -678,21 +756,38 @@ describe('i18n coverage', () => {
     ]
   }
 
-  it('the fixture really has every kind of event', () => {
-    const { facts } = everything()
+  it('the everything fixture really has every kind of event', () => {
+    const facts = everything()
     expect(new Set(facts.events.map(e => e.kind))).toEqual(new Set(['compaction', 'idle_expired', 'model_switch', 'unknown']))
-    expect(eventsNeedSummary(facts)).toBe(false)
   })
 
-  it.each(['zh-TW', 'en'] as const)('%s renders every sentence without a missing key or a leftover placeholder', (locale) => {
-    const { stats, facts } = everything()
+  it.each(['zh-TW', 'en'] as const)('%s renders every sentence of every fixture without a missing key or a leftover placeholder', (locale) => {
     const t: Translate = (key, params) => translate(locale, key, params)
-    for (const s of allStrings(facts, stats, t)) expect(s).not.toMatch(LEFTOVER)
+    for (const [name, facts] of fixtures()) {
+      for (const s of allStrings(facts, t)) expect(s, name).not.toMatch(LEFTOVER)
+    }
   })
 
   it('English output has no Chinese characters or full-width punctuation in it', () => {
-    const { stats, facts } = everything()
-    const offenders = allStrings(facts, stats, tEn).filter(s => CJK.test(s))
+    const offenders = fixtures().flatMap(([name, facts]) => allStrings(facts, tEn).filter(s => CJK.test(s)).map(s => `${name}: ${s}`))
     expect(offenders).toEqual([])
+  })
+
+  // 分支沒走到的模板，占位符寫錯也不會有人發現：每個經過 builder 的 key 都要被上面的 fixture 渲染過
+  it('the fixtures render every builder key at least once', () => {
+    const used = new Set<string>()
+    const t: Translate = (key, params) => {
+      used.add(key)
+      return translate('en', key, params)
+    }
+    for (const [, facts] of fixtures()) allStrings(facts, t)
+    // 元件直接用的標籤：沒有參數、不經 builder
+    const componentOnly = new Set(['tokenBudget.story.label', 'tokenBudget.advice.title', 'tokenBudget.advice.empty'])
+    const builderKeys = Object.keys(messages['zh-TW'])
+      .filter(k => /^tokenBudget\.(story|card|events|advice|span)\./.test(k) || /^tokenBudget\.chart\.(tooltip|legend)/.test(k))
+      .filter(k => !componentOnly.has(k))
+    // 只確認篩選條件真的篩到東西（10-16 時是 79 個），不是要釘死數量
+    expect(builderKeys.length).toBeGreaterThan(60)
+    expect(builderKeys.filter(k => !used.has(k))).toEqual([])
   })
 })

@@ -219,6 +219,7 @@
 }
 
 .chartTitle {
+  margin: 0;
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
@@ -348,6 +349,13 @@
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
+}
+
+/* 區段標題用 h3（比照 Dashboard 的卡片標題）；樣式跟著 .insightsHeader，不吃瀏覽器的預設標題樣式 */
+.insightsTitle {
+  margin: 0;
+  font: inherit;
+  color: inherit;
 }
 
 .insightsSubtitle {
