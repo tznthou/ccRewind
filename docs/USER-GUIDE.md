@@ -35,13 +35,13 @@ ccRewind 提供兩種搜尋模式，在搜尋列右側的 radio 按鈕切換：
 
 ## Context Budget
 
-進入任何 Session 後，點擊頂部 **Show Token Budget** 按鈕即可展開面板：
+進入任何 Session 後，點擊頂部 **顯示 Token Budget** 按鈕即可展開面板，由上而下：
 
-- **Summary Cards**：Total Input / Total Output / Cache Hit Rate / Model(s)，多模型 Session 會顯示各自佔比
-- **Context Growth 面積圖**：逐 turn 的 context 大小堆疊圖（New Input / Cache Creation / Cache Read），可切換 200K / 1M 參考線
-- **Token Breakdown 圓餅圖**：整個 Session 的 token 類型佔比
-- **Output Intensity 熱力條**：每個 turn 的 output token 強度，快速辨識「哪個 turn 讓 Claude 寫最多東西」
-- **Insights 洞察面板**：自動解讀上方圖表，告訴你「這數字好不好、為什麼、該怎麼做」——偵測 context spike 並歸因（上一次回應叫的工具，或大量使用者輸入）、標出對話壓縮與快取中斷（閒置過期、換模型、原因不明）、標記 output 最密集的 turn、分析前後半段成長趨勢
+- **一句話摘要與數字卡**：這場對話多長（從第一次到最後一次呼叫）、呼叫幾次、內容最多累積到多少 token，以及有沒有被壓縮、快取有沒有中斷。只有在某次呼叫超過 200K（代表視窗是 1M）時，最長 context 才會換算成 1M 的百分比，否則只寫數字
+- **對話長度圖**：每次呼叫送出的整段對話有多長，標出壓縮的位置與重寫量最大的 5 次快取中斷（閒置過期、換模型、原因不明）；可切換無 / 200K / 1M 參考線，滑過圖可看那次呼叫的細節
+- **發生了什麼**：依時間列出壓縮與快取中斷；超過 6 筆時先分類彙總，可展開看全部
+- **可以省的地方**：只在這場真的發生過時才出現的建議，例如離開超過 1 小時讓快取過期、換模型讓快取從頭寫
+- **詳細數據**（預設收起）：總輸入、總輸出、快取命中率、模型，Token 分布圓餅圖，以及每次呼叫的輸出強度熱力條
 
 訊息列表中，每個 assistant 訊息左側會顯示色碼指示：綠色代表 cache 命中良好，紅色代表該 turn 灌入大量新 context（預算殺手），不用展開面板就能直覺發現高成本回合。
 
