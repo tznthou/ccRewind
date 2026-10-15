@@ -378,6 +378,83 @@ describe('runIndexer', () => {
   })
 })
 
+describe('runIndexer — sessions indexed with request-replay records are rebuilt after migration v28', () => {
+  it('reindexes the session although its file did not change, so session-level stats are recomputed', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-v28', { 'sess-v28': sampleSession1 })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    const snapshot = () => ({
+      types: db.rawAll<{ type: string }>("SELECT type FROM messages WHERE session_id = 'sess-v28' ORDER BY sequence").map(r => r.type),
+      session: db.rawAll("SELECT message_count, tools_used FROM sessions WHERE id = 'sess-v28'"),
+    })
+    const clean = snapshot()
+
+    // 舊 parser 留下的樣子：多一筆帶 tool_use 的 blob，tools_used 跟著重複計數。
+    // 原始檔沒變，增量索引本來會跳過它——只刪列的話，tools_used 會一直停在錯的值
+    db.rawExec(`INSERT INTO messages (session_id, type, role, content_text, has_tool_use, tool_names, sequence)
+      VALUES ('sess-v28', 'api-request-blob', 'assistant', 'Sure, let me check the config.', 1, 'Read', 2)`)
+    db.rawExec("UPDATE sessions SET message_count = message_count + 1, tools_used = 'Read:2' WHERE id = 'sess-v28'")
+    db.rawExec('DELETE FROM schema_version WHERE version >= 28')
+    db.close()
+    db = new Database(dbPath)
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(snapshot()).toEqual(clean)
+  })
+
+  it('keeps a clean subagent attached when only its parent had replay rows', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-v28a', { 'sess-v28a': sampleSession1 })
+    await addSubagent(baseDir, '-Users-test-v28a', 'sess-v28a', 'agent-clean')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    const subagentRow = () => db.rawAll('SELECT id, parent_session_id, message_count, file_mtime FROM subagent_sessions')
+    const clean = subagentRow()
+    expect(clean).toHaveLength(1)
+
+    db.rawExec(`INSERT INTO messages (session_id, type, role, content_text, sequence)
+      VALUES ('sess-v28a', 'api-request-blob', 'user', 'Help me deploy the app', 2)`)
+    db.rawExec("UPDATE sessions SET message_count = message_count + 1 WHERE id = 'sess-v28a'")
+    db.rawExec('DELETE FROM schema_version WHERE version >= 28')
+    db.close()
+    db = new Database(dbPath)
+
+    // 重建 parent 會經 CASCADE 帶走它的 subagent_sessions 列；subagent 原始檔還在，同一輪 phase 4 要把它接回來。
+    // phase 4 的 mtime 快照若改在 phase 3 之前取，這一列就會被當成沒變而永遠接不回來
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(subagentRow()).toEqual(clean)
+    expect(db.getSessions('-Users-test-v28a').map(s => s.id)).toEqual(['sess-v28a'])
+  })
+
+  it('rebuilds a subagent that had replay rows even though its parent did not change', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-test-v28b', { 'sess-v28b': sampleSession1 })
+    await addSubagent(baseDir, '-Users-test-v28b', 'sess-v28b', 'agent-dirty')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    const subId = 'sess-v28b/agent-dirty'
+    const snapshot = () => ({
+      types: db.rawAll<{ type: string }>('SELECT type FROM messages WHERE session_id = ? ORDER BY sequence', subId).map(r => r.type),
+      subagent: db.rawAll('SELECT message_count, file_mtime FROM subagent_sessions WHERE id = ?', subId),
+      parent: db.rawAll("SELECT message_count, file_mtime FROM sessions WHERE id = 'sess-v28b'"),
+    })
+    const clean = snapshot()
+    expect(clean.types).toEqual(['user'])
+
+    db.rawExec(`INSERT INTO messages (session_id, type, role, content_text, sequence)
+      VALUES (?, 'api-request-blob', 'user', 'subagent task', 1)`, subId)
+    db.rawExec('UPDATE subagent_sessions SET message_count = message_count + 1 WHERE id = ?', subId)
+    db.rawExec('UPDATE sessions SET message_count = message_count + 1 WHERE id = ?', subId)
+    db.rawExec('DELETE FROM schema_version WHERE version >= 28')
+    db.close()
+    db = new Database(dbPath)
+    expect(db.rawAll('SELECT file_mtime FROM subagent_sessions WHERE id = ?', subId)).toEqual([{ file_mtime: null }])
+
+    // parent 原始檔沒變，phase 3 不碰它；phase 4 照樣掃每個 session 的 subagents/。
+    // file_mtime 從 NULL 回到原始檔的 mtime，只有重新索引寫得回來
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(snapshot()).toEqual(clean)
+  })
+})
+
 describe('runIndexer — Task 12 fields end-to-end (parentUuid/isCompactSummary/isSidechain/isAbandonedBranch/version)', () => {
   it('propagates parentUuid, marks abandoned fork branch, stores flags, backfills message_archive version', async () => {
     const baseDir = path.join(tmpDir, 'projects')

@@ -2387,6 +2387,139 @@ describe('migration v27: strip payloads the UI cannot display from message_conte
   })
 })
 
+describe('migration v28: remove request-replay records (Claude Code 2.1.300) that older parsers indexed as messages', () => {
+  const BLOB_ONLY = 'zqxvblobonly'
+
+  /** 舊 parser 寫進來的樣子：三種都不在白名單，raw_json 進 message_archive；blob 帶 message，另有 content_text / content_json */
+  function replayRows(start: number): MessageInput[] {
+    return [
+      msg({ type: 'api-request-shape', rawJson: '{"type":"api-request-shape"}', sequence: start }),
+      msg({ type: 'api-request', rawJson: '{"type":"api-request"}', timestamp: '2026-10-14T09:01:00.000Z', sequence: start + 1 }),
+      msg({
+        type: 'api-request-blob', role: 'assistant', contentText: `${BLOB_ONLY} running the tests`,
+        contentJson: JSON.stringify([{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'pnpm test' } }]),
+        hasToolUse: true, toolNames: ['Bash'], rawJson: '{"type":"api-request-blob"}', sequence: start + 2,
+      }),
+    ]
+  }
+
+  function seedCleanSession(): void {
+    db.indexSession({
+      sessionId: 'v28-clean', projectId: 'p28', projectDisplayName: 'Project 28',
+      title: 'v28 clean', messageCount: 2, filePath: '/tmp/v28-clean.jsonl', fileSize: 1,
+      fileMtime: '2026-09-01T00:00:00.000Z', startedAt: null, endedAt: null, toolsUsed: 'Read:1',
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'an older session', sequence: 0 }),
+        // 別的未知類型照寬容模式保留 raw_json，v28 不能動到它
+        msg({ type: 'future-reasoning-trace', rawJson: '{"type":"future-reasoning-trace"}', sequence: 1 }),
+      ],
+    })
+  }
+
+  function seedPollutedSessions(): void {
+    db.indexSession({
+      sessionId: 'v28-main', projectId: 'p28', projectDisplayName: 'Project 28',
+      title: 'v28 main', messageCount: 5, filePath: '/tmp/v28-main.jsonl', fileSize: 1,
+      fileMtime: '2026-10-14T10:00:00.000Z', startedAt: '2026-10-14T09:00:00.000Z', endedAt: '2026-10-14T09:05:00.000Z',
+      toolsUsed: 'Bash:2',
+      messages: [
+        msg({ type: 'user', role: 'user', contentText: 'run the tests please', sequence: 0 }),
+        ...replayRows(1),
+        msg({
+          type: 'assistant', role: 'assistant', contentText: 'running the tests',
+          contentJson: JSON.stringify([{ type: 'tool_use', id: 't1', name: 'Bash', input: { command: 'pnpm test' } }]),
+          hasToolUse: true, toolNames: ['Bash'], sequence: 4,
+        }),
+      ],
+    })
+    // subagent 在 sessions 與 subagent_sessions 各有一列，兩邊都記著 message_count
+    db.indexSubagentSession({
+      id: 'agent-v28', parentSessionId: 'v28-main', agentType: 'general-purpose',
+      filePath: '/tmp/v28-main/subagents/agent-v28.jsonl', fileSize: 1, fileMtime: '2026-10-14T10:01:00.000Z',
+      messageCount: 4, startedAt: null, endedAt: null,
+    })
+    db.indexSession({
+      sessionId: 'agent-v28', projectId: 'p28', projectDisplayName: 'Project 28',
+      title: 'subagent task', messageCount: 4, filePath: '/tmp/v28-main/subagents/agent-v28.jsonl', fileSize: 1,
+      fileMtime: '2026-10-14T10:01:00.000Z', startedAt: null, endedAt: null,
+      messages: [msg({ type: 'user', role: 'user', contentText: 'subagent task', sequence: 0 }), ...replayRows(1)],
+    })
+  }
+
+  function upgradeFromV27(): void {
+    db.rawExec('DELETE FROM schema_version WHERE version >= 28')
+    db.close()
+    db = new Database(path.join(tmpDir, 'test.db'))
+  }
+
+  const typesOf = (sessionId: string): string[] =>
+    db.rawAll<{ type: string }>('SELECT type FROM messages WHERE session_id = ? ORDER BY sequence', sessionId).map(r => r.type)
+
+  it('schema version is at least 28', () => {
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(28)
+  })
+
+  it('removes the three record types from main sessions and subagents, keeping every other row', () => {
+    seedCleanSession()
+    seedPollutedSessions()
+    upgradeFromV27()
+    expect(typesOf('v28-main')).toEqual(['user', 'assistant'])
+    expect(typesOf('agent-v28')).toEqual(['user'])
+    expect(typesOf('v28-clean')).toEqual(['user', 'future-reasoning-trace'])
+  })
+
+  it('leaves no orphaned content or archive rows, and keeps the archive rows of other unknown types', () => {
+    seedCleanSession()
+    seedPollutedSessions()
+    upgradeFromV27()
+    expect(db.rawAll<{ c: number }>('SELECT COUNT(*) AS c FROM message_content WHERE message_id NOT IN (SELECT id FROM messages)')[0].c).toBe(0)
+    expect(db.rawAll<{ c: number }>('SELECT COUNT(*) AS c FROM message_archive WHERE message_id NOT IN (SELECT id FROM messages)')[0].c).toBe(0)
+    expect(db.rawAll<{ raw_json: string }>('SELECT raw_json FROM message_archive').map(r => r.raw_json))
+      .toEqual(['{"type":"future-reasoning-trace"}'])
+  })
+
+  it('removes the copies from full-text search; the original message is still found', () => {
+    seedPollutedSessions()
+    const matches = (term: string): number =>
+      db.rawAll<{ c: number }>('SELECT COUNT(*) AS c FROM messages_fts WHERE messages_fts MATCH ?', term)[0].c
+    expect(matches(BLOB_ONLY)).toBe(2)
+    upgradeFromV27()
+    expect(matches(BLOB_ONLY)).toBe(0)
+    expect(matches('running')).toBe(1)
+  })
+
+  it('recounts message_count and clears file_mtime of the affected sessions and subagents, so the next index rebuilds them', () => {
+    seedPollutedSessions()
+    upgradeFromV27()
+    const sessions = db.rawAll<{ id: string; message_count: number; file_mtime: string | null }>(
+      "SELECT id, message_count, file_mtime FROM sessions WHERE id IN ('v28-main', 'agent-v28') ORDER BY id",
+    )
+    expect(sessions).toEqual([
+      { id: 'agent-v28', message_count: 1, file_mtime: null },
+      { id: 'v28-main', message_count: 2, file_mtime: null },
+    ])
+    expect(db.rawAll('SELECT message_count, file_mtime FROM subagent_sessions WHERE id = ?', 'agent-v28'))
+      .toEqual([{ message_count: 1, file_mtime: null }])
+  })
+
+  it('does not touch sessions without request-replay rows', () => {
+    seedCleanSession()
+    seedPollutedSessions()
+    upgradeFromV27()
+    expect(db.rawAll('SELECT message_count, file_mtime, tools_used FROM sessions WHERE id = ?', 'v28-clean'))
+      .toEqual([{ message_count: 2, file_mtime: '2026-09-01T00:00:00.000Z', tools_used: 'Read:1' }])
+  })
+
+  it('is a no-op on a database without request-replay rows', () => {
+    seedCleanSession()
+    const before = db.rawAll('SELECT id, message_count, file_mtime, tools_used FROM sessions')
+    upgradeFromV27()
+    expect(db.getSchemaVersion()).toBeGreaterThanOrEqual(28)
+    expect(db.rawAll('SELECT id, message_count, file_mtime, tools_used FROM sessions')).toEqual(before)
+    expect(typesOf('v28-clean')).toEqual(['user', 'future-reasoning-trace'])
+  })
+})
+
 describe('getSessionTokenStats', () => {
   const SUMMARY = 'This session is being continued from a previous conversation that ran out of context. The summary below covers the earlier part of the conversation.'
   const OPUS = 'claude-opus-4-6'
