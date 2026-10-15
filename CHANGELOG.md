@@ -6,6 +6,17 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.26.1] - 2026-10-15
+
+### Fixed
+
+- **Claude Code 2.1.300 新增的請求紀錄不再被當成對話**（[#133](https://github.com/tznthou/ccRewind/pull/133)）：Claude Code 2.1.300 起，對話檔裡會多寫三種用來重現 API 請求的紀錄：`api-request-blob`（送出時的訊息副本）、`api-request`（每次請求的參數）、`api-request-shape`（每次請求帶的 system prompt 與工具定義）。以前 ccRewind 把這三種都當成訊息收進來；其中 blob 帶著訊息內容，所以對話檢視裡的訊息、thinking 和工具呼叫會重複出現，搜尋會搜到這些副本，session 的工具使用次數與檔案操作次數也會重複計算。現在解析時三種都直接略過。shape 也不保留：介面上沒有任何地方會顯示它，而在維護者的四個主 session 裡，一筆就有 85–94 KB，其中約九成是工具定義，有三個 session 的工具定義完全相同
+  - **升級後第一次開啟，會清掉已經收進來的這些紀錄**（資料庫 migration v28）：刪除這三種類型的資料列，其他訊息列不動；重算受影響的 session 與 subagent 的訊息數，並清空它們的索引時間，讓接下來的索引重新處理它們：重新索引成功時，主 session 會重算摘要、工具統計和檔案清單，subagent 則重新建立訊息。只有用 1.26.0 或更早的版本索引過 Claude Code 2.1.300 以後的對話，才會有這些資料列
+  - ⚠️ **刪掉的資料列沒辦法在 ccRewind 裡還原**：1.26.1 起不會再收錄這三種紀錄。被刪的是送出時的訊息副本、請求參數，以及每次請求帶的 system prompt 和工具定義。想留著的話，請在第一次開啟 1.26.1 之前，先關掉 ccRewind，再備份 `~/.ccrewind/index.db`
+  - **第一次開啟會多花一點時間**：v28 要掃過整個訊息表，找出這三種資料列。在維護者約 1.6 GB 的索引上（沒有要刪的資料列、檔案已在系統快取中），開啟資料庫實測約 1.6 秒，之後的開啟不受影響；有受影響的 session 時，還要再加上重建它們的時間。刪除後空出來的空間，可以到「儲存管理」頁按「壓縮資料庫」回收
+  - ⚠️ 原始對話檔已經被 Claude Code 自動清理刪掉的 session 無法重建：它們的副本會刪掉、訊息數會更正，但摘要、工具統計和檔案清單不會重算，原本的重複可能留著
+- **重新索引一個 session 時，底下的 subagent 不會再跟它脫鉤**（[#133](https://github.com/tznthou/ccRewind/pull/133)）：重新索引的做法是把 session 的資料列刪掉再寫回，而資料庫的外鍵設定會把掛在它底下的 subagent 記錄一起刪掉。原始檔還在的 subagent 會在同一次索引中補回來；原始檔已經被清掉的 subagent 則接不回原本的 session，還會在 session 列表裡變成一個獨立的 session。任何一次重新索引都可能碰到，而上面的 migration 會主動重建受影響的 session，所以一併修正：現在重新索引會保留這些 subagent 記錄，原始檔不在的，會跟其他消失的 subagent 一樣依既有規則標成封存。維護者的索引裡沒有已經脫鉤的 subagent（2,090 個中 0 個）；這一版沒有修復既有脫鉤記錄的程序
+
 ## [1.26.0] - 2026-10-01
 
 ### Added
