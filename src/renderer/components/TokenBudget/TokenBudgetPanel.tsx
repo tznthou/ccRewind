@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useId, useMemo, useState } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import TokenSummaryCard from './TokenSummaryCard'
@@ -6,11 +6,71 @@ import ContextGrowthChart from './ContextGrowthChart'
 import TokenBreakdown from './TokenBreakdown'
 import CostHeatBar from './CostHeatBar'
 import InsightsPanel from './InsightsPanel'
-import { generateInsights } from './insightEngine'
+import StorySummary from './StorySummary'
+import {
+  adviceItems, buildSessionFacts, eventItems, eventListText, eventSummaryRows, eventsNeedSummary, type SessionFacts,
+} from './sessionStory'
 import styles from './TokenBudget.module.css'
 
 interface Props {
   sessionId: string
+}
+
+function StoryPanels({ stats, facts }: { stats: SessionTokenStats; facts: SessionFacts }) {
+  const { t } = useI18n()
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const detailsId = useId()
+
+  const events = useMemo(() => eventItems(facts, t), [facts, t])
+  const eventText = useMemo(() => eventListText(facts, t), [facts, t])
+  const summary = useMemo(() => (eventsNeedSummary(facts)
+    ? { rows: eventSummaryRows(facts, t), expandLabel: eventText.expand, collapseLabel: eventText.collapse }
+    : null), [facts, t, eventText])
+  const advice = useMemo(() => adviceItems(facts, t), [facts, t])
+
+  return (
+    <>
+      <StorySummary facts={facts} />
+      <ContextGrowthChart stats={stats} facts={facts} />
+      <InsightsPanel
+        title={eventText.title}
+        subtitle={eventText.subtitle}
+        items={events}
+        emptyText={eventText.empty}
+        summary={summary}
+      />
+      <InsightsPanel
+        title={t('tokenBudget.advice.title')}
+        items={advice}
+        emptyText={t('tokenBudget.advice.empty')}
+        prominentDetail
+      />
+      <div>
+        <button
+          type="button"
+          className={styles.detailsToggle}
+          aria-expanded={detailsOpen}
+          aria-controls={detailsId}
+          onClick={() => setDetailsOpen(prev => !prev)}
+        >
+          <span className={styles.detailsChevron} aria-hidden="true">▸</span>
+          {t('tokenBudget.details.toggle')}
+          <small className={styles.detailsHint}>{t('tokenBudget.details.hint')}</small>
+        </button>
+        <div id={detailsId} className={styles.details} hidden={!detailsOpen}>
+          {detailsOpen && (
+            <>
+              <TokenSummaryCard stats={stats} />
+              <div className={styles.detailsRow}>
+                <TokenBreakdown stats={stats} />
+                <CostHeatBar turns={stats.turns} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  )
 }
 
 function TokenBudgetInner({ sessionId }: Props) {
@@ -39,10 +99,8 @@ function TokenBudgetInner({ sessionId }: Props) {
     })
   }, [sessionId, stats, error, t])
 
-  const insights = useMemo(
-    () => stats ? generateInsights(stats) : [],
-    [stats],
-  )
+  // 故事、圖、清單、建議共用同一份 facts；只在換資料時重算，切語言只重組文字
+  const facts = useMemo(() => (stats ? buildSessionFacts(stats) : null), [stats])
 
   return (
     <div className={styles.panel}>
@@ -62,16 +120,8 @@ function TokenBudgetInner({ sessionId }: Props) {
           {!loading && !error && stats && stats.turns.length === 0 && (
             <div className={styles.empty}>{t('tokenBudget.empty')}</div>
           )}
-          {!loading && !error && stats && stats.turns.length > 0 && (
-            <>
-              <TokenSummaryCard stats={stats} />
-              <div className={styles.chartsRow}>
-                <ContextGrowthChart turns={stats.turns} />
-                <TokenBreakdown stats={stats} />
-              </div>
-              <CostHeatBar turns={stats.turns} />
-              {insights.length > 0 && <InsightsPanel insights={insights} />}
-            </>
+          {!loading && !error && stats && facts && stats.turns.length > 0 && (
+            <StoryPanels stats={stats} facts={facts} />
           )}
         </div>
       )}

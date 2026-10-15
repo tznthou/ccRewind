@@ -443,6 +443,29 @@ export function eventSummaryRows(facts: SessionFacts, t: Translate): ListItem[] 
   return rows
 }
 
+export interface EventListText {
+  title: string
+  /** 「N 件，依時間排序」；沒有事件就不寫 */
+  subtitle: string | null
+  empty: string
+  /** 彙總展開成完整清單的按鈕 */
+  expand: string
+  collapse: string
+}
+
+export function eventListText(facts: SessionFacts, t: Translate): EventListText {
+  const n = facts.events.length
+  return {
+    title: t('tokenBudget.events.title'),
+    subtitle: n === 0
+      ? null
+      : t(n === 1 ? 'tokenBudget.events.subtitle.one' : 'tokenBudget.events.subtitle.other', { count: formatCount(n) }),
+    empty: t('tokenBudget.events.empty'),
+    expand: t('tokenBudget.events.expand', { count: formatCount(n) }),
+    collapse: t('tokenBudget.events.collapse'),
+  }
+}
+
 /** 只放這場真的發生過的，各一條、附本場數字；順序 閒置 → 換模型 → 不明 */
 export function adviceItems(facts: SessionFacts, t: Translate): ListItem[] {
   const items: ListItem[] = []

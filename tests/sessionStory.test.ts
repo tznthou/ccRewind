@@ -5,6 +5,7 @@ import {
   chartRows,
   defaultLimit,
   eventItems,
+  eventListText,
   eventSummaryRows,
   eventsNeedSummary,
   adviceItems,
@@ -461,6 +462,24 @@ describe('eventItems', () => {
   })
 })
 
+describe('eventListText', () => {
+  it('counts the events in the subtitle and the expand button', () => {
+    expect(eventListText(idleThenUnknown(), tZh)).toEqual({
+      title: '發生了什麼',
+      subtitle: '2 件，依時間排序',
+      empty: '這場沒有被壓縮，快取也沒有中斷。',
+      expand: '依時間列出全部 2 筆',
+      collapse: '收合成彙總',
+    })
+  })
+
+  it('uses the singular in English and has no subtitle without events', () => {
+    expect(eventListText(compactedOnce(), tEn).subtitle).toBe('1 event, in time order')
+    expect(eventListText(idleThenUnknown(), tEn).subtitle).toBe('2 events, in time order')
+    expect(eventListText(quiet(), tZh).subtitle).toBeNull()
+  })
+})
+
 describe('eventSummaryRows', () => {
   it('lists up to six events in full and summarises from seven', () => {
     expect(eventsNeedSummary(factsOf(compactedSession(6).turns, compactedSession(6).compactions))).toBe(false)
@@ -648,9 +667,11 @@ describe('i18n coverage', () => {
     const items = [...eventItems(facts, t), ...eventSummaryRows(facts, t), ...adviceItems(facts, t)]
     const titles = new Map(eventItems(facts, t).map(e => [e.id, e.title]))
     const tips = chartRows(stats, facts).filter(r => r.eventIds.length > 0).map(r => tooltipContent(r, titles, t))
+    const listText = eventListText(facts, t)
     return [
       text(storyParts(facts, t)),
       ...numberCards(facts, t).flatMap(c => [c.label, c.value, c.sub ?? '']),
+      listText.title, listText.subtitle ?? '', listText.empty, listText.expand, listText.collapse,
       ...items.flatMap(i => [i.title, i.detail]),
       ...legendItems(facts, t).map(l => l.text),
       ...tips.flatMap(tip => [tip.head, tip.length, tip.breakdown, ...tip.events]),

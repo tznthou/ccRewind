@@ -27,6 +27,9 @@
   background: var(--color-bg-sidebar);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
 }
 
 .loading,
@@ -44,13 +47,68 @@
   padding: var(--space-lg) 0;
 }
 
-/* ── TokenSummaryCard ── */
+/* ── StorySummary ── */
+
+.storyText {
+  margin: 0;
+  font-size: var(--font-size-lg);
+  line-height: 1.75;
+  color: var(--color-text);
+}
+
+.storyText strong {
+  font-weight: 600;
+}
+
+.cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  margin: var(--space-md) 0 0;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 108px;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.cardLabel {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.cardValue {
+  margin: 0;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardSub {
+  margin: 0;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+/* ── TokenSummaryCard（詳細數據裡） ── */
 
 .summaryGrid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: var(--space-md);
-  margin-bottom: var(--space-lg);
+}
+
+@media (max-width: 700px) {
+  .summaryGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 .summaryItem {
@@ -58,6 +116,7 @@
   flex-direction: column;
   align-items: center;
   gap: var(--space-xs);
+  text-align: center;
 }
 
 .summaryLabel {
@@ -74,23 +133,72 @@
   font-family: var(--font-mono);
 }
 
+.summaryNote {
+  max-width: 190px;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
 .modelExtra {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-weight: 400;
 }
 
-/* ── Charts row layout ── */
+/* ── 詳細數據 ── */
 
-.chartsRow {
+.detailsToggle {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  width: 100%;
+  padding: var(--space-sm) 0;
+  font-size: var(--font-size-sm);
+  font-family: var(--font-sans);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--color-border);
+  cursor: pointer;
+}
+
+.detailsToggle:hover {
+  color: var(--color-text);
+}
+
+.detailsChevron {
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.detailsToggle[aria-expanded="true"] .detailsChevron {
+  transform: rotate(90deg);
+}
+
+.detailsHint {
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.details:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  padding-top: var(--space-sm);
+}
+
+.detailsRow {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 280px 1fr;
   gap: var(--space-md);
   align-items: start;
 }
 
 @media (max-width: 700px) {
-  .chartsRow {
+  .detailsRow {
     grid-template-columns: 1fr;
   }
 }
@@ -99,12 +207,14 @@
 
 .chartContainer {
   width: 100%;
+  min-width: 0;
 }
 
 .chartHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--space-sm);
   margin-bottom: var(--space-sm);
 }
 
@@ -144,6 +254,48 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
+.chartTooltip {
+  min-width: 200px;
+  max-width: 280px;
+  padding: var(--space-sm) var(--space-md);
+  line-height: 1.5;
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+.chartTooltipHead {
+  font-weight: 600;
+}
+
+.chartTooltipMuted {
+  color: var(--color-text-secondary);
+}
+
+.chartTooltipEvent {
+  margin-top: var(--space-xs);
+}
+
+.chartLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-lg);
+  margin: var(--space-sm) 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+
+.chartLegend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chartLegend svg {
+  flex-shrink: 0;
+}
+
 /* ── TokenBreakdown ── */
 
 .legendText {
@@ -179,10 +331,9 @@
   opacity: 0.8;
 }
 
-/* ── InsightsPanel ── */
+/* ── InsightsPanel（「發生了什麼」與「可以省的地方」） ── */
 
 .insightsPanel {
-  margin-top: var(--space-md);
   padding: var(--space-md);
   background: var(--color-bg);
   border: 1px solid var(--color-border);
@@ -190,10 +341,19 @@
 }
 
 .insightsHeader {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
   font-size: var(--font-size-sm);
   font-weight: 600;
   color: var(--color-text-secondary);
-  margin-bottom: var(--space-sm);
+}
+
+.insightsSubtitle {
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
 }
 
 .insightsList {
@@ -203,6 +363,12 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
+}
+
+.insightsListScroll {
+  max-height: 320px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .insightItem {
@@ -215,11 +381,6 @@
   border-left: 3px solid transparent;
 }
 
-.insightCritical {
-  border-left-color: #ef4444;
-  background: rgba(239, 68, 68, 0.06);
-}
-
 .insightWarning {
   border-left-color: #f59e0b;
   background: rgba(245, 158, 11, 0.06);
@@ -228,11 +389,6 @@
 .insightInfo {
   border-left-color: #3b82f6;
   background: rgba(59, 130, 246, 0.06);
-}
-
-.insightGood {
-  border-left-color: #22c55e;
-  background: rgba(34, 197, 94, 0.06);
 }
 
 .insightIcon {
@@ -255,13 +411,28 @@
 .insightDetail {
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
-  line-height: 1.4;
+  line-height: 1.5;
+}
+
+/* 建議的說明就是內容本身，比事件的補充說明大一級 */
+.insightsProminent .insightDetail {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+.insightEmpty {
+  margin: 0;
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
 }
 
 .insightsExpand {
   margin-top: var(--space-xs);
   padding: 0;
   font-size: var(--font-size-xs);
+  font-family: var(--font-sans);
   color: var(--color-accent);
   background: transparent;
   border: none;
