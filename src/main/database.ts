@@ -807,6 +807,11 @@ export class Database {
         ).run(oldSession.rowid, oldSession.title ?? '', oldSession.tags ?? '', oldSession.files_touched ?? '', oldSession.summary_text ?? '', oldSession.intent_text ?? '')
       }
       this.db.prepare('DELETE FROM session_files WHERE session_id = ?').run(params.sessionId)
+      // 舊 sessions 列一刪，ON DELETE CASCADE 會帶走掛在它底下的 subagent_sessions。原始檔還在的 subagent
+      // 之後的掃描會補回來，原始檔已被清掉的就再也接不回 parent，還會被當成主 session 列出來。
+      // 所以先整列存下，新的 parent 列插好之後原樣放回（照抄所有欄位，日後加欄位也不會漏）
+      const keptSubagents = this.db.prepare('SELECT * FROM subagent_sessions WHERE parent_session_id = ?')
+        .all(params.sessionId) as Array<Record<string, unknown>>
       this.db.prepare('DELETE FROM sessions WHERE id = ?').run(params.sessionId)
       this.upsertProject(params.projectId, params.projectDisplayName)
       // 計算 token 彙總
@@ -841,6 +846,13 @@ export class Database {
         hasRemoteControl ? 1 : 0,
         bridgeSessionId,
       )
+      if (keptSubagents.length > 0) {
+        const columns = Object.keys(keptSubagents[0])
+        const restoreSubagent = this.db.prepare(
+          `INSERT INTO subagent_sessions (${columns.join(', ')}) VALUES (${columns.map(c => `@${c}`).join(', ')})`,
+        )
+        for (const row of keptSubagents) restoreSubagent.run(row)
+      }
       // 新增 sessions_fts 條目（用 INSERT 回傳的 rowid 避免多餘查詢）
       this.db.prepare(
         'INSERT INTO sessions_fts(rowid, title, tags, files_touched, summary_text, intent_text) VALUES (?, ?, ?, ?, ?, ?)',

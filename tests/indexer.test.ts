@@ -418,8 +418,8 @@ describe('runIndexer — sessions indexed with request-replay records are rebuil
     db.close()
     db = new Database(dbPath)
 
-    // 重建 parent 會經 CASCADE 帶走它的 subagent_sessions 列；subagent 原始檔還在，同一輪 phase 4 要把它接回來。
-    // phase 4 的 mtime 快照若改在 phase 3 之前取，這一列就會被當成沒變而永遠接不回來
+    // parent 被強制重建，乾淨的 subagent 不能跟著受影響：它的 subagent_sessions 列由 indexSession 原樣放回
+    // （原始檔已消失的情況見下一個 describe）
     await runIndexer(db, undefined, baseDir, tasksDir)
     expect(subagentRow()).toEqual(clean)
     expect(db.getSessions('-Users-test-v28a').map(s => s.id)).toEqual(['sess-v28a'])
@@ -452,6 +452,39 @@ describe('runIndexer — sessions indexed with request-replay records are rebuil
     // file_mtime 從 NULL 回到原始檔的 mtime，只有重新索引寫得回來
     await runIndexer(db, undefined, baseDir, tasksDir)
     expect(snapshot()).toEqual(clean)
+  })
+})
+
+describe('runIndexer — reindexing a parent keeps its subagents attached', () => {
+  it('a subagent whose transcript is gone stays under its parent and is archived, not listed as a session', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    const projectId = '-Users-test-keep-sub'
+    await createProject(baseDir, projectId, { 'sess-keep': sampleSession1 })
+    const goneFile = await addSubagent(baseDir, projectId, 'sess-keep', 'agent-gone')
+    await addSubagent(baseDir, projectId, 'sess-keep', 'agent-still')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    const subagentRows = () => db.rawAll('SELECT * FROM subagent_sessions ORDER BY id')
+    const before = subagentRows()
+    expect(before).toHaveLength(2)
+
+    // 其中一個 subagent 的原始檔被 Claude Code 清掉了，parent 之後又有新內容 → parent 走一般的增量重新索引
+    await rm(goneFile)
+    const parentFile = path.join(baseDir, projectId, 'sess-keep.jsonl')
+    await writeFile(parentFile, makeJsonl([
+      ...sampleSession1,
+      { type: 'user', uuid: 'u-more', timestamp: '2024-06-01T10:10:00.000Z', sessionId: 'sess-keep', message: { role: 'user', content: 'one more thing' } },
+    ]))
+    const later = new Date(Date.now() + 60_000)
+    await utimes(parentFile, later, later)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-keep')).toHaveLength(3)
+    expect(subagentRows()).toEqual(before)
+    expect(db.rawAll("SELECT id, archived FROM sessions WHERE id LIKE 'sess-keep/%' ORDER BY id")).toEqual([
+      { id: 'sess-keep/agent-gone', archived: 1 },
+      { id: 'sess-keep/agent-still', archived: 0 },
+    ])
+    expect(db.getSessions(projectId).map(s => s.id)).toEqual(['sess-keep'])
   })
 })
 
