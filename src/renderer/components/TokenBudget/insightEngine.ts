@@ -44,7 +44,7 @@ type Compactions = SessionTokenStats['compactions']
  * 同一對呼叫之間有好幾則摘要只算一次。session 開頭的摘要（上一段對話帶進來的）不算這段對話的壓縮；
  * 最後一次呼叫之後的摘要沒有「壓縮後」的呼叫可以量，也不列。兩個陣列都依 sequence 由小到大（SQL 已排序）。
  */
-function compactedCallIndexes(turns: Turn[], compactions: Compactions): Set<number> {
+export function compactedCallIndexes(turns: Turn[], compactions: Compactions): Set<number> {
   const result = new Set<number>()
   let t = 0
   for (const c of compactions) {
@@ -98,6 +98,18 @@ function detectContextSpikes(turns: Turn[], compacted: ReadonlySet<number>): Ins
 }
 
 // ── Rule 2: Context Limit Warning ──
+
+/** 視窗只有這個大小，一次呼叫的 context 就不可能超過它 */
+const SMALL_WINDOW_TOKENS = 200_000
+
+/**
+ * 這場的視窗是 1M 的證據：任一次呼叫超過 200K（之後縮小也算）。沒有就是「不知道」，不是 200K。
+ * 模型名不算證據（2026-10-15 實測：同模型同月既有超過 200K、也有 17 萬就壓縮的；`[1m]` 是 Claude Code 的設定，
+ * 不會寫進 JSONL 的 model 欄），壓縮前貼著 165–170K 也不算（從未超過 200K 的壓縮落在 160–165K 的比 165–170K 還多）。
+ */
+export function contextWindowEvidence(turns: SessionTokenStats['turns']): '1m' | null {
+  return turns.some(t => t.contextTotal > SMALL_WINDOW_TOKENS) ? '1m' : null
+}
 
 // Detect plan window: (1) any turn >200K is physical proof of 1M context,
 // (2) model family — Claude 3.x was 200K-only; Claude 4+/5+ default to 1M,
@@ -189,11 +201,11 @@ const REWRITE_KEEP_RATIO = 0.8
 /** 間隔達此分鐘數視為閒置過期（2026-09-30 實測：<40 分鐘重寫 ≤5%、≥60 分鐘 91–94%；訂閱額度內主對話 TTL 1 小時） */
 const IDLE_EXPIRED_MINUTES = 60
 /** API key／超額時主對話 TTL 只有 5 分鐘 */
-const SHORT_TTL_MINUTES = 5
+export const SHORT_TTL_MINUTES = 5
 const MAX_LISTED_IDLE = 3
 
 /** 閒置過期一定量得到間隔；其他原因的間隔可能不知道（缺時間戳） */
-type CacheBreak =
+export type CacheBreak =
   | { turn: number; cause: 'idle_expired'; gapMinutes: number; rewrittenTokens: number }
   | { turn: number; cause: 'model_switch' | 'unknown'; gapMinutes: number | null; rewrittenTokens: number }
 
@@ -205,7 +217,7 @@ function minutesBetween(from: string | null, to: string | null): number | null {
   return (b - a) / 60_000
 }
 
-function findCacheBreaks(turns: Turn[], compacted: ReadonlySet<number>): CacheBreak[] {
+export function findCacheBreaks(turns: Turn[], compacted: ReadonlySet<number>): CacheBreak[] {
   const breaks: CacheBreak[] = []
   for (let i = 1; i < turns.length; i++) {
     const prev = turns[i - 1]

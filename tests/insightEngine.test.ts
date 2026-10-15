@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { detectContextPlan, generateInsights } from '../src/renderer/components/TokenBudget/insightEngine'
+import {
+  compactedCallIndexes,
+  contextWindowEvidence,
+  detectContextPlan,
+  findCacheBreaks,
+  generateInsights,
+} from '../src/renderer/components/TokenBudget/insightEngine'
 import type { SessionTokenStats } from '../src/shared/types'
 
 // ── Helpers ──
@@ -74,6 +80,11 @@ function call(o: {
     hasToolUse: tools.length > 0,
     toolNames: tools,
   })
+}
+
+/** 規則層：這場的快取中斷（壓縮後第一次呼叫已排除） */
+function breaksOf(turns: SessionTokenStats['turns'], compactions: SessionTokenStats['compactions'] = []) {
+  return findCacheBreaks(turns, compactedCallIndexes(turns, compactions))
 }
 
 // ── Tests ──
@@ -327,6 +338,41 @@ describe('insightEngine', () => {
     })
   })
 
+  // 視窗大小只認一條證據：任一次呼叫超過 200K，視窗就一定是 1M。模型名不算（同模型同月既有 >200K、也有 17 萬就壓縮的），
+  // 壓縮貼著 165–170K 也不算（2026-10-15 實測：從未 >200K 的壓縮落在 160–165K 的比 165–170K 還多）
+  describe('contextWindowEvidence', () => {
+    it('is not evidence when no call exceeds 200K — exactly 200K is not over', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000 }),
+        makeTurn({ sequence: 2, contextTotal: 200_000 }),
+      ]
+      expect(contextWindowEvidence(turns)).toBeNull()
+    })
+
+    it('is evidence of a 1M window from the first token over 200K', () => {
+      expect(contextWindowEvidence([makeTurn({ sequence: 1, contextTotal: 200_001 })])).toBe('1m')
+    })
+
+    it('keeps the evidence after the context shrinks again', () => {
+      const turns = [
+        makeTurn({ sequence: 1, contextTotal: 100_000 }),
+        makeTurn({ sequence: 2, contextTotal: 250_000 }),
+        makeTurn({ sequence: 3, contextTotal: 180_000 }),
+      ]
+      expect(contextWindowEvidence(turns)).toBe('1m')
+    })
+
+    it('has no evidence for an empty session', () => {
+      expect(contextWindowEvidence([])).toBeNull()
+    })
+
+    it('does not take the model name as evidence', () => {
+      for (const model of ['claude-opus-4-6', 'claude-fable-5', 'claude-3-5-sonnet-20241022']) {
+        expect(contextWindowEvidence([makeTurn({ sequence: 1, contextTotal: 100_000, model })])).toBeNull()
+      }
+    })
+  })
+
   // 命中率 >70% 的「運作良好」與 <30% 的「僅 N%」已移除: 2026-09-30 實測 1,707 個 session 有 93.3% 被判良好,
   // 整段重寫 0–9 次的 session 全部判良好, 「僅 N%」的 28 個有 27 個只有 1–2 次呼叫(第一次呼叫本來就要寫快取)。
   // 命中率吃對話長度, 分不出快取有沒有壞掉; 改看「整段重寫」。
@@ -348,8 +394,7 @@ describe('insightEngine', () => {
     }
     const stats = makeStats(turns)
     expect(stats.cacheHitRate).toBeGreaterThan(0.9)
-    const summary = generateInsights(stats).find(i => i.id === 'cache-breaks')!
-    expect(summary.data).toMatchObject({ total: 1, idle: 1, rewrittenTokens: rewritten })
+    expect(breaksOf(turns)).toEqual([{ turn: 16, cause: 'idle_expired', gapMinutes: 105 - 14, rewrittenTokens: rewritten }])
   })
 
   describe('Cache Breaks', () => {
@@ -360,9 +405,7 @@ describe('insightEngine', () => {
         call({ sequence: 2, ctx: 101_000, read: 100_000, write: 1_000, minute: 1 }),
         call({ sequence: 3, ctx: 102_000, read: 101_000, write: 1_000, minute: 2 }),
       ]
-      const ids = generateInsights(makeStats(turns)).map(i => i.id)
-      expect(ids).not.toContain('cache-breaks')
-      expect(ids.some(id => id.startsWith('cache-idle-'))).toBe(false)
+      expect(breaksOf(turns)).toEqual([])
     })
 
     it('reports an idle expiry: gap and rewritten tokens', () => {
@@ -370,14 +413,8 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
         call({ sequence: 2, ctx: 105_000, read: 0, write: 105_000, minute: 75 }),
       ]
-      const insights = generateInsights(makeStats(turns))
-      const summary = insights.find(i => i.id === 'cache-breaks')!
       // 寫入 105K，但只有上一次的 100K 是因為過期才重寫；多出的 5K 是這次新增的
-      expect(summary.data).toEqual({
-        type: 'cache_breaks', total: 1, idle: 1, modelSwitch: 0, unknown: 0, unknownLong: 0, rewrittenTokens: 100_000,
-      })
-      const idle = insights.find(i => i.id === 'cache-idle-2')!
-      expect(idle.data).toEqual({ type: 'cache_idle_expired', turn: 2, gapMinutes: 75, rewrittenTokens: 100_000 })
+      expect(breaksOf(turns)).toEqual([{ turn: 2, cause: 'idle_expired', gapMinutes: 75, rewrittenTokens: 100_000 }])
     })
 
     // 重寫量＝快取沒斷的話本來讀得到的舊內容(上一次的 prompt 這次沒讀到的部分)。
@@ -391,9 +428,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ...before, minute: 0 }),
         call({ sequence: 2, ...after, minute: 120 }),
       ]
-      const insights = generateInsights(makeStats(turns))
-      expect(insights.find(i => i.id === 'cache-breaks')!.data).toMatchObject({ total: 1, idle: 1, rewrittenTokens: rewritten })
-      expect(insights.find(i => i.id === 'cache-idle-2')!.data).toMatchObject({ rewrittenTokens: rewritten })
+      expect(breaksOf(turns)).toEqual([{ turn: 2, cause: 'idle_expired', gapMinutes: 120, rewrittenTokens: rewritten }])
     })
 
     it('draws the idle line at 60 minutes (>= 60 expired, 59 is not)', () => {
@@ -401,10 +436,8 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
         call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500, minute: gap }),
       ]
-      const at59 = generateInsights(makeStats(pair(59))).find(i => i.id === 'cache-breaks')!
-      expect(at59.data).toMatchObject({ idle: 0, unknown: 1 })
-      const at60 = generateInsights(makeStats(pair(60))).find(i => i.id === 'cache-breaks')!
-      expect(at60.data).toMatchObject({ idle: 1, unknown: 0 })
+      expect(breaksOf(pair(59)).map(b => b.cause)).toEqual(['unknown'])
+      expect(breaksOf(pair(60)).map(b => b.cause)).toEqual(['idle_expired'])
     })
 
     it('attributes a rewrite to a model switch, even when the gap is also long', () => {
@@ -412,8 +445,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0, model: 'claude-opus-4-6' }),
         call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500, minute: 90, model: 'claude-sonnet-4-6' }),
       ]
-      const summary = generateInsights(makeStats(turns)).find(i => i.id === 'cache-breaks')!
-      expect(summary.data).toMatchObject({ total: 1, modelSwitch: 1, idle: 0, unknown: 0 })
+      expect(breaksOf(turns).map(b => b.cause)).toEqual(['model_switch'])
     })
 
     it('does not call it a model switch when a model is unknown', () => {
@@ -421,8 +453,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0, model: 'claude-opus-4-6' }),
         call({ sequence: 2, ctx: 100_500, read: 0, write: 100_500, minute: 1, model: null }),
       ]
-      const summary = generateInsights(makeStats(turns)).find(i => i.id === 'cache-breaks')!
-      expect(summary.data).toMatchObject({ modelSwitch: 0, unknown: 1 })
+      expect(breaksOf(turns).map(b => b.cause)).toEqual(['unknown'])
     })
 
     it.each<[number | null, number]>([[3, 0], [10, 1], [null, 0]])(
@@ -442,7 +473,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
         call({ sequence: 2, ctx: 101_000, read: 60_000, write: 41_000, minute: 1 }),
       ]
-      expect(generateInsights(makeStats(turns)).map(i => i.id)).not.toContain('cache-breaks')
+      expect(breaksOf(turns)).toEqual([])
     })
 
     // MiniMax 等沒有 prompt caching 的供應商: 每次呼叫讀 0 寫 0(2026-03 的 7c9cb866 命中率 0%), 從頭到尾沒有快取可以「中斷」
@@ -452,7 +483,7 @@ describe('insightEngine', () => {
         call({ sequence: 2, ctx: 12_000, minute: 1 }),
         call({ sequence: 3, ctx: 14_000, minute: 2 }),
       ]
-      expect(generateInsights(makeStats(turns)).map(i => i.id)).not.toContain('cache-breaks')
+      expect(breaksOf(turns)).toEqual([])
     })
 
     // 上一次沒有任何快取活動(prompt 太短、或剛從不支援快取的供應商換過來), 這一次第一次寫入: 之前沒有東西可以「斷」
@@ -461,7 +492,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 3_000, read: 0, write: 0, minute: 0 }),
         call({ sequence: 2, ctx: 4_000, read: 0, write: 4_000, minute: 1 }),
       ]
-      expect(generateInsights(makeStats(turns)).map(i => i.id)).not.toContain('cache-breaks')
+      expect(breaksOf(turns)).toEqual([])
     })
 
     it('needs something to have been written: a prompt too short to cache is not a rewrite', () => {
@@ -469,7 +500,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
         call({ sequence: 2, ctx: 100_500, read: 0, write: 0, minute: 90 }),
       ]
-      expect(generateInsights(makeStats(turns)).map(i => i.id)).not.toContain('cache-breaks')
+      expect(breaksOf(turns)).toEqual([])
     })
 
     it('is not a rewrite when the prompt shrank (rewind / trimmed history) — nothing was re-sent', () => {
@@ -477,7 +508,7 @@ describe('insightEngine', () => {
         call({ sequence: 1, ctx: 100_000, read: 90_000, write: 10_000, minute: 0 }),
         call({ sequence: 2, ctx: 70_000, read: 30_000, write: 40_000, minute: 1 }),
       ]
-      expect(generateInsights(makeStats(turns)).map(i => i.id)).not.toContain('cache-breaks')
+      expect(breaksOf(turns)).toEqual([])
     })
 
     // 壓縮後的第一次呼叫本來就要整段重寫; 就算 prompt 沒縮小(實測有 2 則小對話如此)也不能算快取中斷
@@ -486,9 +517,9 @@ describe('insightEngine', () => {
         call({ sequence: 10, ctx: 150_000, read: 140_000, write: 10_000, minute: 0 }),
         call({ sequence: 30, ctx: 149_000, read: 0, write: 149_000, minute: 6 }),
       ]
-      const insights = generateInsights(makeStats(turns, { compactions: [{ sequence: 20 }] }))
-      expect(insights.map(i => i.id)).not.toContain('cache-breaks')
-      expect(insights.map(i => i.id)).toContain('compactions')
+      const compactions = [{ sequence: 20 }]
+      expect(breaksOf(turns, compactions)).toEqual([])
+      expect([...compactedCallIndexes(turns, compactions)]).toEqual([1])
     })
 
     it('summarises every break but lists only the three biggest idle expiries', () => {
