@@ -42,6 +42,17 @@ const KNOWN_MESSAGE_TYPES = new Set([
   'mode', 'agent-setting', 'frame-link', 'bridge-session',
 ])
 
+/**
+ * Claude Code 2.1.300 起寫進 transcript、用來重現 API 請求的三種紀錄。都不是對話內容，parseLine 直接略過：
+ * - api-request-blob：送出訊息的副本（帶 message.role/content），照一般訊息解析會讓文字、thinking、工具呼叫
+ *   重複出現在對話、FTS 與工具／檔案統計裡
+ * - api-request：每次請求的參數
+ * - api-request-shape：Claude Code 內建的 system prompt 與工具定義，不是使用者寫的內容；一筆數十 KB，
+ *   大半是各 session 重複的工具定義
+ * 不走未知類型保留 raw_json 的路徑：類型已知、內容確定不需要，封存只會把 message_archive 塞滿重複資料。
+ */
+const SKIPPED_RECORD_TYPES = new Set(['api-request', 'api-request-blob', 'api-request-shape'])
+
 /** 移除系統注入的 XML 標籤，保留使用者原始文字。白名單制，不認識的標籤不動 */
 export function stripSystemXml(text: string): string {
   return text.replace(STRIP_RE, '').replace(UNWRAP_RE, (_, _tag: string, content: string) => content).trim()
@@ -179,7 +190,7 @@ function stripBase64Source(block: unknown): unknown {
   return { ...b, source: { ...source, data: '[base64-stripped]' } }
 }
 
-/** 解析單行 JSONL，失敗回傳 null */
+/** 解析單行 JSONL；格式錯誤或屬於 SKIPPED_RECORD_TYPES 時回傳 null */
 export function parseLine(line: string): ParsedLine | null {
   if (!line.trim()) return null
 
@@ -193,6 +204,7 @@ export function parseLine(line: string): ParsedLine | null {
   if (typeof obj !== 'object' || obj === null) return null
 
   const type = typeof obj.type === 'string' ? obj.type : 'unknown'
+  if (SKIPPED_RECORD_TYPES.has(type)) return null
   const parseFailed = !KNOWN_MESSAGE_TYPES.has(type)
   const rawUuid = typeof obj.uuid === 'string' ? obj.uuid.trim() : null
   const uuid = rawUuid && rawUuid.length <= 128 ? rawUuid : null
