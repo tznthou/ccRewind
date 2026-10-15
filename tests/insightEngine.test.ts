@@ -7,80 +7,9 @@ import {
   generateInsights,
 } from '../src/renderer/components/TokenBudget/insightEngine'
 import type { SessionTokenStats } from '../src/shared/types'
+import { call, makeStats, makeTurn } from './fixtures/tokenStats'
 
 // ── Helpers ──
-
-function makeTurn(
-  overrides: Partial<SessionTokenStats['turns'][0]> & { sequence: number },
-): SessionTokenStats['turns'][0] {
-  return {
-    timestamp: null,
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadTokens: 0,
-    cacheCreationTokens: 0,
-    contextTotal: 0,
-    hasToolUse: false,
-    toolNames: [],
-    model: null,
-    ...overrides,
-  }
-}
-
-function makeStats(
-  turns: SessionTokenStats['turns'],
-  overrides?: Partial<Omit<SessionTokenStats, 'turns'>>,
-): SessionTokenStats {
-  const totalInput = turns.reduce((s, t) => s + t.inputTokens, 0)
-  const totalOutput = turns.reduce((s, t) => s + t.outputTokens, 0)
-  const totalCacheRead = turns.reduce((s, t) => s + t.cacheReadTokens, 0)
-  const totalCacheCreation = turns.reduce((s, t) => s + t.cacheCreationTokens, 0)
-  const cacheHitRate = totalInput > 0 ? totalCacheRead / totalInput : 0
-
-  return {
-    totalInputTokens: totalInput,
-    totalOutputTokens: totalOutput,
-    totalCacheReadTokens: totalCacheRead,
-    totalCacheCreationTokens: totalCacheCreation,
-    cacheHitRate,
-    models: ['claude-sonnet-4-20250514'],
-    primaryModel: 'claude-sonnet-4-20250514',
-    turns,
-    compactions: [],
-    ...overrides,
-  }
-}
-
-/** 基準時間 + N 分鐘 */
-function ts(minutes: number): string {
-  return new Date(Date.UTC(2026, 8, 25, 0, 0) + minutes * 60_000).toISOString()
-}
-
-/** 一次 API 呼叫: ctx = 整段 prompt(input + 讀 + 寫), read/write 是其中快取讀寫的部分 */
-function call(o: {
-  sequence: number
-  ctx: number
-  read?: number
-  write?: number
-  minute?: number
-  model?: string | null
-  tools?: string[]
-  output?: number
-}): SessionTokenStats['turns'][0] {
-  const tools = o.tools ?? []
-  return makeTurn({
-    sequence: o.sequence,
-    inputTokens: o.ctx,
-    contextTotal: o.ctx,
-    cacheReadTokens: o.read ?? 0,
-    cacheCreationTokens: o.write ?? 0,
-    outputTokens: o.output ?? 0,
-    timestamp: o.minute == null ? null : ts(o.minute),
-    model: o.model ?? null,
-    hasToolUse: tools.length > 0,
-    toolNames: tools,
-  })
-}
 
 /** 規則層：這場的快取中斷（壓縮後第一次呼叫已排除） */
 function breaksOf(turns: SessionTokenStats['turns'], compactions: SessionTokenStats['compactions'] = []) {
