@@ -35,13 +35,13 @@ Both modes support "All projects / Current project" scope filtering. Search resu
 
 ## Context Budget
 
-Open any session and click **Show Token Budget** at the top of the conversation to expand the panel:
+Open any session and click **Show Token Budget** at the top of the conversation to expand the panel. From top to bottom:
 
-- **Summary cards**: Total Input / Total Output / Cache Hit Rate / Model(s); multi-model sessions show percentage splits
-- **Context Growth area chart**: Per-turn stacked context size (New Input / Cache Creation / Cache Read), with togglable 200K / 1M reference lines
-- **Token Breakdown pie chart**: Session-wide proportions of each token type
-- **Output Intensity heat bar**: Per-turn output token intensity, making it easy to spot "which turn made Claude write the most"
-- **Insights panel**: Automatically interprets the charts above — "is this good or bad, why, what should I do?" Detects context spikes and attributes them (to the tools of the previous response, or to large user input), points out compactions and cache breaks (idle expiry, model switch or unknown), flags the most output-intensive turn, and analyzes growth between the first and second halves of the conversation
+- **One-sentence summary and number cards**: How long the session ran (first to last call), how many calls it made, how large the context got, and whether it was compacted or the cache broke. The longest context is shown as a share of 1M only when some call went over 200K (which means the window was 1M); otherwise it is just the number, and from 160K up it notes that the window size is unknown
+- **Conversation length chart**: The whole conversation sent with each call, with compactions marked and the 5 biggest cache breaks labelled by cause (idle expiry, model switch or unknown). Toggle a None / 200K / 1M reference line, and hover for the details of a call
+- **What happened**: Compactions and cache breaks in time order; with more than 6, a summary by kind comes first and expands to the full list
+- **Where to save**: Advice that only appears when it applies to this session, such as the cache expiring after an hour or more away, or restarting after a model switch
+- **Details** (collapsed by default): Total input, total output, cache hit rate and model, the token breakdown pie chart, and the per-call output intensity heat bar
 
 In the message list, each assistant bubble has a colored gutter on the left: green for good cache hits, red for turns that injected large amounts of new context (budget killers). You can spot expensive turns intuitively without expanding the panel.
 

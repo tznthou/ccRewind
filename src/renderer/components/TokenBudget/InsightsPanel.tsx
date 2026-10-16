@@ -1,61 +1,74 @@
-import { useState } from 'react'
-import { useI18n } from '../../i18n/useI18n'
-import type { Insight, InsightSeverity } from './insightEngine'
-import { mapInsightToMessages } from './insightMessages'
+import { useId, useState } from 'react'
+import type { ListItem, Tone } from './sessionStory'
 import styles from './TokenBudget.module.css'
 
-const MAX_VISIBLE = 3
-
-const SEVERITY_CLASS: Record<InsightSeverity, string> = {
-  critical: styles.insightCritical,
+const TONE_CLASS: Record<Tone, string> = {
   warning: styles.insightWarning,
   info: styles.insightInfo,
-  good: styles.insightGood,
+}
+
+interface Summary {
+  rows: ListItem[]
+  expandLabel: string
+  collapseLabel: string
 }
 
 interface Props {
-  insights: Insight[]
+  title: string
+  subtitle?: string | null
+  items: ListItem[]
+  emptyText: string
+  /** 給了就先顯示彙總，按鈕展開成完整清單（清單內捲動） */
+  summary?: Summary | null
+  /** 建議的說明就是內容本身，字比事件的補充說明大一級 */
+  prominentDetail?: boolean
 }
 
-export default function InsightsPanel({ insights }: Props) {
-  const { t } = useI18n()
+/** 「發生了什麼」與「可以省的地方」共用的清單 */
+export default function InsightsPanel({ title, subtitle, items, emptyText, summary, prominentDetail }: Props) {
   const [expanded, setExpanded] = useState(false)
+  const headingId = useId()
+  const listId = useId()
 
-  if (insights.length === 0) return null
-
-  const visible = expanded ? insights : insights.slice(0, MAX_VISIBLE)
-  const hasMore = insights.length > MAX_VISIBLE
+  const showSummary = summary != null && !expanded
+  const rows = showSummary ? summary.rows : items
+  const scroll = summary != null && expanded
 
   return (
-    <div className={styles.insightsPanel}>
-      <div className={styles.insightsHeader}>{t('tokenBudget.insights.title')}</div>
-      <ul className={styles.insightsList}>
-        {visible.map(insight => {
-          const rendered = mapInsightToMessages(insight)
-          return (
-            <li
-              key={insight.id}
-              className={`${styles.insightItem} ${SEVERITY_CLASS[insight.severity]}`}
-            >
-              <span className={styles.insightIcon}>{insight.icon}</span>
-              <div className={styles.insightBody}>
-                <span className={styles.insightTitle}>{t(rendered.titleKey, rendered.titleParams)}</span>
-                {rendered.detailKey && (
-                  <span className={styles.insightDetail}>{t(rendered.detailKey, rendered.detailParams)}</span>
-                )}
-              </div>
-            </li>
-          )
-        })}
-      </ul>
-      {hasMore && !expanded && (
+    <section
+      className={`${styles.insightsPanel} ${prominentDetail ? styles.insightsProminent : ''}`}
+      aria-labelledby={headingId}
+    >
+      <div className={styles.insightsHeader}>
+        <h3 className={styles.insightsTitle} id={headingId}>{title}</h3>
+        {subtitle && <small className={styles.insightsSubtitle}>{subtitle}</small>}
+      </div>
+      {items.length === 0
+        ? <p className={styles.insightEmpty}>{emptyText}</p>
+        : (
+          <ul id={listId} className={`${styles.insightsList} ${scroll ? styles.insightsListScroll : ''}`}>
+            {rows.map(item => (
+              <li key={item.id} className={`${styles.insightItem} ${TONE_CLASS[item.tone]}`}>
+                <span className={styles.insightIcon} aria-hidden="true">{item.icon}</span>
+                <div className={styles.insightBody}>
+                  <span className={styles.insightTitle}>{item.title}</span>
+                  <span className={styles.insightDetail}>{item.detail}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      {summary != null && items.length > 0 && (
         <button
+          type="button"
           className={styles.insightsExpand}
-          onClick={() => setExpanded(true)}
+          aria-expanded={expanded}
+          aria-controls={listId}
+          onClick={() => setExpanded(prev => !prev)}
         >
-          {t('tokenBudget.insights.showMore', { count: insights.length - MAX_VISIBLE })}
+          {expanded ? summary.collapseLabel : summary.expandLabel}
         </button>
       )}
-    </div>
+    </section>
   )
 }

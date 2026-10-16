@@ -16,6 +16,7 @@ export default function TokenSummaryCard({ stats }: Props) {
       <div className={styles.summaryItem}>
         <span className={styles.summaryLabel}>{t('tokenBudget.summary.totalInput')}</span>
         <span className={styles.summaryValue}>{formatTokens(stats.totalInputTokens)}</span>
+        <span className={styles.summaryNote}>{t('tokenBudget.summary.totalInputHint')}</span>
       </div>
       <div className={styles.summaryItem}>
         <span className={styles.summaryLabel}>{t('tokenBudget.summary.totalOutput')}</span>
@@ -24,6 +25,7 @@ export default function TokenSummaryCard({ stats }: Props) {
       <div className={styles.summaryItem}>
         <span className={styles.summaryLabel}>{t('tokenBudget.summary.cacheHitRate')}</span>
         <span className={styles.summaryValue}>{hitRate}%</span>
+        <span className={styles.summaryNote}>{t('tokenBudget.summary.cacheHitRateHint')}</span>
       </div>
       <div className={styles.summaryItem}>
         <span className={styles.summaryLabel}>{t('tokenBudget.summary.model')}</span>

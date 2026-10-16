@@ -91,8 +91,8 @@ Built for depth, not breadth.
 
 | Feature | Description |
 |---------|-------------|
-| **Context Budget** | Token breakdown (input/output/cache), context growth chart, output intensity heat bar — see at a glance how many tokens each session burned and how well cache hit |
-| **Token Insights** | Auto-interpret the charts: detect context spikes and attribute them, flag compactions and cache breaks (idle expiry, model switch or unknown), mark output hotspots, analyse growth trends — so the charts aren't just pretty, they're readable |
+| **Context Budget** | Token breakdown (input/output/cache), conversation length chart, output intensity heat bar — see at a glance how many tokens each session burned and how well cache hit |
+| **Plain-language summary** | One sentence on the session (how long, how many calls, how large the context got), compactions and cache breaks in time order (idle expiry, model switch or unknown), and token-saving advice only when it applies — so the charts aren't just pretty, they're readable |
 | **Token Heat Indicators** | Color bar on the left of assistant messages (green = good cache hit, red = high cost). Session list shows total tokens and supports token-based sorting |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
 
@@ -281,7 +281,7 @@ ccRewind/
 │   │   │   ├── Dashboard/     # Statistics dashboard: usage/efficiency trends, project health, unresolved sessions, tool/tag distribution, work patterns
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
-│   │   │   ├── TokenBudget/   # Context Budget panel: area chart, pie chart, heat bar, Insights
+│   │   │   ├── TokenBudget/   # Context Budget panel: summary, conversation length chart, events and advice, pie chart, heat bar
 │   │   │   ├── ThemeSwitcher/ # Three-theme toggle
 │   │   │   ├── FontScaleSwitcher/ # Three-tier font zoom with ARIA radio keyboard pattern
 │   │   │   ├── LiveRegion/    # Global aria-live announcements (search results, sync status)
