@@ -37,7 +37,7 @@ Both modes support "All projects / Current project" scope filtering. Search resu
 
 Open any session and click **Show Token Budget** at the top of the conversation to expand the panel. From top to bottom:
 
-- **One-sentence summary and number cards**: How long the session ran (first to last call), how many calls it made, how large the context got, and whether it was compacted or the cache broke. The longest context is shown as a share of 1M only when some call went over 200K (which means the window was 1M); otherwise it is just the number
+- **One-sentence summary and number cards**: How long the session ran (first to last call), how many calls it made, how large the context got, and whether it was compacted or the cache broke. The longest context is shown as a share of 1M only when some call went over 200K (which means the window was 1M); otherwise it is just the number, and from 160K up it notes that the window size is unknown
 - **Conversation length chart**: The whole conversation sent with each call, with compactions marked and the 5 biggest cache breaks labelled by cause (idle expiry, model switch or unknown). Toggle a None / 200K / 1M reference line, and hover for the details of a call
 - **What happened**: Compactions and cache breaks in time order; with more than 6, a summary by kind comes first and expands to the full list
 - **Where to save**: Advice that only appears when it applies to this session, such as the cache expiring after an hour or more away, or restarting after a model switch
