@@ -62,10 +62,8 @@ function StoryPanels({ stats, facts }: { stats: SessionTokenStats; facts: Sessio
           {detailsOpen && (
             <>
               <TokenSummaryCard stats={stats} />
-              <div className={styles.detailsRow}>
-                <TokenBreakdown stats={stats} />
-                <CostHeatBar turns={stats.turns} />
-              </div>
+              <TokenBreakdown stats={stats} />
+              <CostHeatBar turns={stats.turns} />
             </>
           )}
         </div>
