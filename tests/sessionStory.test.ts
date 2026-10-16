@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { messages, translate } from '../src/renderer/i18n/messages'
 import {
+  adviceEmptyText,
   buildSessionFacts,
   chartRows,
   defaultLimit,
@@ -231,6 +232,7 @@ describe('buildSessionFacts', () => {
       events: [],
       compactions: [],
       compactedAfterLastCall: false,
+      cacheUsed: false,
       cacheBreaks: [],
       rewrittenTokens: 0,
       idle: { count: 0, rewrittenTokens: 0 },
@@ -808,6 +810,65 @@ describe('a compaction after the last call', () => {
   })
 })
 
+// ── 沒有用到 prompt 快取 ──
+
+// 每次呼叫的快取讀寫都是 0（不支援 prompt caching 的供應商、prompt 太短沒法快取）：快取規則一律跳過，所以不會有中斷；
+// 但沒有快取就談不上中斷，三處不能說「快取沒有中斷」，卡片也不能寫 0 次。建議全都跟快取有關，空狀態不能說「沒有可以省的」。
+describe('a session that never used the prompt cache', () => {
+  const noCacheTurns = () => [
+    call({ sequence: 10, ctx: 20_000, minute: 0 }),
+    call({ sequence: 20, ctx: 24_000, minute: 3 }),
+    call({ sequence: 30, ctx: 30_000, minute: 9 }),
+  ]
+  const noCache = () => factsOf(noCacheTurns())
+
+  it('records whether any call read or wrote the cache', () => {
+    expect(noCache().cacheUsed).toBe(false)
+    expect(quiet().cacheUsed).toBe(true)
+    // 一次寫入就算用到
+    expect(factsOf([call({ sequence: 1, ctx: 5_000 }), call({ sequence: 2, ctx: 6_000, write: 6_000 })]).cacheUsed).toBe(true)
+  })
+
+  it.each<[string, Translate, string]>([
+    ['zh-TW', tZh, '這場對話 9 分鐘、3 次呼叫，內容最多累積到 30.0K token。過程中沒有被壓縮，也沒有用到 prompt 快取。'],
+    ['en', tEn, 'This session ran 9 min over 3 calls, and the context peaked at 30.0K tokens. It was never compacted, and it didn\'t use prompt caching.'],
+  ])('%s: the story says it did not use the cache, not that the cache never broke', (_locale, t, story) => {
+    expect(text(storyParts(noCache(), t))).toBe(story)
+  })
+
+  it.each<[string, Translate, string]>([
+    ['zh-TW', tZh, '這場對話 5 分鐘、2 次呼叫，內容最多累積到 150.0K token。第 2 次呼叫前對話被壓縮：150.0K → 30.0K。沒有用到 prompt 快取。'],
+    ['en', tEn, 'This session ran 5 min over 2 calls, and the context peaked at 150.0K tokens. The conversation was compacted before call 2: 150.0K → 30.0K. It didn\'t use prompt caching.'],
+  ])('%s: the same after a compaction', (_locale, t, story) => {
+    const facts = factsOf([call({ sequence: 10, ctx: 150_000, minute: 0 }), call({ sequence: 30, ctx: 30_000, minute: 5 })], [{ sequence: 20 }])
+    expect(text(storyParts(facts, t))).toBe(story)
+  })
+
+  it.each<[string, Translate, NumberCard]>([
+    ['zh-TW', tZh, { id: 'cacheBreaks', label: '快取中斷', value: '—', sub: '沒有用到 prompt 快取' }],
+    ['en', tEn, { id: 'cacheBreaks', label: 'Cache breaks', value: '—', sub: 'prompt caching not used' }],
+  ])('%s: the cache-break card shows no count', (_locale, t, expected) => {
+    expect(card(noCache(), 'cacheBreaks', t)).toEqual(expected)
+  })
+
+  it.each<[string, Translate, string]>([
+    ['zh-TW', tZh, '這場沒有被壓縮，也沒有用到 prompt 快取。'],
+    ['en', tEn, 'This session was never compacted, and it didn\'t use prompt caching.'],
+  ])('%s: the empty event list says it did not use the cache', (_locale, t, empty) => {
+    expect(eventItems(noCache(), t)).toEqual([])
+    expect(eventListText(noCache(), t).empty).toBe(empty)
+  })
+
+  it.each<[string, Translate, string, string]>([
+    ['zh-TW', tZh, '這場沒有用到 prompt 快取，所以這些跟快取有關的建議都不適用。', '這場沒有明顯可以省的地方。'],
+    ['en', tEn, 'This session didn\'t use prompt caching, so none of these cache suggestions apply.', 'Nothing obvious to save in this session.'],
+  ])('%s: the empty advice says the cache suggestions do not apply, instead of “nothing to save”', (_locale, t, noCacheEmpty, cachedEmpty) => {
+    expect(adviceItems(noCache(), t)).toEqual([])
+    expect(adviceEmptyText(noCache(), t)).toBe(noCacheEmpty)
+    expect(adviceEmptyText(quiet(), t)).toBe(cachedEmpty)
+  })
+})
+
 // ── i18n：每種句型中英都渲染得出來 ──
 
 describe('i18n coverage', () => {
@@ -854,6 +915,7 @@ describe('i18n coverage', () => {
       call({ sequence: 30, ctx: 85_466, read: 0, write: 85_466, minute: 198.24 }),
     ], [{ sequence: 20 }, { sequence: 40 }])],
     ['six breaks and a compaction after the last call', factsOf(withBreaks([10_000, 60_000, 30_000, 50_000, 20_000, 40_000].map(rewritten => ({ cause: 'unknown' as const, rewritten }))), [{ sequence: 99 }])],
+    ['never used the cache', factsOf([call({ sequence: 1, ctx: 20_000, minute: 0 }), call({ sequence: 2, ctx: 24_000, minute: 3 })])],
   ]
 
   function allStrings(facts: SessionFacts, t: Translate): string[] {
@@ -866,6 +928,7 @@ describe('i18n coverage', () => {
       text(storyParts(facts, t)),
       ...numberCards(facts, t).flatMap(c => [c.label, c.value, c.sub ?? '']),
       listText.title, listText.subtitle ?? '', listText.empty, listText.expand, listText.collapse,
+      adviceEmptyText(facts, t),
       ...items.flatMap(i => [i.title, i.detail]),
       ...legendItems(facts, t).map(l => l.text),
       ...tips.flatMap(tip => [tip.head, tip.length, tip.breakdown, ...tip.events]),
@@ -897,8 +960,8 @@ describe('i18n coverage', () => {
       return translate('en', key, params)
     }
     for (const [, facts] of fixtures()) allStrings(facts, t)
-    // 元件直接用的標籤：沒有參數、不經 builder
-    const componentOnly = new Set(['tokenBudget.story.label', 'tokenBudget.advice.title', 'tokenBudget.advice.empty'])
+    // 元件直接用的標籤：沒有參數、不經 builder（advice.empty 依有沒有用到快取換句子，改由 adviceEmptyText 產生）
+    const componentOnly = new Set(['tokenBudget.story.label', 'tokenBudget.advice.title'])
     const builderKeys = Object.keys(messages['zh-TW'])
       .filter(k => /^tokenBudget\.(story|card|events|advice|span)\./.test(k) || /^tokenBudget\.chart\.(tooltip|legend)/.test(k))
       .filter(k => !componentOnly.has(k))

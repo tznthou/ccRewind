@@ -54,6 +54,8 @@ export interface SessionFacts {
   compactions: CompactionEvent[]
   /** 最後一次呼叫之後被壓縮：量不到前後，不在 compactions 與 events 裡、不畫在時間軸上，但算進壓縮次數、排在事件清單最後 */
   compactedAfterLastCall: boolean
+  /** 任一次呼叫有讀或寫快取。沒有的話（不支援 prompt caching 的供應商、prompt 太短沒法快取）就談不上快取中斷 */
+  cacheUsed: boolean
   cacheBreaks: CacheBreakEvent[]
   rewrittenTokens: number
   idle: CauseTally
@@ -149,6 +151,8 @@ export function buildSessionFacts(stats: SessionTokenStats): SessionFacts {
     events: [...compactions, ...cacheBreaks].sort((a, b) => a.call - b.call),
     compactions,
     compactedAfterLastCall: compactedAfterLastCall(turns, stats.compactions),
+    // findCacheBreaks 對沒讀沒寫的呼叫一律跳過，所以沒用到快取時中斷一定是 0，文字要另外說
+    cacheUsed: turns.some(t => t.cacheReadTokens + t.cacheCreationTokens > 0),
     cacheBreaks,
     rewrittenTokens: cacheBreaks.reduce((sum, b) => sum + b.rewrittenTokens, 0),
     idle: tally(cacheBreaks, 'idle_expired'),
@@ -303,7 +307,11 @@ export function storyParts(facts: SessionFacts, t: Translate): TextPart[] {
 
   const breaks = facts.cacheBreaks
   if (breaks.length === 0) {
-    parts.push(...fillTemplate(t(compacted === 0 ? 'tokenBudget.story.cacheClean' : 'tokenBudget.story.cacheIntact')))
+    // 沒用到快取就談不上中斷，不說「快取沒有中斷」
+    const key = facts.cacheUsed
+      ? (compacted === 0 ? 'tokenBudget.story.cacheClean' : 'tokenBudget.story.cacheIntact')
+      : (compacted === 0 ? 'tokenBudget.story.cacheUnusedClean' : 'tokenBudget.story.cacheUnused')
+    parts.push(...fillTemplate(t(key)))
     return parts
   }
   parts.push(...fillTemplate(t(breaks.length === 1 ? 'tokenBudget.story.cacheBroken.one' : 'tokenBudget.story.cacheBroken.other'), {
@@ -344,12 +352,15 @@ export function numberCards(facts: SessionFacts, t: Translate): NumberCard[] {
     { id: 'calls', label: t('tokenBudget.card.calls'), value: count(facts.calls), sub: null },
     { id: 'maxContext', label: t('tokenBudget.card.maxContext'), value: formatTokens(facts.maxContext), sub: maxContextSub },
     { id: 'compactions', label: t('tokenBudget.card.compactions'), value: count(compactionCount(facts)), sub: null },
-    {
-      id: 'cacheBreaks',
-      label: t('tokenBudget.card.cacheBreaks'),
-      value: count(breaks),
-      sub: breaks > 0 ? t('tokenBudget.card.cacheBreaksSub', { tokens: formatTokens(facts.rewrittenTokens) }) : null,
-    },
+    facts.cacheUsed
+      ? {
+        id: 'cacheBreaks',
+        label: t('tokenBudget.card.cacheBreaks'),
+        value: count(breaks),
+        sub: breaks > 0 ? t('tokenBudget.card.cacheBreaksSub', { tokens: formatTokens(facts.rewrittenTokens) }) : null,
+      }
+      // 沒用到快取就沒有中斷可數，不寫 0 次
+      : { id: 'cacheBreaks', label: t('tokenBudget.card.cacheBreaks'), value: t('tokenBudget.card.noValue'), sub: t('tokenBudget.card.cacheUnusedSub') },
   ]
 }
 
@@ -497,7 +508,7 @@ export function eventListText(facts: SessionFacts, t: Translate): EventListText 
     subtitle: n === 0
       ? null
       : t(n === 1 ? 'tokenBudget.events.subtitle.one' : 'tokenBudget.events.subtitle.other', { count: formatCount(n) }),
-    empty: t('tokenBudget.events.empty'),
+    empty: t(facts.cacheUsed ? 'tokenBudget.events.empty' : 'tokenBudget.events.emptyCacheUnused'),
     expand: t('tokenBudget.events.expand', { count: formatCount(n) }),
     collapse: t('tokenBudget.events.collapse'),
   }
@@ -545,6 +556,11 @@ export function adviceItems(facts: SessionFacts, t: Translate): ListItem[] {
     })
   }
   return items
+}
+
+/** 建議區塊沒有東西時的那句：建議全都跟快取有關，沒用到快取時說不適用，不說「沒有可以省的」 */
+export function adviceEmptyText(facts: SessionFacts, t: Translate): string {
+  return t(facts.cacheUsed ? 'tokenBudget.advice.empty' : 'tokenBudget.advice.emptyCacheUnused')
 }
 
 export type LegendId = 'area' | 'compaction' | 'idle_expired' | 'model_switch' | 'unknown' | 'overflow'

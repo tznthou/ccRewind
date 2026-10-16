@@ -8,7 +8,7 @@ import CostHeatBar from './CostHeatBar'
 import InsightsPanel from './InsightsPanel'
 import StorySummary from './StorySummary'
 import {
-  adviceItems, buildSessionFacts, eventItems, eventListText, eventSummaryRows, eventsNeedSummary, type SessionFacts,
+  adviceEmptyText, adviceItems, buildSessionFacts, eventItems, eventListText, eventSummaryRows, eventsNeedSummary, type SessionFacts,
 } from './sessionStory'
 import styles from './TokenBudget.module.css'
 
@@ -27,6 +27,7 @@ function StoryPanels({ stats, facts }: { stats: SessionTokenStats; facts: Sessio
     ? { rows: eventSummaryRows(facts, t), expandLabel: eventText.expand, collapseLabel: eventText.collapse }
     : null), [facts, t, eventText])
   const advice = useMemo(() => adviceItems(facts, t), [facts, t])
+  const adviceEmpty = useMemo(() => adviceEmptyText(facts, t), [facts, t])
 
   return (
     <>
@@ -42,7 +43,7 @@ function StoryPanels({ stats, facts }: { stats: SessionTokenStats; facts: Sessio
       <InsightsPanel
         title={t('tokenBudget.advice.title')}
         items={advice}
-        emptyText={t('tokenBudget.advice.empty')}
+        emptyText={adviceEmpty}
         prominentDetail
       />
       <div>
