@@ -9,7 +9,8 @@ type Compactions = SessionTokenStats['compactions']
 /**
  * 壓縮摘要後面第一次呼叫的位置 i（turns[i - 1] 與 turns[i] 之間夾著壓縮），以 JSONL sequence 判斷。
  * 同一對呼叫之間有好幾則摘要只算一次。session 開頭的摘要（上一段對話帶進來的）不算這段對話的壓縮；
- * 最後一次呼叫之後的摘要沒有「壓縮後」的呼叫可以量，也不列。兩個陣列都依 sequence 由小到大（SQL 已排序）。
+ * 最後一次呼叫之後的摘要沒有「壓縮後」的呼叫可以量，不列在這裡，由 compactedAfterLastCall 回報。
+ * 兩個陣列都依 sequence 由小到大（SQL 已排序）。
  */
 export function compactedCallIndexes(turns: Turn[], compactions: Compactions): Set<number> {
   const result = new Set<number>()
@@ -19,6 +20,16 @@ export function compactedCallIndexes(turns: Turn[], compactions: Compactions): S
     if (t > 0 && t < turns.length) result.add(t)
   }
   return result
+}
+
+/**
+ * 最後一次呼叫之後有沒有壓縮摘要。之後沒有呼叫，量不到前後，但對話確實被壓縮過：要算進次數，
+ * 文字要說量不到，不能說沒有。好幾則摘要只算一次，同 compactedCallIndexes；沒有呼叫就沒有「最後一次呼叫之後」。
+ */
+export function compactedAfterLastCall(turns: Turn[], compactions: Compactions): boolean {
+  if (turns.length === 0) return false
+  const last = turns[turns.length - 1].sequence
+  return compactions.some(c => c.sequence > last)
 }
 
 // ── 視窗大小 ──

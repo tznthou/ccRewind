@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  compactedAfterLastCall,
   compactedCallIndexes,
   contextWindowEvidence,
   findCacheBreaks,
@@ -16,6 +17,30 @@ function breaksOf(turns: SessionTokenStats['turns'], compactions: SessionTokenSt
 
 // ── Tests ──
 describe('insightEngine', () => {
+  // 最後一次呼叫之後的摘要沒有「壓縮後」的呼叫可以量前後，compactedCallIndexes 不列它；但對話確實被壓縮過，由這裡回報
+  describe('compactedAfterLastCall', () => {
+    const turns = [makeTurn({ sequence: 10 }), makeTurn({ sequence: 20 })]
+
+    // 摘要只有三種位置：開頭（上一段對話帶進來的，兩條規則都不算）、兩次呼叫之間（compactedCallIndexes）、最後一次之後（這裡）
+    it.each<[string, number, number[], boolean]>([
+      ['at the very start', 5, [], false],
+      ['between two calls', 15, [1], false],
+      ['after the last call', 25, [], true],
+    ])('a summary %s is counted by one rule at most', (_where, sequence, between, after) => {
+      expect([...compactedCallIndexes(turns, [{ sequence }])]).toEqual(between)
+      expect(compactedAfterLastCall(turns, [{ sequence }])).toBe(after)
+    })
+
+    it('finds the one after the last call among summaries elsewhere', () => {
+      expect(compactedAfterLastCall(turns, [{ sequence: 5 }, { sequence: 15 }, { sequence: 25 }])).toBe(true)
+      expect(compactedAfterLastCall(turns, [{ sequence: 5 }, { sequence: 15 }])).toBe(false)
+    })
+
+    it('has no “after the last call” without a call', () => {
+      expect(compactedAfterLastCall([], [{ sequence: 1 }])).toBe(false)
+    })
+  })
+
   // 視窗大小只認一條證據：任一次呼叫超過 200K，視窗就一定是 1M。模型名不算（同模型同月既有 >200K、也有 17 萬就壓縮的），
   // 壓縮貼著 165–170K 也不算（2026-10-15 實測：從未 >200K 的壓縮落在 160–165K 的比 165–170K 還多）
   describe('contextWindowEvidence', () => {

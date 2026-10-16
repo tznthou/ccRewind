@@ -17,6 +17,8 @@ import {
   timelineMarkers,
   tooltipContent,
   windowPercent,
+  type ListItem,
+  type NumberCard,
   type SessionFacts,
   type TextPart,
   type Translate,
@@ -228,6 +230,7 @@ describe('buildSessionFacts', () => {
       windowEvidence: null,
       events: [],
       compactions: [],
+      compactedAfterLastCall: false,
       cacheBreaks: [],
       rewrittenTokens: 0,
       idle: { count: 0, rewrittenTokens: 0 },
@@ -268,9 +271,11 @@ describe('buildSessionFacts', () => {
       expect(facts.compactions).toHaveLength(1)
     })
 
-    it('ignores a summary at the very start (session continued from another) and one after the last call', () => {
+    // 最後一次呼叫之後的那則量不到前後，不在 compactions 裡，但另外記著（它算進次數，見「最後一次呼叫之後的壓縮」）
+    it('leaves a summary at the very start (session continued from another) and one after the last call out of the measured compactions', () => {
       const facts = factsOf([call({ sequence: 5, ctx: 50_000 }), call({ sequence: 9, ctx: 52_000 })], [{ sequence: 0 }, { sequence: 99 }])
       expect(facts.compactions).toEqual([])
+      expect(facts.compactedAfterLastCall).toBe(true)
     })
   })
 })
@@ -698,6 +703,109 @@ describe('chartRows / tooltipContent', () => {
   })
 })
 
+// ── 最後一次呼叫之後的壓縮 ──
+
+// 摘要落在最後一次呼叫之後時，沒有「壓縮後」的呼叫可以量前後，所以不畫在時間軸上（compactedCallIndexes 不列它）；
+// 但對話確實被壓縮過：算進壓縮次數，故事句與事件清單寫「最後一次呼叫之後被壓縮，量不到前後」，不能寫成沒有被壓縮。
+// 同一場拿掉這則摘要就是從沒壓縮過：三處維持原樣，確認改動沒有波及。
+describe('a compaction after the last call', () => {
+  const turns = () => [
+    call({ sequence: 10, ctx: 10_000, read: 0, write: 10_000, minute: 0 }),
+    call({ sequence: 20, ctx: 11_000, read: 10_000, write: 1_000, minute: 30 }),
+    call({ sequence: 30, ctx: 12_000, read: 11_000, write: 1_000, minute: 100.56 }),
+  ]
+  const trailing = () => factsOf(turns(), [{ sequence: 40 }])
+
+  it.each<[string, Translate, string]>([
+    ['zh-TW', tZh, '這場對話 1 小時 40 分、3 次呼叫，內容最多累積到 12.0K token。最後一次呼叫之後對話被壓縮，量不到前後。快取沒有中斷。'],
+    ['en', tEn, 'This session ran 1 h 40 min over 3 calls, and the context peaked at 12.0K tokens. The conversation was compacted after the last call, so the before and after can\'t be measured. The cache never broke.'],
+  ])('%s: the story says it was compacted after the last call and that the before and after cannot be measured', (_locale, t, story) => {
+    expect(text(storyParts(trailing(), t))).toBe(story)
+  })
+
+  it.each<[string, Translate, NumberCard]>([
+    ['zh-TW', tZh, { id: 'compactions', label: '壓縮', value: '1 次', sub: null }],
+    ['en', tEn, { id: 'compactions', label: 'Compactions', value: '1', sub: null }],
+  ])('%s: the compactions card counts it', (_locale, t, expected) => {
+    expect(card(trailing(), 'compactions', t)).toEqual(expected)
+  })
+
+  it.each<[string, Translate, string, ListItem]>([
+    ['zh-TW', tZh, '1 件，依時間排序', { id: 'compaction-after-last-call', icon: '📦', tone: 'info', title: '對話被壓縮，量不到前後', detail: '最後一次呼叫之後' }],
+    ['en', tEn, '1 event, in time order', { id: 'compaction-after-last-call', icon: '📦', tone: 'info', title: 'Conversation compacted, before and after can\'t be measured', detail: 'After the last call' }],
+  ])('%s: the event list shows it', (_locale, t, subtitle, item) => {
+    expect(eventListText(trailing(), t).subtitle).toBe(subtitle)
+    expect(eventItems(trailing(), t)).toEqual([item])
+  })
+
+  it.each<[string, Translate, string, string, string]>([
+    ['zh-TW', tZh, '這場對話 1 小時 40 分、3 次呼叫，內容最多累積到 12.0K token。過程中沒有被壓縮，快取也沒有中斷。', '0 次', '這場沒有被壓縮，快取也沒有中斷。'],
+    ['en', tEn, 'This session ran 1 h 40 min over 3 calls, and the context peaked at 12.0K tokens. It was never compacted, and the cache never broke.', '0', 'This session was never compacted, and the cache never broke.'],
+  ])('%s: the same session without that summary still says it was never compacted', (_locale, t, story, cardValue, empty) => {
+    const facts = factsOf(turns())
+    expect(text(storyParts(facts, t))).toBe(story)
+    expect(card(facts, 'compactions', t).value).toBe(cardValue)
+    expect(eventItems(facts, t)).toEqual([])
+    expect(eventListText(facts, t)).toMatchObject({ subtitle: null, empty })
+  })
+
+  it('is recorded beside the measured compactions, not among them, and stays off the timeline', () => {
+    const facts = trailing()
+    expect(facts.compactedAfterLastCall).toBe(true)
+    expect(facts.compactions).toEqual([])
+    expect(facts.events).toEqual([])
+    expect(timelineMarkers(facts).compactions).toEqual([])
+    expect(legendItems(facts, tZh).map(l => l.id)).toEqual(['area'])
+    expect(chartRows(statsOf.get(facts)!, facts).flatMap(r => r.eventIds)).toEqual([])
+  })
+
+  it('counts several summaries after the last call once, as between two calls', () => {
+    expect(card(factsOf(turns(), [{ sequence: 40 }, { sequence: 45 }]), 'compactions').value).toBe('1 次')
+  })
+
+  // 量得到的壓縮之外還有最後一次呼叫之後的：一起算次數，故事句點出那一次量不到，事件清單把它排在最後
+  it('counts together with the compactions that were measured', () => {
+    const facts = factsOf([
+      call({ sequence: 10, ctx: 150_000, read: 0, write: 150_000, minute: 0 }),
+      call({ sequence: 30, ctx: 30_000, read: 0, write: 30_000, minute: 10 }),
+      call({ sequence: 40, ctx: 31_000, read: 30_000, write: 1_000, minute: 11 }),
+    ], [{ sequence: 20 }, { sequence: 50 }])
+    expect(text(storyParts(facts, tZh))).toBe('這場對話 11 分鐘、3 次呼叫，內容最多累積到 150.0K token。對話被壓縮 2 次，其中 1 次在最後一次呼叫之後，量不到前後。快取沒有中斷。')
+    expect(text(storyParts(facts, tEn))).toBe('This session ran 11 min over 3 calls, and the context peaked at 150.0K tokens. The conversation was compacted 2 times; one of those came after the last call, so its before and after can\'t be measured. The cache never broke.')
+    expect(card(facts, 'compactions').value).toBe('2 次')
+    expect(eventItems(facts, tZh).map(e => e.id)).toEqual(['compaction-2', 'compaction-after-last-call'])
+    expect(eventListText(facts, tZh).subtitle).toBe('2 件，依時間排序')
+  })
+
+  it('comes after the cache breaks in the event list, and the story still reports the breaks', () => {
+    const facts = factsOf(withBreaks([{ cause: 'unknown', rewritten: 50_000 }]), [{ sequence: 4 }])
+    expect(text(storyParts(facts, tZh))).toBe('這場對話 3 分鐘、3 次呼叫，內容最多累積到 102.0K token。最後一次呼叫之後對話被壓縮，量不到前後。快取中斷 1 次，共重寫 50.0K。')
+    expect(text(storyParts(facts, tEn))).toBe('This session ran 3 min over 3 calls, and the context peaked at 102.0K tokens. The conversation was compacted after the last call, so the before and after can\'t be measured. The cache broke once, rewriting 50.0K.')
+    expect(eventItems(facts, tZh).map(e => e.id)).toEqual(['unknown-2', 'compaction-after-last-call'])
+  })
+
+  // 彙總的門檻看清單實際有幾筆：六次中斷加上這一筆是七筆
+  it('counts toward the summary threshold, and the summary says the latest compaction could not be measured', () => {
+    const facts = factsOf(withBreaks([10_000, 60_000, 30_000, 50_000, 20_000, 40_000].map(rewritten => ({ cause: 'unknown' as const, rewritten }))), [{ sequence: 99 }])
+    expect(eventsNeedSummary(facts)).toBe(true)
+    expect(eventListText(facts, tZh).expand).toBe('依時間列出全部 7 筆')
+    expect(eventSummaryRows(facts, tZh)[0]).toEqual({
+      id: 'summary-compactions', icon: '📦', tone: 'info',
+      title: '對話被壓縮 1 次',
+      detail: '最近一次在最後一次呼叫之後，量不到前後',
+    })
+    expect(eventSummaryRows(facts, tEn)[0]).toMatchObject({
+      title: 'Conversation compacted once',
+      detail: 'Most recent after the last call, before and after can\'t be measured',
+    })
+    const many = compactedSession(7)
+    expect(eventSummaryRows(factsOf(many.turns, [...many.compactions, { sequence: 999 }]), tZh)[0]).toMatchObject({
+      title: '對話被壓縮 8 次',
+      detail: '最近一次在最後一次呼叫之後，量不到前後',
+    })
+  })
+})
+
 // ── i18n：每種句型中英都渲染得出來 ──
 
 describe('i18n coverage', () => {
@@ -738,6 +846,12 @@ describe('i18n coverage', () => {
     ['under a minute', factsOf(withBreaks([{ cause: 'unknown', rewritten: 10_000, gap: 0.5 }]))],
     ['at the start', factsOf([call({ sequence: 10, ctx: 150_000, minute: 0 }), call({ sequence: 30, ctx: 20_000, minute: 0.5 })], [{ sequence: 20 }])],
     ['everything', everything()],
+    ['compacted after the last call', factsOf([call({ sequence: 1, ctx: 5_000, read: 0, write: 5_000, minute: 0 })], [{ sequence: 2 }])],
+    ['compacted twice, once after the last call', factsOf([
+      call({ sequence: 10, ctx: 412_645, read: 400_000, write: 12_645, minute: 0 }),
+      call({ sequence: 30, ctx: 85_466, read: 0, write: 85_466, minute: 198.24 }),
+    ], [{ sequence: 20 }, { sequence: 40 }])],
+    ['six breaks and a compaction after the last call', factsOf(withBreaks([10_000, 60_000, 30_000, 50_000, 20_000, 40_000].map(rewritten => ({ cause: 'unknown' as const, rewritten }))), [{ sequence: 99 }])],
   ]
 
   function allStrings(facts: SessionFacts, t: Translate): string[] {

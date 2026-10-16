@@ -1,7 +1,7 @@
 import type { SessionTokenStats } from '../../../shared/types'
 import type { MessageKey, TranslateParams } from '../../i18n/messages'
 import { formatTokens } from '../../utils/formatTokens'
-import { compactedCallIndexes, contextWindowEvidence, findCacheBreaks, SHORT_TTL_MINUTES } from './insightEngine'
+import { compactedAfterLastCall, compactedCallIndexes, contextWindowEvidence, findCacheBreaks, SHORT_TTL_MINUTES } from './insightEngine'
 
 // Token Budget 面板的「這場發生了什麼」：facts 只放數字（不翻譯、不帶樣式），故事句、卡片、事件、建議、圖例
 // 都從同一份 facts 組出來，面板算一次 facts、切語言只重組文字。
@@ -49,9 +49,11 @@ export interface SessionFacts {
   maxContextCall: number | null
   lastContext: number
   windowEvidence: '1m' | null
-  /** 壓縮與快取中斷，依呼叫序 */
+  /** 量得到前後的壓縮與快取中斷，依呼叫序 */
   events: SessionEvent[]
   compactions: CompactionEvent[]
+  /** 最後一次呼叫之後被壓縮：量不到前後，不在 compactions 與 events 裡、不畫在時間軸上，但算進壓縮次數、排在事件清單最後 */
+  compactedAfterLastCall: boolean
   cacheBreaks: CacheBreakEvent[]
   rewrittenTokens: number
   idle: CauseTally
@@ -146,12 +148,18 @@ export function buildSessionFacts(stats: SessionTokenStats): SessionFacts {
     windowEvidence: contextWindowEvidence(turns),
     events: [...compactions, ...cacheBreaks].sort((a, b) => a.call - b.call),
     compactions,
+    compactedAfterLastCall: compactedAfterLastCall(turns, stats.compactions),
     cacheBreaks,
     rewrittenTokens: cacheBreaks.reduce((sum, b) => sum + b.rewrittenTokens, 0),
     idle: tally(cacheBreaks, 'idle_expired'),
     modelSwitch: tally(cacheBreaks, 'model_switch'),
     unknown: tally(cacheBreaks, 'unknown'),
   }
+}
+
+/** 壓縮次數：量得到前後的，加上最後一次呼叫之後的那次 */
+function compactionCount(facts: SessionFacts): number {
+  return facts.compactions.length + (facts.compactedAfterLastCall ? 1 : 0)
 }
 
 /** 最長 context 是 1M 的幾 %（四捨五入）；沒有 1M 證據就不算，不拿 200K 去除 */
@@ -204,8 +212,13 @@ export function timelineMarkers(facts: SessionFacts): TimelineMarkers {
 /** 事件超過這麼多筆，清單先分類彙總 */
 export const EVENT_LIST_MAX = 6
 
+/** 事件清單的筆數：時間軸上的事件，加上排在最後的「最後一次呼叫之後被壓縮」 */
+function eventCount(facts: SessionFacts): number {
+  return facts.events.length + (facts.compactedAfterLastCall ? 1 : 0)
+}
+
 export function eventsNeedSummary(facts: SessionFacts): boolean {
-  return facts.events.length > EVENT_LIST_MAX
+  return eventCount(facts) > EVENT_LIST_MAX
 }
 
 // ── 文案 ──
@@ -274,19 +287,23 @@ export function storyParts(facts: SessionFacts, t: Translate): TextPart[] {
     parts.push(...fillTemplate(t(facts.maxContext >= UNKNOWN_WINDOW_MENTION ? 'tokenBudget.story.windowUnknown' : 'tokenBudget.story.windowNone')))
   }
 
-  const compactions = facts.compactions
-  if (compactions.length === 1) {
-    const c = compactions[0]
+  // 最後一次呼叫之後的壓縮量不到前後，但它發生過：照樣算次數，不寫成沒有被壓縮
+  const compacted = compactionCount(facts)
+  if (compacted === 1 && facts.compactedAfterLastCall) {
+    parts.push(...fillTemplate(t('tokenBudget.story.compactedAfterLastCall')))
+  } else if (compacted === 1) {
+    const c = facts.compactions[0]
     parts.push(...fillTemplate(t('tokenBudget.story.compactedOnce'), {
       call: formatCount(c.call), before: formatTokens(c.before), after: formatTokens(c.after),
     }))
-  } else if (compactions.length > 1) {
-    parts.push(...fillTemplate(t('tokenBudget.story.compactedMany'), { count: formatCount(compactions.length) }))
+  } else if (compacted > 1) {
+    const key = facts.compactedAfterLastCall ? 'tokenBudget.story.compactedManyAfterLastCall' : 'tokenBudget.story.compactedMany'
+    parts.push(...fillTemplate(t(key), { count: formatCount(compacted) }))
   }
 
   const breaks = facts.cacheBreaks
   if (breaks.length === 0) {
-    parts.push(...fillTemplate(t(compactions.length === 0 ? 'tokenBudget.story.cacheClean' : 'tokenBudget.story.cacheIntact')))
+    parts.push(...fillTemplate(t(compacted === 0 ? 'tokenBudget.story.cacheClean' : 'tokenBudget.story.cacheIntact')))
     return parts
   }
   parts.push(...fillTemplate(t(breaks.length === 1 ? 'tokenBudget.story.cacheBroken.one' : 'tokenBudget.story.cacheBroken.other'), {
@@ -326,7 +343,7 @@ export function numberCards(facts: SessionFacts, t: Translate): NumberCard[] {
       : { id: 'duration', label: t('tokenBudget.card.duration'), value: t('tokenBudget.card.noValue'), sub: null },
     { id: 'calls', label: t('tokenBudget.card.calls'), value: count(facts.calls), sub: null },
     { id: 'maxContext', label: t('tokenBudget.card.maxContext'), value: formatTokens(facts.maxContext), sub: maxContextSub },
-    { id: 'compactions', label: t('tokenBudget.card.compactions'), value: count(facts.compactions.length), sub: null },
+    { id: 'compactions', label: t('tokenBudget.card.compactions'), value: count(compactionCount(facts)), sub: null },
     {
       id: 'cacheBreaks',
       label: t('tokenBudget.card.cacheBreaks'),
@@ -404,25 +421,43 @@ function eventItem(e: SessionEvent, t: Translate): ListItem {
 }
 
 export function eventItems(facts: SessionFacts, t: Translate): ListItem[] {
-  return facts.events.map(e => eventItem(e, t))
+  const items = facts.events.map(e => eventItem(e, t))
+  // 最後一次呼叫之後的壓縮沒有呼叫可以掛，不在時間軸上；依時間它是最後一件
+  if (facts.compactedAfterLastCall) {
+    items.push({
+      id: 'compaction-after-last-call',
+      icon: EVENT_ICON.compaction,
+      tone: EVENT_TONE.compaction,
+      title: t('tokenBudget.events.compactionAfterLastCall.title'),
+      detail: t('tokenBudget.events.compactionAfterLastCall.detail'),
+    })
+  }
+  return items
 }
 
 /** 事件太多時的彙總：只列發生過的種類 */
 export function eventSummaryRows(facts: SessionFacts, t: Translate): ListItem[] {
   const rows: ListItem[] = []
-  const compactions = facts.compactions
-  if (compactions.length > 0) {
-    const latest = compactions[compactions.length - 1]
+  const compacted = compactionCount(facts)
+  if (compacted > 0) {
+    let latest: string
+    if (facts.compactedAfterLastCall) {
+      // 最晚的是最後一次呼叫之後那次，量不到前後
+      latest = t('tokenBudget.events.summary.compactionsLatestAfterLastCall')
+    } else {
+      const c = facts.compactions[facts.compactions.length - 1]
+      latest = t('tokenBudget.events.summary.compactionsLatest', {
+        call: formatCount(c.call), before: formatTokens(c.before), after: formatTokens(c.after),
+      })
+    }
     rows.push({
       id: 'summary-compactions',
       icon: EVENT_ICON.compaction,
       tone: EVENT_TONE.compaction,
-      title: t(compactions.length === 1 ? 'tokenBudget.events.summary.compactions.one' : 'tokenBudget.events.summary.compactions.other', {
-        count: formatCount(compactions.length),
+      title: t(compacted === 1 ? 'tokenBudget.events.summary.compactions.one' : 'tokenBudget.events.summary.compactions.other', {
+        count: formatCount(compacted),
       }),
-      detail: t('tokenBudget.events.summary.compactionsLatest', {
-        call: formatCount(latest.call), before: formatTokens(latest.before), after: formatTokens(latest.after),
-      }),
+      detail: latest,
     })
   }
   const breaks = facts.cacheBreaks.length
@@ -456,7 +491,7 @@ export interface EventListText {
 }
 
 export function eventListText(facts: SessionFacts, t: Translate): EventListText {
-  const n = facts.events.length
+  const n = eventCount(facts)
   return {
     title: t('tokenBudget.events.title'),
     subtitle: n === 0
