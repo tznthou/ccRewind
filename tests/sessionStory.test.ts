@@ -363,8 +363,8 @@ describe('storyParts', () => {
 
   it('a long context with no evidence of the window, compacted and broken several times', () => {
     const facts = busyNoEvidence()
-    expect(text(storyParts(facts, tZh))).toBe('這場對話 3 小時 23 分、11 次呼叫，內容最多累積到 171.0K token，看不出這場的視窗是 200K 還是 1M。對話被壓縮 2 次。快取中斷 3 次，共重寫 85.0K，其中 2 次是離開超過 1 小時後回來。')
-    expect(text(storyParts(facts, tEn))).toBe('This session ran 3 h 23 min over 11 calls, and the context peaked at 171.0K tokens; there\'s no telling whether the window was 200K or 1M. The conversation was compacted 2 times. The cache broke 3 times, rewriting 85.0K in total; 2 of those came after more than an hour away.')
+    expect(text(storyParts(facts, tZh))).toBe('這場對話 3 小時 23 分、11 次呼叫，內容最多累積到 171.0K token，看不出這場的視窗是 200K 還是 1M。對話被壓縮 2 次。快取中斷 3 次，共重寫 85.0K，其中 2 次是離開 1 小時以上後回來。')
+    expect(text(storyParts(facts, tEn))).toBe('This session ran 3 h 23 min over 11 calls, and the context peaked at 171.0K tokens; there\'s no telling whether the window was 200K or 1M. The conversation was compacted 2 times. The cache broke 3 times, rewriting 85.0K in total; 2 of those came after an hour or more away.')
   })
 
   // 故事句只點名閒置（它有建議可給）；其他原因只報次數與重寫量，句子照樣收尾
@@ -567,7 +567,7 @@ describe('adviceItems', () => {
     expect(adviceItems(everyCause(), tZh)).toEqual([
       {
         id: 'advice-idle', icon: '⏰', tone: 'warning',
-        title: '離開超過 1 小時，回來時快取已經過期',
+        title: '離開 1 小時以上，回來時快取已經過期',
         detail: '訂閱額度內的主對話，快取閒置 1 小時就會過期，下一次呼叫要把整段對話重寫一次。這場第 8 次呼叫回來時重寫了 90.0K（這場共 2 次，合計 140.0K）。要離開又想保留脈絡，可以離開前先 /compact：快取還在時壓縮比較便宜，回來要重寫的只剩摘要。',
       },
       {
@@ -581,6 +581,8 @@ describe('adviceItems', () => {
         detail: '共重寫 30.0K。進行中的對話可以用 Claude Code 的 /usage 看最近一次快取失效的可能原因。',
       },
     ])
+    // 規則是閒置 >= 60 分：剛好 1 小時也算，所以寫「以上」不寫「超過」
+    expect(adviceItems(everyCause(), tEn)[0].title).toBe('Away for an hour or more, and the cache had expired')
   })
 
   it('quotes the earlier call when two idle rewrites are the same size', () => {
