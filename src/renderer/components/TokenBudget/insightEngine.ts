@@ -58,7 +58,7 @@ const REWRITE_READ_RATIO = 0.5
 const REWRITE_KEEP_RATIO = 0.8
 /** 間隔達此分鐘數視為閒置過期（2026-09-30 實測：<40 分鐘重寫 ≤5%、≥60 分鐘 91–94%；訂閱額度內主對話 TTL 1 小時） */
 const IDLE_EXPIRED_MINUTES = 60
-/** API key／超額時主對話 TTL 只有 5 分鐘 */
+/** API key／超額時主對話 TTL 預設只有 5 分鐘（可以設定成 1 小時） */
 export const SHORT_TTL_MINUTES = 5
 
 /** 閒置過期一定量得到間隔；其他原因的間隔可能不知道（缺時間戳） */

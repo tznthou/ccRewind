@@ -414,7 +414,7 @@ function eventItem(e: SessionEvent, t: Translate): ListItem {
       }
     case 'unknown': {
       const gap = e.gapMinutes == null ? '' : t('tokenBudget.events.gapSincePrevious', { span: formatSpan(e.gapMinutes, t) })
-      // API key／超額時快取只保留 5 分鐘：間隔夠長的「原因不明」可能就是這樣過期的
+      // API key／超額時快取預設只保留 5 分鐘：間隔夠長的「原因不明」可能就是這樣過期的
       const shortTtl = e.gapMinutes != null && e.gapMinutes >= SHORT_TTL_MINUTES ? t('tokenBudget.events.unknown.shortTtl') : ''
       return {
         ...base,

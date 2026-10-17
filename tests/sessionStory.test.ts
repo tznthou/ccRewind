@@ -453,7 +453,7 @@ describe('eventItems', () => {
       {
         id: 'unknown-4', icon: 'unknown', tone: 'info',
         title: '快取中斷，原因不明，重寫 50.0K',
-        detail: '第 4 次呼叫 · 距上一次呼叫 11 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘',
+        detail: '第 4 次呼叫 · 距上一次呼叫 11 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘',
       },
     ])
   })
@@ -470,8 +470,8 @@ describe('eventItems', () => {
   it.each<[number | null, string]>([
     [3, '第 2 次呼叫 · 距上一次呼叫 3 分鐘'],
     [4.99, '第 2 次呼叫 · 距上一次呼叫 4 分鐘'],
-    [5, '第 2 次呼叫 · 距上一次呼叫 5 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘'],
-    [10, '第 2 次呼叫 · 距上一次呼叫 10 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘'],
+    [5, '第 2 次呼叫 · 距上一次呼叫 5 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘'],
+    [10, '第 2 次呼叫 · 距上一次呼叫 10 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘'],
   ])('mentions the 5-minute cache only for a gap of 5 minutes or more (gap %s)', (gap, detail) => {
     const facts = factsOf(withBreaks([{ cause: 'unknown', rewritten: 50_000, gap: gap ?? undefined }]))
     expect(eventItems(facts, tZh)[0].detail).toBe(detail)
@@ -499,7 +499,7 @@ describe('eventItems', () => {
   it('English wording', () => {
     expect(eventItems(idleThenUnknown(), tEn).map(e => [e.title, e.detail])).toEqual([
       ['Back after about 2 h 38 min away: cache expired, 99.0K rewritten', 'Call 2 · 2 h 38 min in. The cache timed out while idle, so the first message back reprocessed the whole conversation'],
-      ['Cache broke for an unknown reason, 50.0K rewritten', 'Call 4 · 11 min after the previous call. With an API key or over your plan\'s usage, the cache only lasts 5 minutes'],
+      ['Cache broke for an unknown reason, 50.0K rewritten', 'Call 4 · 11 min after the previous call. With an API key or over your plan\'s usage, the cache only lasts 5 minutes by default'],
     ])
   })
 })
