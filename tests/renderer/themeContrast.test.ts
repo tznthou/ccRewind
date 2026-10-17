@@ -33,7 +33,8 @@ function parseColor(value: string): Rgba {
   const fn = value.match(/^rgba?\(([^)]+)\)$/)
   if (fn) {
     const [r, g, b, a = 1] = fn[1].split(/[\s,/]+/).filter(Boolean).map(Number)
-    return [r, g, b, a]
+    // 百分比之類的寫法會變成 NaN，而 NaN < 4.5 是 false：那個底色會被默默略過、照樣報綠
+    if ([r, g, b, a].every(Number.isFinite)) return [r, g, b, a]
   }
   throw new Error(`認不得的顏色：${value}`)
 }
@@ -56,11 +57,12 @@ function contrast(a: Rgba, b: Rgba): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
+// timeline 用 :root；其他主題從 global.css 的 [data-theme="…"] 區塊找，之後加的主題也會被檢查到
 const ROOT = tokens(':root')
+const THEME_NAMES = [...GLOBAL_CSS.matchAll(/^\[data-theme="([\w-]+)"\] \{/gm)].map(m => m[1])
 const THEMES: Record<string, Record<string, string>> = {
   timeline: ROOT,
-  archive: { ...ROOT, ...tokens('[data-theme="archive"]') },
-  terminal: { ...ROOT, ...tokens('[data-theme="terminal"]') },
+  ...Object.fromEntries(THEME_NAMES.map(name => [name, { ...ROOT, ...tokens(`[data-theme="${name}"]`) }])),
 }
 
 describe('主題的錯誤色對比', () => {
@@ -70,6 +72,12 @@ describe('主題的錯誤色對比', () => {
     expect(contrast(parseColor('#767676'), parseColor('#FFFFFF'))).toBeCloseTo(4.54, 2)
     expect(over(parseColor('rgba(0, 0, 0, 0.5)'), parseColor('#FFFFFF'))).toEqual([127.5, 127.5, 127.5, 1])
     expect(over(parseColor('transparent'), parseColor('#1B1D23'))).toEqual(parseColor('#1B1D23'))
+  })
+
+  it('認不得的顏色寫法直接報錯，不會變成 NaN 被略過；主題都有找到', () => {
+    expect(() => parseColor('rgb(10% 20% 30%)')).toThrow()
+    expect(() => parseColor('var(--color-bg)')).toThrow()
+    expect(Object.keys(THEMES)).toEqual(expect.arrayContaining(['timeline', 'archive', 'terminal']))
   })
 
   it.each(Object.keys(THEMES))('%s：錯誤色在每種底色上都至少 4.5:1', theme => {
