@@ -59,13 +59,15 @@ Click the Dashboard icon (four-square grid) in the title bar to switch to the cr
 
 The project dropdown in the top-right filters all charts simultaneously to a specific project.
 
+The 7D / 30D / 90D / All range applies to the usage and efficiency trends, tool usage, tags and work patterns; project health and unresolved sessions always cover all time (project health's trend arrow compares the last 7 days with the 7 days before them). The statistics include sessions whose original JSONL Claude Code has already cleaned up (the ones marked "Archived" in the sidebar). Session counts cover main sessions only, not subagents; the usage trend's tokens add what subagents used, and the efficiency trend counts main sessions only.
+
 ## Cross-Session Archaeology
 
 Open any session and the toolbar shows a file-count button (e.g. `12 files ▾`). Expanding it lists every file this session operated on, color-coded by operation type (yellow = edit, green = write, blue = read, purple = discovery).
 
 Click any file to slide out the **File History** drawer from the right, which timelines every session that touched that file. Click any entry to jump directly to that session.
 
-At the bottom of the conversation, **Related Sessions** recommendations appear automatically — based on Jaccard similarity over file overlap, surfacing other sessions that modified the same files, with shared filenames and similarity percentages.
+At the bottom of the conversation, **Related Sessions** recommendations appear automatically — based on Jaccard similarity over file overlap, surfacing other sessions that modified the same files, with shared filenames and similarity percentages. Sessions whose original files have been cleaned up are included too.
 
 ## Storage Management
 
