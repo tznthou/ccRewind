@@ -3,6 +3,7 @@ import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import type { DistributionItem } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../TokenBudget/chartConstants'
+import { formatDistributionTooltip } from './distributionTooltip'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -45,7 +46,7 @@ export default function DistributionPieChart({ data, emptyText, unitLabel, ariaL
               dataKey="value"
             />
             <Tooltip
-              formatter={(value) => [Number(value).toLocaleString(), unitLabel]}
+              formatter={(value, name) => formatDistributionTooltip(value, name, unitLabel)}
               contentStyle={CHART_TOOLTIP_STYLE}
               itemStyle={CHART_TOOLTIP_ITEM_STYLE}
             />
