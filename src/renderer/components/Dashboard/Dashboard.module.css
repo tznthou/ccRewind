@@ -18,14 +18,18 @@
   font-size: var(--font-size-xl);
   font-weight: 700;
   color: var(--color-text);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .controls {
   display: flex;
   gap: var(--space-sm);
   align-items: center;
+  min-width: 0;
 }
 
+/* <select> 會跟著最長的選項變寬，不設上限就把標題與區間按鈕擠到換行；選項已經縮成不撞名的尾段（projectLabels），上限只是保險 */
 .filterSelect {
   padding: var(--space-xs) var(--space-sm);
   font-size: var(--font-size-sm);
@@ -35,6 +39,11 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
+  min-width: 0;
+  max-width: 320px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .rangeGroup {
@@ -43,6 +52,7 @@
   background: var(--color-bg-hover);
   border-radius: var(--radius-sm);
   padding: 2px;
+  flex-shrink: 0;
 }
 
 .rangeButton {
@@ -55,6 +65,7 @@
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
 
 .rangeButton:hover {

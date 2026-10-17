@@ -59,13 +59,15 @@ Session 列表的每筆項目旁顯示 token 總量（如 1.2M），並可點擊
 
 右上角的下拉選單可以篩選特定專案，所有圖表同步更新。
 
+7D / 30D / 90D / 全部 套用到使用量／效率趨勢、工具使用、標籤和工作型態；專案健康與未收尾的對話一律看全部期間（專案健康的趨勢箭頭固定比較最近 7 天與再往前 7 天）。統計包含原始 JSONL 已被 Claude Code 自動清理的對話（側欄標「已封存」的那些）。session 數只算主對話、不含 subagent；使用量趨勢的 token 會加上 subagent 用掉的量，效率趨勢只算主對話。
+
 ## 跨 Session 考古
 
 進入任何 Session 後，工具列會顯示檔案數按鈕（如 `12 files ▾`）。展開後顯示該 session 操作的所有檔案，以色碼標記操作類型（黃=edit、綠=write、藍=read、紫=discovery）。
 
 點擊任一檔案會從右側滑出 **File History** 抽屜，以時間軸呈現該檔案在所有 session 中的操作歷史。點擊任一條目可直接跳轉到該 session。
 
-對話底部會自動顯示 **Related Sessions** 推薦——基於檔案交集的 Jaccard 相似度計算，找出跟當前 session 改過相同檔案的其他 session，顯示共享檔案名和相似度百分比。
+對話底部會自動顯示 **Related Sessions** 推薦——基於檔案交集的 Jaccard 相似度計算，找出跟當前 session 改過相同檔案的其他 session，顯示共享檔案名和相似度百分比。原始檔已被清理的對話也會列入。
 
 ## 儲存管理
 

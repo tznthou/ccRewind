@@ -1258,14 +1258,17 @@ export class Database {
 
   // ── Phase 3.5: Dashboard Stats ──
 
-  /** 每日使用趨勢（session 數 + token 消耗） */
-  getUsageStats(projectId?: string | null, days = 30): DailyUsage[] {
+  /**
+   * 每日使用趨勢（session 數 + token 消耗）。
+   * session 數只算主對話；token 連 subagent 一起加，那是實際燒掉的量（parent 的總量不含 subagent）。
+   */
+  getUsageStats(projectId: string | null, days: number): DailyUsage[] {
     let sql = `
       SELECT date(started_at) AS date,
-             COUNT(*) AS session_count,
+             SUM(CASE WHEN id ${Database.EXCLUDE_SUBAGENTS} THEN 1 ELSE 0 END) AS session_count,
              COALESCE(SUM(total_input_tokens), 0) + COALESCE(SUM(total_output_tokens), 0) AS total_tokens
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0
+      WHERE started_at IS NOT NULL
     `
     const params: (string | number)[] = []
 
@@ -1301,7 +1304,7 @@ export class Database {
              MAX(s.started_at) AS last_activity
       FROM sessions s
       JOIN projects p ON p.id = s.project_id
-      WHERE s.archived = 0
+      WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
       GROUP BY s.project_id
       ORDER BY session_count DESC
     `).all() as Array<{
@@ -1321,10 +1324,14 @@ export class Database {
     }))
   }
 
-  /** 工具分佈（從 tools_used CSV 欄位聚合） */
-  getToolDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = `SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`
+  /** 工具分佈（從 tools_used CSV 欄位聚合）；days = 0 為全部期間 */
+  getToolDistribution(projectId: string | null, days: number): DistributionItem[] {
+    let sql = `SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
+    if (days > 0) {
+      sql += ` AND started_at >= date('now', ?)`
+      params.push(`-${days} days`)
+    }
     if (projectId) {
       sql += ' AND project_id = ?'
       params.push(projectId)
@@ -1352,10 +1359,14 @@ export class Database {
       .sort((a, b) => b.count - a.count)
   }
 
-  /** 標籤分佈（從 tags CSV 欄位聚合） */
-  getTagDistribution(projectId?: string | null): DistributionItem[] {
-    let sql = `SELECT tags FROM sessions WHERE tags IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}`
+  /** 標籤分佈（從 tags CSV 欄位聚合）；days = 0 為全部期間 */
+  getTagDistribution(projectId: string | null, days: number): DistributionItem[] {
+    let sql = `SELECT tags FROM sessions WHERE tags IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
+    if (days > 0) {
+      sql += ` AND started_at >= date('now', ?)`
+      params.push(`-${days} days`)
+    }
     if (projectId) {
       sql += ' AND project_id = ?'
       params.push(projectId)
@@ -1378,20 +1389,26 @@ export class Database {
       .sort((a, b) => b.count - a.count)
   }
 
-  /** 工作模式（時段分佈 + 平均 session 長度） */
-  getWorkPatterns(projectId?: string | null): WorkPatterns {
+  /** 工作模式（時段分佈 + 平均 session 長度）；days = 0 為全部期間 */
+  getWorkPatterns(projectId: string | null, days: number): WorkPatterns {
     let hourSql = `
       SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}
+      WHERE started_at IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}
     `
     let durationSql = `
       SELECT AVG(COALESCE(active_duration_seconds, duration_seconds)) AS avg_duration
       FROM sessions
-      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND archived = 0 AND id ${Database.EXCLUDE_SUBAGENTS}
+      WHERE started_at IS NOT NULL AND (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND id ${Database.EXCLUDE_SUBAGENTS}
     `
+    // 兩條 SQL 共用 params：條件要用同樣的順序加。started_at 兩邊都要：時段分布與平均時長算的是同一群 session
     const params: string[] = []
 
+    if (days > 0) {
+      hourSql += ` AND started_at >= date('now', ?)`
+      durationSql += ` AND started_at >= date('now', ?)`
+      params.push(`-${days} days`)
+    }
     if (projectId) {
       hourSql += ' AND project_id = ?'
       durationSql += ' AND project_id = ?'
@@ -1421,7 +1438,7 @@ export class Database {
   // ── Phase 4: Dashboard 進階功能 ──
 
   /** 效率趨勢：每日 token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
-  getEfficiencyTrend(projectId?: string | null, days = 30): DailyEfficiency[] {
+  getEfficiencyTrend(projectId: string | null, days: number): DailyEfficiency[] {
     let sql = `
       SELECT date(started_at) AS date,
              COUNT(*) AS session_count,
@@ -1434,7 +1451,7 @@ export class Database {
                ELSE 0
              END AS avg_tokens_per_turn
       FROM sessions
-      WHERE started_at IS NOT NULL AND archived = 0 AND message_count > 0 AND id ${Database.EXCLUDE_SUBAGENTS}
+      WHERE started_at IS NOT NULL AND message_count > 0 AND id ${Database.EXCLUDE_SUBAGENTS}
     `
     const params: (string | number)[] = []
 
@@ -1476,8 +1493,7 @@ export class Database {
              END AS file_count
       FROM sessions s
       JOIN projects p ON p.id = s.project_id
-      WHERE s.archived = 0
-        AND s.id ${Database.EXCLUDE_SUBAGENTS}
+      WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
         AND (s.outcome_status IS NULL OR s.outcome_status NOT IN ('committed', 'tested'))
         AND (COALESCE(s.total_input_tokens, 0) + COALESCE(s.total_output_tokens, 0)) > 0
     `
@@ -1535,7 +1551,7 @@ export class Database {
              END AS avg_tokens_per_turn
       FROM sessions s
       JOIN projects p ON p.id = s.project_id
-      WHERE s.archived = 0
+      WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
       GROUP BY s.project_id
       ORDER BY recent_count DESC, committed + tested DESC
     `).all() as Array<{
@@ -1588,7 +1604,6 @@ export class Database {
       JOIN projects p ON p.id = s.project_id
       WHERE sf.file_path IN (${placeholders})
         AND sf.session_id != ?
-        AND s.archived = 0
         AND s.id ${Database.EXCLUDE_SUBAGENTS}
     `).all(...targetFiles.map(r => r.file_path), sessionId) as Array<{
       session_id: string

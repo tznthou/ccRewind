@@ -10,6 +10,7 @@ import ProjectHealthComponent from './ProjectHealth'
 import ToolDistribution from './ToolDistribution'
 import TagDistribution from './TagDistribution'
 import WorkPatternHeatmap from './WorkPatternHeatmap'
+import { projectLabels } from './projectLabels'
 import styles from './Dashboard.module.css'
 
 const RANGE_OPTIONS: ReadonlyArray<{ days: number; labelKey: MessageKey }> = [
@@ -21,7 +22,10 @@ const RANGE_OPTIONS: ReadonlyArray<{ days: number; labelKey: MessageKey }> = [
 
 interface ProjectOption {
   id: string
+  /** 完整路徑，放在 title：收合時滑鼠停在下拉上看得到；macOS 展開後是原生選單，不一定顯示選項的 title */
   name: string
+  /** 下拉顯示的文字：跟其他專案不撞名的最短尾段 */
+  label: string
 }
 
 interface CardProps {
@@ -75,7 +79,8 @@ export default function DashboardPage() {
     window.api.getProjectStats()
       .then(ps => {
         setProjectStats(ps)
-        setProjects(ps.map(p => ({ id: p.projectId, name: p.displayName })))
+        const labels = projectLabels(ps.map(p => p.displayName))
+        setProjects(ps.map((p, i) => ({ id: p.projectId, name: p.displayName, label: labels[i] })))
       })
       .catch(() => { /* graceful degrade */ })
     window.api.getProjectHealth()
@@ -90,9 +95,9 @@ export default function DashboardPage() {
       try {
         const results = await Promise.allSettled([
           window.api.getUsageStats(projectFilter, range),
-          window.api.getToolDistribution(projectFilter),
-          window.api.getTagDistribution(projectFilter),
-          window.api.getWorkPatterns(projectFilter),
+          window.api.getToolDistribution(projectFilter, range),
+          window.api.getTagDistribution(projectFilter, range),
+          window.api.getWorkPatterns(projectFilter, range),
           window.api.getEfficiencyTrend(projectFilter, range),
           window.api.getWasteSessions(projectFilter),
         ])
@@ -144,10 +149,11 @@ export default function DashboardPage() {
             value={projectFilter ?? ''}
             onChange={e => setProjectFilter(e.target.value || null)}
             aria-label={t('dashboard.filter.label')}
+            title={projects.find(p => p.id === projectFilter)?.name}
           >
             <option value="">{t('dashboard.filter.allProjects')}</option>
             {projects.map(p => (
-              <option key={p.id} value={p.id}>{p.name}</option>
+              <option key={p.id} value={p.id} title={p.name}>{p.label}</option>
             ))}
           </select>
 

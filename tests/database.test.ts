@@ -3,7 +3,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { Database } from '../src/main/database'
-import type { MessageInput } from '../src/main/database'
+import type { IndexSessionParams, MessageInput } from '../src/main/database'
 import { BACKFILL_HAS_REMOTE_CONTROL_SQL } from '../src/main/migrations'
 import { SUMMARY_VERSION } from '../src/main/summarizer'
 
@@ -1015,7 +1015,7 @@ describe('Phase 3.5: getToolDistribution', () => {
   })
 
   it('aggregates tool counts across sessions', () => {
-    const dist = db.getToolDistribution()
+    const dist = db.getToolDistribution(null, 0)
     expect(dist.length).toBeGreaterThanOrEqual(3)
 
     const read = dist.find(d => d.name === 'Read')!
@@ -1037,7 +1037,7 @@ describe('Phase 3.5: getToolDistribution', () => {
       messages: [],
     })
 
-    const dist = db.getToolDistribution('proj-td')
+    const dist = db.getToolDistribution('proj-td', 0)
     const grep = dist.find(d => d.name === 'Grep')
     expect(grep).toBeUndefined()
   })
@@ -1062,7 +1062,7 @@ describe('Phase 3.5: getTagDistribution', () => {
   })
 
   it('aggregates tag counts across sessions', () => {
-    const dist = db.getTagDistribution()
+    const dist = db.getTagDistribution(null, 0)
     const bugFix = dist.find(d => d.name === 'bug-fix')!
     expect(bugFix.count).toBe(2) // appears in both sessions
 
@@ -1103,7 +1103,7 @@ describe('Phase 3.5: getWorkPatterns', () => {
   })
 
   it('returns 24 hours with counts', () => {
-    const patterns = db.getWorkPatterns()
+    const patterns = db.getWorkPatterns(null, 0)
     expect(patterns.hourly).toHaveLength(24)
 
     const hour9 = patterns.hourly.find(h => h.hour === 9)!
@@ -1118,7 +1118,7 @@ describe('Phase 3.5: getWorkPatterns', () => {
   })
 
   it('returns average duration', () => {
-    const patterns = db.getWorkPatterns()
+    const patterns = db.getWorkPatterns(null, 0)
     // (3600 + 1800 + 900) / 3 = 2100
     expect(patterns.avgDurationSeconds).toBe(2100)
   })
@@ -1344,6 +1344,178 @@ describe('Phase 4: getProjectHealth', () => {
     const h = health.find(p => p.projectId === 'proj-h')!
     // total tokens = 12500, total JSONL records = 18, avg ≈ 694
     expect(h.avgTokensPerTurn).toBe(694)
+  })
+})
+
+// ── 儀表板統計範圍：封存的 session 與 subagent ──
+// 封存＝原始 JSONL 已從磁碟消失（多半是 Claude Code 的 30 天自動清理），索引庫裡的副本是那段對話唯一還在的地方，
+// 所以儀表板與相關 session 都要算進來。subagent 在 sessions 表另有一列：不算場數，使用量的 token 照算。
+
+describe('dashboard scope: archived sessions and subagents', () => {
+  const daysAgo = (n: number): string => new Date(Date.now() - n * 86_400_000).toISOString()
+
+  interface ScopeSeed {
+    projectId?: string
+    startedAt?: string | null
+    tokens?: [number, number]
+    toolsUsed?: string
+    tags?: string
+    outcomeStatus?: IndexSessionParams['outcomeStatus']
+    durationSeconds?: number
+    files?: string[]
+    archived?: boolean
+  }
+
+  function seed(sessionId: string, opts: ScopeSeed = {}): void {
+    const projectId = opts.projectId ?? 'proj-scope'
+    const [input, output] = opts.tokens ?? [100, 50]
+    db.indexSession({
+      sessionId, projectId, projectDisplayName: `/test/${projectId}`,
+      title: sessionId, messageCount: 1, filePath: `/tmp/${sessionId}.jsonl`, fileSize: 0,
+      fileMtime: '2026-01-01T00:00:00.000Z',
+      startedAt: opts.startedAt === undefined ? daysAgo(3) : opts.startedAt, endedAt: null,
+      toolsUsed: opts.toolsUsed, tags: opts.tags, outcomeStatus: opts.outcomeStatus, durationSeconds: opts.durationSeconds,
+      sessionFiles: opts.files?.map((filePath, i) => ({ filePath, operation: 'edit', count: 1, firstSeenSeq: i, lastSeenSeq: i })),
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: input, outputTokens: output })],
+    })
+    if (opts.archived) db.rawExec('UPDATE sessions SET archived = 1 WHERE id = ?', sessionId)
+  }
+
+  /** subagent 在 subagent_sessions 與 sessions 各有一列（同 indexer 的寫法） */
+  function seedSubagent(parentId: string, subId: string, opts: ScopeSeed = {}): void {
+    const startedAt = opts.startedAt === undefined ? daysAgo(3) : opts.startedAt
+    db.indexSubagentSession({
+      id: subId, parentSessionId: parentId, agentType: 'Explore', filePath: `/tmp/${subId}.jsonl`,
+      fileSize: 0, fileMtime: '2026-01-01T00:00:00.000Z', messageCount: 1, startedAt, endedAt: null,
+    })
+    seed(subId, { ...opts, startedAt })
+  }
+
+  it('getUsageStats counts archived sessions', () => {
+    seed('u-live', { tokens: [1000, 500] })
+    seed('u-gone', { startedAt: daysAgo(200), tokens: [300, 100], archived: true })
+
+    const all = db.getUsageStats(null, 0)
+    expect(all.reduce((s, d) => s + d.sessionCount, 0)).toBe(2)
+    expect(all.reduce((s, d) => s + d.totalTokens, 0)).toBe(1500 + 400)
+  })
+
+  it('getUsageStats adds subagent tokens, archived or not, without counting subagents as sessions', () => {
+    seed('u-parent', { tokens: [1000, 500] })
+    seedSubagent('u-parent', 'u-parent/agent-a', { tokens: [200, 100] })
+    seedSubagent('u-parent', 'u-parent/agent-b', { tokens: [40, 10], archived: true })
+
+    const all = db.getUsageStats(null, 0)
+    expect(all.reduce((s, d) => s + d.sessionCount, 0)).toBe(1)
+    expect(all.reduce((s, d) => s + d.totalTokens, 0)).toBe(1500 + 300 + 50)
+  })
+
+  it('getUsageStats keeps subagent tokens inside the project and range filters', () => {
+    seed('up-a', { projectId: 'proj-ua', tokens: [1000, 0] })
+    seedSubagent('up-a', 'up-a/agent-a', { projectId: 'proj-ua', tokens: [100, 0] })
+    seed('up-b', { projectId: 'proj-ub', tokens: [5000, 0] })
+    seedSubagent('up-b', 'up-b/agent-b', { projectId: 'proj-ub', tokens: [500, 0] })
+    seed('up-old', { projectId: 'proj-ua', startedAt: daysAgo(40), tokens: [7000, 0] })
+    seedSubagent('up-old', 'up-old/agent-c', { projectId: 'proj-ua', startedAt: daysAgo(40), tokens: [700, 0] })
+
+    const stats = db.getUsageStats('proj-ua', 30)
+    expect(stats.reduce((s, d) => s + d.sessionCount, 0)).toBe(1)
+    expect(stats.reduce((s, d) => s + d.totalTokens, 0)).toBe(1100)
+  })
+
+  it('getProjectStats lists projects whose sessions are all archived and ranks projects by main sessions', () => {
+    for (const n of [1, 2, 3]) seed(`ps-three-${n}`, { projectId: 'proj-three' })
+    for (const n of [1, 2]) seed(`ps-two-${n}`, { projectId: 'proj-two' })
+    for (const n of [1, 2, 3]) seedSubagent('ps-two-1', `ps-two-1/agent-${n}`, { projectId: 'proj-two' })
+    seed('ps-gone', { projectId: 'proj-gone', startedAt: daysAgo(200), archived: true })
+
+    const stats = db.getProjectStats()
+    // 這份清單只餵專案下拉，畫面上看得到的是排序：subagent 不該把專案往前推
+    expect(stats.map(p => p.projectId)).toEqual(['proj-three', 'proj-two', 'proj-gone'])
+    expect(stats.find(p => p.projectId === 'proj-two')?.sessionCount).toBe(2)
+  })
+
+  it('getToolDistribution counts archived sessions and follows the range', () => {
+    seed('t-live', { toolsUsed: 'Read:2' })
+    seed('t-gone', { startedAt: daysAgo(200), toolsUsed: 'Read:5', archived: true })
+    seed('t-old', { startedAt: daysAgo(40), toolsUsed: 'Edit:4' })
+    seed('t-nostart', { startedAt: null, toolsUsed: 'Grep:1' })
+    seedSubagent('t-live', 't-live/agent-a', { toolsUsed: 'Read:100' }) // 守門：subagent 不算
+
+    const all = db.getToolDistribution(null, 0)
+    expect(all.find(d => d.name === 'Read')?.count).toBe(7)
+    expect(all.find(d => d.name === 'Edit')?.count).toBe(4)
+    expect(all.find(d => d.name === 'Grep')?.count).toBe(1) // 全部期間不看 started_at
+
+    const recent = db.getToolDistribution(null, 30)
+    expect(recent).toEqual([{ name: 'Read', count: 2 }])
+  })
+
+  it('getTagDistribution counts archived sessions and follows the range', () => {
+    seed('g-live', { tags: 'bug-fix' })
+    seed('g-gone', { startedAt: daysAgo(200), tags: 'bug-fix,auth', archived: true })
+    seed('g-old', { startedAt: daysAgo(40), tags: 'refactor' })
+    seed('g-nostart', { startedAt: null, tags: 'docs' })
+    seedSubagent('g-live', 'g-live/agent-a', { tags: 'bug-fix' }) // 守門：subagent 不算
+
+    const all = db.getTagDistribution(null, 0)
+    expect(all.find(d => d.name === 'bug-fix')?.count).toBe(2)
+    expect(all.find(d => d.name === 'auth')?.count).toBe(1)
+    expect(all.find(d => d.name === 'refactor')?.count).toBe(1)
+    expect(all.find(d => d.name === 'docs')?.count).toBe(1)
+
+    expect(db.getTagDistribution(null, 30)).toEqual([{ name: 'bug-fix', count: 1 }])
+  })
+
+  it('getWorkPatterns counts archived sessions and applies the range to both the hours and the average', () => {
+    seed('w-live', { durationSeconds: 600 })
+    seed('w-gone', { startedAt: daysAgo(200), durationSeconds: 1200, archived: true })
+    seed('w-old', { startedAt: daysAgo(40), durationSeconds: 3000 })
+    seed('w-other', { projectId: 'proj-other', durationSeconds: 60 })
+    seed('w-nostart', { startedAt: null, durationSeconds: 99_999 }) // 時段分布排不進去，平均時長也不算它
+    seedSubagent('w-live', 'w-live/agent-a', { durationSeconds: 9000 }) // 守門：subagent 不算
+
+    const all = db.getWorkPatterns(null, 0)
+    expect(all.hourly.reduce((s, h) => s + h.count, 0)).toBe(4)
+    expect(all.avgDurationSeconds).toBe(1215) // (600 + 1200 + 3000 + 60) / 4
+
+    const recent = db.getWorkPatterns(null, 30)
+    expect(recent.hourly.reduce((s, h) => s + h.count, 0)).toBe(2)
+    expect(recent.avgDurationSeconds).toBe(330) // (600 + 60) / 2
+
+    // 兩條 SQL 共用參數：區間與專案的佔位順序寫反時，這裡會一筆都查不到
+    const project = db.getWorkPatterns('proj-scope', 30)
+    expect(project.hourly.reduce((s, h) => s + h.count, 0)).toBe(1)
+    expect(project.avgDurationSeconds).toBe(600)
+  })
+
+  it('getEfficiencyTrend counts archived sessions', () => {
+    seed('e-live')
+    seed('e-gone', { startedAt: daysAgo(200), archived: true })
+    seedSubagent('e-live', 'e-live/agent-a') // 守門：subagent 不算
+    expect(db.getEfficiencyTrend(null, 0).reduce((s, d) => s + d.sessionCount, 0)).toBe(2)
+  })
+
+  it('getWasteSessions lists archived sessions', () => {
+    seed('x-gone', { startedAt: daysAgo(200), tokens: [90_000, 10_000], archived: true })
+    seedSubagent('x-gone', 'x-gone/agent-a', { tokens: [500_000, 0] }) // 守門：subagent 不算
+    expect(db.getWasteSessions(null, 10).map(w => w.sessionId)).toEqual(['x-gone'])
+  })
+
+  it('getProjectHealth counts archived sessions and leaves subagents out', () => {
+    seed('h-live', { projectId: 'proj-h2', outcomeStatus: 'committed' })
+    seed('h-gone', { projectId: 'proj-h2', startedAt: daysAgo(200), outcomeStatus: 'tested', archived: true })
+    seedSubagent('h-live', 'h-live/agent-a', { projectId: 'proj-h2' }) // subagent 沒有 outcome
+
+    const h = db.getProjectHealth().find(p => p.projectId === 'proj-h2')!
+    expect(h.outcomeDistribution).toEqual({ committed: 1, tested: 1, inProgress: 0, quickQa: 0, unknown: 0 })
+  })
+
+  it('getRelatedSessions recommends archived sessions', () => {
+    seed('r-target', { files: ['/src/a.ts', '/src/b.ts'] })
+    seed('r-gone', { startedAt: daysAgo(200), files: ['/src/a.ts'], archived: true })
+    seedSubagent('r-target', 'r-target/agent-a', { files: ['/src/a.ts', '/src/b.ts'] }) // 守門：subagent 不推薦
+    expect(db.getRelatedSessions('r-target').map(r => r.sessionId)).toEqual(['r-gone'])
   })
 })
 

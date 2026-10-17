@@ -445,18 +445,19 @@ export interface ElectronAPI {
   getFileHistory: (filePath: string) => Promise<FileHistoryEntry[]>
   /** Session 操作的檔案清單 */
   getSessionFiles: (sessionId: string) => Promise<SessionFile[]>
+  // 儀表板區間的 days：0 = 全部期間。必填：漏傳時 handler 會用預設 30 天，剛好等於畫面的預設區間，看不出來
   /** 使用趨勢統計 */
-  getUsageStats: (projectId?: string | null, days?: number) => Promise<DailyUsage[]>
+  getUsageStats: (projectId: string | null, days: number) => Promise<DailyUsage[]>
   /** 專案統計排名 */
   getProjectStats: () => Promise<ProjectStats[]>
   /** 工具分佈 */
-  getToolDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
+  getToolDistribution: (projectId: string | null, days: number) => Promise<DistributionItem[]>
   /** 標籤分佈 */
-  getTagDistribution: (projectId?: string | null) => Promise<DistributionItem[]>
+  getTagDistribution: (projectId: string | null, days: number) => Promise<DistributionItem[]>
   /** 工作模式 */
-  getWorkPatterns: (projectId?: string | null) => Promise<WorkPatterns>
+  getWorkPatterns: (projectId: string | null, days: number) => Promise<WorkPatterns>
   /** 效率趨勢（每日 token ÷ JSONL 記錄數） */
-  getEfficiencyTrend: (projectId?: string | null, days?: number) => Promise<DailyEfficiency[]>
+  getEfficiencyTrend: (projectId: string | null, days: number) => Promise<DailyEfficiency[]>
   /** 未收尾的對話（無 commit/test outcome，依 token 用量由高到低） */
   getWasteSessions: (projectId?: string | null, limit?: number) => Promise<WasteSession[]>
   /** 專案健康（outcome 分佈 + 趨勢） */
