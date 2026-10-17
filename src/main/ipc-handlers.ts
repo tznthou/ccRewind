@@ -16,10 +16,9 @@ function parseOptionalString(v: unknown): string | null {
  * 其他值（非數字、NaN、負數）用預設 30 天。0 本來就能查全部期間，所以 365 只是正規化，不是查詢量的上限。
  */
 function parseRangeDays(v: unknown): number {
-  if (typeof v !== 'number' || !Number.isFinite(v)) return 30
-  const d = Math.round(v)
-  if (d === 0) return 0
-  return d < 0 ? 30 : Math.min(d, 365)
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 30
+  if (v === 0) return 0
+  return Math.min(Math.max(Math.round(v), 1), 365)
 }
 
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/

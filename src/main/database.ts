@@ -1399,9 +1399,9 @@ export class Database {
     let durationSql = `
       SELECT AVG(COALESCE(active_duration_seconds, duration_seconds)) AS avg_duration
       FROM sessions
-      WHERE (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND id ${Database.EXCLUDE_SUBAGENTS}
+      WHERE started_at IS NOT NULL AND (active_duration_seconds IS NOT NULL OR duration_seconds IS NOT NULL) AND id ${Database.EXCLUDE_SUBAGENTS}
     `
-    // 兩條 SQL 共用 params：條件要用同樣的順序加
+    // 兩條 SQL 共用 params：條件要用同樣的順序加。started_at 兩邊都要：時段分布與平均時長算的是同一群 session
     const params: string[] = []
 
     if (days > 0) {

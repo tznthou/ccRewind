@@ -439,6 +439,8 @@ describe('IPC Handlers', () => {
       [500, 365],
       [-5, 30],
       ['7', 30], // 字串不轉成數字：拒收，用預設
+      [0.3, 1], // 正數四捨五入成 0 也不能變成「全部」
+      [-0.3, 30], // 負數一律用預設（-0.3 四捨五入是 -0，-0 === 0）
       [Number.NaN, 30],
       [undefined, 30],
     ])('stats:usage turns days=%s into %s', (input, expected) => {

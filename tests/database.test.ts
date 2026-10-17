@@ -1410,6 +1410,19 @@ describe('dashboard scope: archived sessions and subagents', () => {
     expect(all.reduce((s, d) => s + d.totalTokens, 0)).toBe(1500 + 300 + 50)
   })
 
+  it('getUsageStats keeps subagent tokens inside the project and range filters', () => {
+    seed('up-a', { projectId: 'proj-ua', tokens: [1000, 0] })
+    seedSubagent('up-a', 'up-a/agent-a', { projectId: 'proj-ua', tokens: [100, 0] })
+    seed('up-b', { projectId: 'proj-ub', tokens: [5000, 0] })
+    seedSubagent('up-b', 'up-b/agent-b', { projectId: 'proj-ub', tokens: [500, 0] })
+    seed('up-old', { projectId: 'proj-ua', startedAt: daysAgo(40), tokens: [7000, 0] })
+    seedSubagent('up-old', 'up-old/agent-c', { projectId: 'proj-ua', startedAt: daysAgo(40), tokens: [700, 0] })
+
+    const stats = db.getUsageStats('proj-ua', 30)
+    expect(stats.reduce((s, d) => s + d.sessionCount, 0)).toBe(1)
+    expect(stats.reduce((s, d) => s + d.totalTokens, 0)).toBe(1100)
+  })
+
   it('getProjectStats lists projects whose sessions are all archived and ranks projects by main sessions', () => {
     for (const n of [1, 2, 3]) seed(`ps-three-${n}`, { projectId: 'proj-three' })
     for (const n of [1, 2]) seed(`ps-two-${n}`, { projectId: 'proj-two' })
@@ -1459,6 +1472,7 @@ describe('dashboard scope: archived sessions and subagents', () => {
     seed('w-gone', { startedAt: daysAgo(200), durationSeconds: 1200, archived: true })
     seed('w-old', { startedAt: daysAgo(40), durationSeconds: 3000 })
     seed('w-other', { projectId: 'proj-other', durationSeconds: 60 })
+    seed('w-nostart', { startedAt: null, durationSeconds: 99_999 }) // 時段分布排不進去，平均時長也不算它
     seedSubagent('w-live', 'w-live/agent-a', { durationSeconds: 9000 }) // 守門：subagent 不算
 
     const all = db.getWorkPatterns(null, 0)
