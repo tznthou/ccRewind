@@ -8,7 +8,7 @@ import { LOCALES, messages } from '../../src/renderer/i18n/messages'
  * Token Budget 面板不用 emoji：emoji 不跟著主題變色，各平台的字型也畫得不一樣。面板的圖示一律用 EventIcon 的 SVG。
  *
  * emoji 進得了面板的路有兩條，都要擋：
- *   1. 元件原始碼裡的字面（含 CSS 的 `content`）
+ *   1. 元件原始碼裡的字（含 CSS 的 `content`，以及用跳脫序列寫的）
  *   2. 經 `t()` 回來的 catalog 值：掃元件原始碼永遠看不到它（儲存空間的警告符號就是走這條顯示的）
  *
  * 註解不算：repo 習慣在註解裡寫警告符號。
@@ -16,6 +16,7 @@ import { LOCALES, messages } from '../../src/renderer/i18n/messages'
  * `\p{Emoji_Presentation}` 會漏警告符號（U+26A0 預設是文字樣式），`\p{Emoji}` 會把數字與 `#`、`*` 都算進去。
  *
  * 已知抓不到：字串裡的 `//`（例如網址）會被當成註解開頭，同一行後面的內容不掃；這個目錄沒有網址。
+ * 已知誤報：被跳脫的反斜線（兩個反斜線再接 u 與十六進位）也會被解開、當成 emoji；這個目錄也沒有。
  */
 
 const TOKEN_BUDGET_DIR = fileURLToPath(new URL('../../src/renderer/components/TokenBudget', import.meta.url))
@@ -27,8 +28,23 @@ interface Hit {
   text: string
 }
 
-/** 逐行去掉 `/* … *\/` 與 `//` 註解後找 emoji；CSS 沒有 `//` 註解，關掉免得把 `url(https://…)` 當註解 */
-function findPictographs(src: string, lineComments = true): Hit[] {
+/**
+ * 原始碼裡用跳脫序列寫的字，畫出來一樣是 emoji，所以先解開再比：JS 的大括號與四位數兩種（代理對逐一解開後會接回同一個字），
+ * CSS 是反斜線接 1–6 位十六進位（後面可以跟一個空白）
+ */
+function decodeEscapes(code: string, css: boolean): string {
+  const char = (hex: string) => {
+    const cp = parseInt(hex, 16)
+    return cp > 0x10ffff ? '' : String.fromCodePoint(cp)
+  }
+  if (css) return code.replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex: string) => char(hex))
+  return code
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex: string) => char(hex))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+}
+
+/** 逐行去掉 `/* … *\/` 與 `//` 註解、解開跳脫序列後找 emoji。CSS 沒有 `//` 註解（不關掉會把 `url(https://…)` 當成註解），跳脫的寫法也跟 JS 不同 */
+function findPictographs(src: string, css = false): Hit[] {
   const hits: Hit[] = []
   let inBlock = false
   src.split('\n').forEach((raw, i) => {
@@ -43,14 +59,14 @@ function findPictographs(src: string, lineComments = true): Hit[] {
       } else if (raw.startsWith('/*', j)) {
         inBlock = true
         j += 2
-      } else if (lineComments && raw.startsWith('//', j)) {
+      } else if (!css && raw.startsWith('//', j)) {
         break
       } else {
         code += raw[j]
         j += 1
       }
     }
-    if (PICTOGRAPHIC.test(code)) hits.push({ line: i + 1, text: raw.trim() })
+    if (PICTOGRAPHIC.test(decodeEscapes(code, css))) hits.push({ line: i + 1, text: raw.trim() })
   })
   return hits
 }
@@ -70,18 +86,21 @@ async function* walk(dir: string): AsyncGenerator<string> {
   }
 }
 
-// 面板原本用的四種，用跳脫序列寫：工具或編輯器弄丟 U+FE0F 也不會讓 fixture 悄悄變樣
+// 面板原本用的四種，一律用大括號形式的跳脫序列寫：工具或編輯器弄丟 U+FE0F 也不會讓 fixture 悄悄變樣。
+// 四位數的形式有些編輯工具會先解成字元，所以不用
 const PACKAGE = '\u{1F4E6}'
-const ALARM_CLOCK = '⏰'
+const ALARM_CLOCK = '\u{23F0}'
 const ARROWS = '\u{1F504}'
-const WARNING = '⚠️'
+const WARNING = '\u{26A0}\u{FE0F}'
+// 原始碼裡用跳脫序列寫的 emoji 要組出反斜線：直接寫四位數的跳脫，同樣會被那些工具解成字元，fixture 就不再是跳脫
+const BS = '\\'
 
 describe('Token Budget 面板不用 emoji', () => {
   it('元件原始碼（註解以外）沒有 emoji', async () => {
     const found: string[] = []
     for await (const file of walk(TOKEN_BUDGET_DIR)) {
       const src = await readFile(file, 'utf-8')
-      for (const hit of findPictographs(src, !file.endsWith('.css'))) {
+      for (const hit of findPictographs(src, file.endsWith('.css'))) {
         found.push(`  ${path.relative(TOKEN_BUDGET_DIR, file)}:${hit.line}  ${hit.text}`)
       }
     }
@@ -93,7 +112,7 @@ describe('Token Budget 面板不用 emoji', () => {
     expect(found, `經 t() 回來的文案也會顯示在面板上：\n${found.join('\n')}`).toEqual([])
   })
 
-  it.each([PACKAGE, ALARM_CLOCK, ARROWS, WARNING, '⚠'])('抓得到程式碼裡的 %s', emoji => {
+  it.each([PACKAGE, ALARM_CLOCK, ARROWS, WARNING, '\u{26A0}'])('抓得到程式碼裡的 %s', emoji => {
     expect(findPictographs(`const icon = '${emoji}'`)).toEqual([{ line: 1, text: `const icon = '${emoji}'` }])
   })
 
@@ -112,7 +131,22 @@ describe('Token Budget 面板不用 emoji', () => {
   })
 
   it('CSS 的 content 抓得到，網址不會讓同一行後面的內容被略過', () => {
-    expect(findPictographs(`.x { background: url(https://a.b/c.svg); content: '${WARNING}'; }`, false)).toHaveLength(1)
+    expect(findPictographs(`.x { background: url(https://a.b/c.svg); content: '${WARNING}'; }`, true)).toHaveLength(1)
+  })
+
+  it.each([
+    ['大括號', `const icon = '${BS}u{1F4E6}'`],
+    ['四位數', `const icon = '${BS}u23F0'`],
+    ['代理對', `const icon = '${BS}uD83D${BS}uDCE6'`],
+  ])('跳脫序列寫的 emoji 也抓得到（%s）', (_label, line) => {
+    expect(findPictographs(line)).toEqual([{ line: 1, text: line }])
+  })
+
+  it('CSS 跳脫寫的 emoji 也抓得到，不是 emoji 的跳脫不算', () => {
+    expect(findPictographs(`.a::before { content: '${BS}23F0'; }`, true)).toHaveLength(1)
+    expect(findPictographs(`.a::before { content: "${BS}1F4E6 x"; }`, true)).toHaveLength(1)
+    expect(findPictographs(`.a::before { content: '${BS}25B8'; }`, true)).toEqual([])
+    expect(findPictographs(`const arrow = '${BS}u2192'`)).toEqual([])
   })
 
   it('面板文案在用的符號不算 emoji', () => {
