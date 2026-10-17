@@ -369,17 +369,11 @@ export type Tone = 'warning' | 'info'
 
 export interface ListItem {
   id: string
-  icon: string
+  /** 畫哪一種圖示（EventIcon）；只存種類，圖示本身是元件 */
+  icon: SessionEvent['kind']
   tone: Tone
   title: string
   detail: string
-}
-
-const EVENT_ICON: Record<SessionEvent['kind'], string> = {
-  compaction: '📦',
-  idle_expired: '⏰',
-  model_switch: '🔄',
-  unknown: '⚠️',
 }
 
 const EVENT_TONE: Record<SessionEvent['kind'], Tone> = {
@@ -397,7 +391,7 @@ function sinceText(minutes: number | null, t: Translate): string {
 }
 
 function eventItem(e: SessionEvent, t: Translate): ListItem {
-  const base = { id: e.id, icon: EVENT_ICON[e.kind], tone: EVENT_TONE[e.kind] }
+  const base = { id: e.id, icon: e.kind, tone: EVENT_TONE[e.kind] }
   const call = formatCount(e.call)
   switch (e.kind) {
     case 'compaction':
@@ -420,7 +414,7 @@ function eventItem(e: SessionEvent, t: Translate): ListItem {
       }
     case 'unknown': {
       const gap = e.gapMinutes == null ? '' : t('tokenBudget.events.gapSincePrevious', { span: formatSpan(e.gapMinutes, t) })
-      // API key／超額時快取只保留 5 分鐘：間隔夠長的「原因不明」可能就是這樣過期的
+      // API key／超額時快取預設只保留 5 分鐘：間隔夠長的「原因不明」可能就是這樣過期的
       const shortTtl = e.gapMinutes != null && e.gapMinutes >= SHORT_TTL_MINUTES ? t('tokenBudget.events.unknown.shortTtl') : ''
       return {
         ...base,
@@ -437,7 +431,7 @@ export function eventItems(facts: SessionFacts, t: Translate): ListItem[] {
   if (facts.compactedAfterLastCall) {
     items.push({
       id: 'compaction-after-last-call',
-      icon: EVENT_ICON.compaction,
+      icon: 'compaction',
       tone: EVENT_TONE.compaction,
       title: t('tokenBudget.events.compactionAfterLastCall.title'),
       detail: t('tokenBudget.events.compactionAfterLastCall.detail'),
@@ -463,7 +457,7 @@ export function eventSummaryRows(facts: SessionFacts, t: Translate): ListItem[] 
     }
     rows.push({
       id: 'summary-compactions',
-      icon: EVENT_ICON.compaction,
+      icon: 'compaction',
       tone: EVENT_TONE.compaction,
       title: t(compacted === 1 ? 'tokenBudget.events.summary.compactions.one' : 'tokenBudget.events.summary.compactions.other', {
         count: formatCount(compacted),
@@ -480,7 +474,7 @@ export function eventSummaryRows(facts: SessionFacts, t: Translate): ListItem[] 
     if (unknown.count > 0) causes.push(t('tokenBudget.events.summary.unknown', { count: formatCount(unknown.count) }))
     rows.push({
       id: 'summary-cache-breaks',
-      icon: idle.count > 0 ? EVENT_ICON.idle_expired : modelSwitch.count > 0 ? EVENT_ICON.model_switch : EVENT_ICON.unknown,
+      icon: idle.count > 0 ? 'idle_expired' : modelSwitch.count > 0 ? 'model_switch' : 'unknown',
       tone: idle.count + modelSwitch.count > 0 ? 'warning' : 'info',
       title: t(breaks === 1 ? 'tokenBudget.events.summary.breaks.one' : 'tokenBudget.events.summary.breaks.other', {
         count: formatCount(breaks), tokens: formatTokens(facts.rewrittenTokens),
@@ -526,7 +520,7 @@ export function adviceItems(facts: SessionFacts, t: Translate): ListItem[] {
       : ''
     items.push({
       id: 'advice-idle',
-      icon: EVENT_ICON.idle_expired,
+      icon: 'idle_expired',
       tone: 'warning',
       title: t('tokenBudget.advice.idle.title'),
       detail: t('tokenBudget.advice.idle.detail', { call: formatCount(biggest.call), tokens: formatTokens(biggest.rewrittenTokens), more }),
@@ -536,7 +530,7 @@ export function adviceItems(facts: SessionFacts, t: Translate): ListItem[] {
   if (modelSwitch.count > 0) {
     items.push({
       id: 'advice-model-switch',
-      icon: EVENT_ICON.model_switch,
+      icon: 'model_switch',
       tone: 'warning',
       title: t('tokenBudget.advice.modelSwitch.title'),
       detail: t(modelSwitch.count === 1 ? 'tokenBudget.advice.modelSwitch.detail.one' : 'tokenBudget.advice.modelSwitch.detail.other', {
@@ -547,7 +541,7 @@ export function adviceItems(facts: SessionFacts, t: Translate): ListItem[] {
   if (unknown.count > 0) {
     items.push({
       id: 'advice-unknown',
-      icon: EVENT_ICON.unknown,
+      icon: 'unknown',
       tone: 'info',
       title: t(unknown.count === 1 ? 'tokenBudget.advice.unknown.title.one' : 'tokenBudget.advice.unknown.title.other', {
         count: formatCount(unknown.count),

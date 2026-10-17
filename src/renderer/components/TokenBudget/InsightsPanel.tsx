@@ -1,5 +1,6 @@
 import { useId, useState } from 'react'
 import type { ListItem, Tone } from './sessionStory'
+import { EventIcon } from './EventIcon'
 import styles from './TokenBudget.module.css'
 
 const TONE_CLASS: Record<Tone, string> = {
@@ -49,7 +50,9 @@ export default function InsightsPanel({ title, subtitle, items, emptyText, summa
           <ul id={listId} className={`${styles.insightsList} ${scroll ? styles.insightsListScroll : ''}`}>
             {rows.map(item => (
               <li key={item.id} className={`${styles.insightItem} ${TONE_CLASS[item.tone]}`}>
-                <span className={styles.insightIcon} aria-hidden="true">{item.icon}</span>
+                <span className={styles.insightIcon} aria-hidden="true">
+                  <EventIcon kind={item.icon} />
+                </span>
                 <div className={styles.insightBody}>
                   <span className={styles.insightTitle}>{item.title}</span>
                   <span className={styles.insightDetail}>{item.detail}</span>

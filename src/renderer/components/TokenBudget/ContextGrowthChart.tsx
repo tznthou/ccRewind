@@ -9,9 +9,10 @@ import { formatTokens } from '../../utils/formatTokens'
 import { useI18n } from '../../i18n/useI18n'
 import {
   chartRows, defaultLimit, eventItems, legendItems, timelineMarkers, tooltipContent,
-  type CacheBreakEvent, type ChartRow, type LegendId, type SessionFacts, type Translate,
+  type ChartRow, type LegendId, type SessionFacts, type Translate,
 } from './sessionStory'
 import { CHART_TOOLTIP_STYLE, MARKER_COLORS } from './chartConstants'
+import { ChartEventIcon, EventIcon } from './EventIcon'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -24,12 +25,6 @@ type LimitId = 'none' | '200k' | '1m'
 const LIMIT_VALUES: Record<Exclude<LimitId, 'none'>, { label: string; value: number }> = {
   '200k': { label: '200K', value: 200_000 },
   '1m': { label: '1M', value: 1_000_000 },
-}
-
-const BREAK_ICON: Record<CacheBreakEvent['kind'], string> = {
-  idle_expired: '⏰',
-  model_switch: '🔄',
-  unknown: '⚠️',
 }
 
 function ChartTooltip({ active, payload, titles, t }: TooltipContentProps & {
@@ -73,7 +68,7 @@ function LegendMark({ id, faintCompactions }: { id: LegendId; faintCompactions: 
     case 'overflow':
       return null
     default:
-      return <span aria-hidden="true">{BREAK_ICON[id]}</span>
+      return <EventIcon kind={id} />
   }
 }
 
@@ -147,7 +142,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
               stroke="var(--color-text-secondary)"
               strokeDasharray={markers.faintCompactions ? undefined : '4 3'}
               strokeOpacity={markers.faintCompactions ? 0.35 : 0.6}
-              label={markers.compactionIcons ? { value: '📦', position: 'top', fontSize: 13 } : undefined}
+              label={markers.compactionIcons ? { position: 'top', content: <ChartEventIcon kind="compaction" /> } : undefined}
             />
           ))}
           <Area
@@ -167,7 +162,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
               r={4}
               fill={b.kind === 'unknown' ? MARKER_COLORS.info : MARKER_COLORS.warning}
               stroke="var(--color-bg)"
-              label={{ value: BREAK_ICON[b.kind], position: 'top', fontSize: 13 }}
+              label={{ position: 'top', content: <ChartEventIcon kind={b.kind} /> }}
             />
           ))}
         </AreaChart>

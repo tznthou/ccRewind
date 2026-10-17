@@ -437,7 +437,7 @@ describe('numberCards', () => {
 describe('eventItems', () => {
   it('a compaction', () => {
     expect(eventItems(compactedOnce(), tZh)).toEqual([{
-      id: 'compaction-2', icon: '📦', tone: 'info',
+      id: 'compaction-2', icon: 'compaction', tone: 'info',
       title: '對話被壓縮：412.6K → 85.5K',
       detail: '第 2 次呼叫前 · 開始後 3 小時 18 分',
     }])
@@ -446,21 +446,21 @@ describe('eventItems', () => {
   it('an idle expiry and an unexplained break after 11 minutes', () => {
     expect(eventItems(idleThenUnknown(), tZh)).toEqual([
       {
-        id: 'idle_expired-2', icon: '⏰', tone: 'warning',
+        id: 'idle_expired-2', icon: 'idle_expired', tone: 'warning',
         title: '離開約 2 小時 38 分後回來，快取已過期，重寫 99.0K',
         detail: '第 2 次呼叫 · 開始後 2 小時 38 分。閒置超過保留時間，回來的第一句要把整段對話重新算過',
       },
       {
-        id: 'unknown-4', icon: '⚠️', tone: 'info',
+        id: 'unknown-4', icon: 'unknown', tone: 'info',
         title: '快取中斷，原因不明，重寫 50.0K',
-        detail: '第 4 次呼叫 · 距上一次呼叫 11 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘',
+        detail: '第 4 次呼叫 · 距上一次呼叫 11 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘',
       },
     ])
   })
 
   it('a model switch', () => {
     expect(eventItems(everyCause(), tZh).find(e => e.id === 'model_switch-4')).toEqual({
-      id: 'model_switch-4', icon: '🔄', tone: 'warning',
+      id: 'model_switch-4', icon: 'model_switch', tone: 'warning',
       title: '換模型，快取重寫 30.0K',
       detail: '第 4 次呼叫 · claude-opus-4-6 → claude-sonnet-4-6',
     })
@@ -470,8 +470,8 @@ describe('eventItems', () => {
   it.each<[number | null, string]>([
     [3, '第 2 次呼叫 · 距上一次呼叫 3 分鐘'],
     [4.99, '第 2 次呼叫 · 距上一次呼叫 4 分鐘'],
-    [5, '第 2 次呼叫 · 距上一次呼叫 5 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘'],
-    [10, '第 2 次呼叫 · 距上一次呼叫 10 分鐘。用 API key 或超出方案額度時，快取只保留 5 分鐘'],
+    [5, '第 2 次呼叫 · 距上一次呼叫 5 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘'],
+    [10, '第 2 次呼叫 · 距上一次呼叫 10 分鐘。用 API key 或超出方案額度時，快取預設只保留 5 分鐘'],
   ])('mentions the 5-minute cache only for a gap of 5 minutes or more (gap %s)', (gap, detail) => {
     const facts = factsOf(withBreaks([{ cause: 'unknown', rewritten: 50_000, gap: gap ?? undefined }]))
     expect(eventItems(facts, tZh)[0].detail).toBe(detail)
@@ -499,7 +499,7 @@ describe('eventItems', () => {
   it('English wording', () => {
     expect(eventItems(idleThenUnknown(), tEn).map(e => [e.title, e.detail])).toEqual([
       ['Back after about 2 h 38 min away: cache expired, 99.0K rewritten', 'Call 2 · 2 h 38 min in. The cache timed out while idle, so the first message back reprocessed the whole conversation'],
-      ['Cache broke for an unknown reason, 50.0K rewritten', 'Call 4 · 11 min after the previous call. With an API key or over your plan\'s usage, the cache only lasts 5 minutes'],
+      ['Cache broke for an unknown reason, 50.0K rewritten', 'Call 4 · 11 min after the previous call. With an API key or over your plan\'s usage, the cache only lasts 5 minutes by default'],
     ])
   })
 })
@@ -531,7 +531,7 @@ describe('eventSummaryRows', () => {
   it('summarises only the kinds that happened', () => {
     const { turns, compactions } = compactedSession(7)
     expect(eventSummaryRows(factsOf(turns, compactions), tZh)).toEqual([{
-      id: 'summary-compactions', icon: '📦', tone: 'info',
+      id: 'summary-compactions', icon: 'compaction', tone: 'info',
       title: '對話被壓縮 7 次',
       detail: '最近一次在第 8 次呼叫前：150.0K → 30.0K',
     }])
@@ -539,7 +539,7 @@ describe('eventSummaryRows', () => {
 
   it('counts each cause that happened, in a fixed order, and warns when something actionable happened', () => {
     expect(eventSummaryRows(everyCause(), tZh)).toEqual([{
-      id: 'summary-cache-breaks', icon: '⏰', tone: 'warning',
+      id: 'summary-cache-breaks', icon: 'idle_expired', tone: 'warning',
       title: '快取中斷 5 次，共重寫 200.0K',
       detail: '離開太久 2、換模型 1、原因不明 2',
     }])
@@ -550,10 +550,10 @@ describe('eventSummaryRows', () => {
   })
 
   // 舊 Cache Breaks 的 severity 測試：閒置或換模型 → warning，只有原因不明 → info；原因只列發生過的
-  it.each<[string, BreakSpec[], string, string, string]>([
-    ['only unexplained breaks', [{ cause: 'unknown', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], '⚠️', 'info', '原因不明 2'],
-    ['a model switch and an unexplained break', [{ cause: 'switch', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], '🔄', 'warning', '換模型 1、原因不明 1'],
-    ['an idle expiry', [{ cause: 'idle', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], '⏰', 'warning', '離開太久 1、原因不明 1'],
+  it.each<[string, BreakSpec[], ListItem['icon'], string, string]>([
+    ['only unexplained breaks', [{ cause: 'unknown', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], 'unknown', 'info', '原因不明 2'],
+    ['a model switch and an unexplained break', [{ cause: 'switch', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], 'model_switch', 'warning', '換模型 1、原因不明 1'],
+    ['an idle expiry', [{ cause: 'idle', rewritten: 10_000 }, { cause: 'unknown', rewritten: 10_000 }], 'idle_expired', 'warning', '離開太久 1、原因不明 1'],
   ])('%s', (_label, spec, icon, tone, detail) => {
     expect(eventSummaryRows(factsOf(withBreaks(spec)), tZh)[0]).toMatchObject({ icon, tone, detail })
   })
@@ -568,17 +568,17 @@ describe('adviceItems', () => {
   it('suggests idle → model switch → unknown, quoting the biggest idle rewrite', () => {
     expect(adviceItems(everyCause(), tZh)).toEqual([
       {
-        id: 'advice-idle', icon: '⏰', tone: 'warning',
+        id: 'advice-idle', icon: 'idle_expired', tone: 'warning',
         title: '離開 1 小時以上，回來時快取已經過期',
         detail: '訂閱額度內的主對話，快取閒置 1 小時就會過期，下一次呼叫要把整段對話重寫一次。這場第 8 次呼叫回來時重寫了 90.0K（這場共 2 次，合計 140.0K）。要離開又想保留脈絡，可以離開前先 /compact：快取還在時壓縮比較便宜，回來要重寫的只剩摘要。',
       },
       {
-        id: 'advice-model-switch', icon: '🔄', tone: 'warning',
+        id: 'advice-model-switch', icon: 'model_switch', tone: 'warning',
         title: '換模型會讓快取從頭寫',
         detail: '這場換了 1 次，共重寫 30.0K。模型和 effort 盡量在對話開頭選好。',
       },
       {
-        id: 'advice-unknown', icon: '⚠️', tone: 'info',
+        id: 'advice-unknown', icon: 'unknown', tone: 'info',
         title: '有 2 次快取中斷找不出原因',
         detail: '共重寫 30.0K。進行中的對話可以用 Claude Code 的 /usage 看最近一次快取失效的可能原因。',
       },
@@ -735,8 +735,8 @@ describe('a compaction after the last call', () => {
   })
 
   it.each<[string, Translate, string, ListItem]>([
-    ['zh-TW', tZh, '1 件，依時間排序', { id: 'compaction-after-last-call', icon: '📦', tone: 'info', title: '對話被壓縮，量不到前後', detail: '最後一次呼叫之後' }],
-    ['en', tEn, '1 event, in time order', { id: 'compaction-after-last-call', icon: '📦', tone: 'info', title: 'Conversation compacted, before and after can\'t be measured', detail: 'After the last call' }],
+    ['zh-TW', tZh, '1 件，依時間排序', { id: 'compaction-after-last-call', icon: 'compaction', tone: 'info', title: '對話被壓縮，量不到前後', detail: '最後一次呼叫之後' }],
+    ['en', tEn, '1 event, in time order', { id: 'compaction-after-last-call', icon: 'compaction', tone: 'info', title: 'Conversation compacted, before and after can\'t be measured', detail: 'After the last call' }],
   ])('%s: the event list shows it', (_locale, t, subtitle, item) => {
     expect(eventListText(trailing(), t).subtitle).toBe(subtitle)
     expect(eventItems(trailing(), t)).toEqual([item])
@@ -794,7 +794,7 @@ describe('a compaction after the last call', () => {
     expect(eventsNeedSummary(facts)).toBe(true)
     expect(eventListText(facts, tZh).expand).toBe('依時間列出全部 7 筆')
     expect(eventSummaryRows(facts, tZh)[0]).toEqual({
-      id: 'summary-compactions', icon: '📦', tone: 'info',
+      id: 'summary-compactions', icon: 'compaction', tone: 'info',
       title: '對話被壓縮 1 次',
       detail: '最近一次在最後一次呼叫之後，量不到前後',
     })
