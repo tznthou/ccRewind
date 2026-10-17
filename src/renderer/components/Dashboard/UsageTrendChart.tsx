@@ -1,5 +1,5 @@
 import { useId, useMemo } from 'react'
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
+import { AreaChart, Area, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer, CartesianGrid } from 'recharts'
 import type { DailyUsage } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
@@ -27,6 +27,7 @@ export default function UsageTrendChart({ data }: Props) {
 
   const totalSessions = data.reduce((sum, d) => sum + d.sessionCount, 0)
   const totalTokens = data.reduce((sum, d) => sum + d.totalTokens, 0)
+  const seriesLabel = (name: unknown) => (name === 'totalTokens' ? t('dashboard.usage.tokens') : t('dashboard.usage.sessions'))
 
   return (
     <div>
@@ -56,11 +57,14 @@ export default function UsageTrendChart({ data }: Props) {
               itemStyle={CHART_TOOLTIP_ITEM_STYLE}
               formatter={(value, name) => {
                 const num = Number(value)
-                return name === 'totalTokens'
-                  ? [formatTokens(num), t('dashboard.usage.tokens')]
-                  : [num, t('dashboard.usage.sessions')]
+                return [name === 'totalTokens' ? formatTokens(num) : num, seriesLabel(name)]
               }}
               labelFormatter={(label) => t('dashboard.usage.dateLabel', { label: String(label) })}
+            />
+            {/* tooltip 的字是主題色、不再標出系列色：藍、橘兩塊各是什麼只能看圖例 */}
+            <Legend
+              formatter={(value) => <span className={styles.legendText}>{seriesLabel(value)}</span>}
+              iconSize={10}
             />
             <Area
               yAxisId="sessions"
