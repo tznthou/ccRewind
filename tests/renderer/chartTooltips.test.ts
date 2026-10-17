@@ -16,7 +16,7 @@ import ts from 'typescript'
  *
  * 已知抓不到：只認具名匯入的元件（`import * as R` 再寫 `<R.Tooltip>`、或自己包一層再匯出的都看不到）；
  * 只看有沒有 itemStyle，不看裡面有沒有設 color；有 content 就當它自己用主題色畫（ContextGrowthChart 是這樣）。
- * 系列與圖例以檔案為單位計算，一個檔案一張圖。
+ * 系列與圖例以檔案為單位計算，一個檔案一張圖；系列數的是 JSX 標籤，`keys.map(k => <Line />)` 只算一個。
  */
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))

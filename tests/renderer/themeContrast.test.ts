@@ -1,19 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import ts from 'typescript'
 
 /**
  * 錯誤色（--color-error）的字在每個主題、每種會出現的底色上都要讀得清楚：WCAG AA 對一般大小的字要求 4.5:1。
  * timeline 原本的 #dc3545 在下面三種底色上只有 4.07–4.37。
  *
  * 底色取錯誤色的字實際出現的地方：對話區的錯誤（--color-bg）、側欄（--color-bg-sidebar）、錯誤畫面的說明框（--color-bubble-system）。
- * 主題只寫跟 :root 不同的 token，其餘沿用 :root；半透明的底色疊在該主題的 --color-bg 上算。
+ * 主題只寫跟 :root 不同的 token，其餘沿用 :root；半透明的底色疊在該主題的 --color-bg 上算，半透明的錯誤色再疊在那個底色上算。
+ *
+ * 主題清單取自 ThemeContext.tsx 的 ThemeId：app 選得到的主題都會檢查。timeline 是 :root；其他主題缺 CSS 區塊時直接報錯，
+ * 不會被略過。只讀每個主題的第一個 `[data-theme="x"] {` 區塊，@media 裡或之後重複的覆寫不算。
  *
  * 泡泡上的「已捨棄分支」徽章不在這裡：整個泡泡刻意淡化成 opacity 0.7，徽章的字與泡泡底色一起疊在頁面底色上，
  * 實際對比約 3:1（timeline 3.25–3.39）。把它當成畫在不透明泡泡上算，會在一個畫面上不存在的組合報綠。
  */
 
-const GLOBAL_CSS = readFileSync(fileURLToPath(new URL('../../src/renderer/styles/global.css', import.meta.url)), 'utf-8')
+const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf-8')
+const GLOBAL_CSS = read('../../src/renderer/styles/global.css')
+const THEME_CONTEXT = read('../../src/renderer/context/ThemeContext.tsx')
 const SURFACES = ['--color-bg', '--color-bg-sidebar', '--color-bubble-system']
 const AA_NORMAL_TEXT = 4.5
 
@@ -24,6 +30,17 @@ function tokens(selector: string): Record<string, string> {
   if (start === -1) throw new Error(`global.css 沒有 ${selector}`)
   const body = GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('\n}', start))
   return Object.fromEntries([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]))
+}
+
+/** `type ThemeId = 'a' | 'b'` 的成員 */
+function themeIds(source: string): string[] {
+  const sf = ts.createSourceFile('ThemeContext.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  for (const stmt of sf.statements) {
+    if (ts.isTypeAliasDeclaration(stmt) && stmt.name.text === 'ThemeId' && ts.isUnionTypeNode(stmt.type)) {
+      return stmt.type.types.flatMap(t => (ts.isLiteralTypeNode(t) && ts.isStringLiteral(t.literal) ? [t.literal.text] : []))
+    }
+  }
+  throw new Error('找不到 ThemeId')
 }
 
 function parseColor(value: string): Rgba {
@@ -57,13 +74,10 @@ function contrast(a: Rgba, b: Rgba): number {
   return (hi + 0.05) / (lo + 0.05)
 }
 
-// timeline 用 :root；其他主題從 global.css 的 [data-theme="…"] 區塊找，之後加的主題也會被檢查到
 const ROOT = tokens(':root')
-const THEME_NAMES = [...GLOBAL_CSS.matchAll(/^\[data-theme="([\w-]+)"\] \{/gm)].map(m => m[1])
-const THEMES: Record<string, Record<string, string>> = {
-  timeline: ROOT,
-  ...Object.fromEntries(THEME_NAMES.map(name => [name, { ...ROOT, ...tokens(`[data-theme="${name}"]`) }])),
-}
+const THEMES: Record<string, Record<string, string>> = Object.fromEntries(
+  themeIds(THEME_CONTEXT).map(id => [id, id === 'timeline' ? ROOT : { ...ROOT, ...tokens(`[data-theme="${id}"]`) }]),
+)
 
 describe('主題的錯誤色對比', () => {
   // 公式或解析壞掉時，下面的主題檢查可能全部「通過」：先用已知的參考值確認它算得對
@@ -74,9 +88,10 @@ describe('主題的錯誤色對比', () => {
     expect(over(parseColor('transparent'), parseColor('#1B1D23'))).toEqual(parseColor('#1B1D23'))
   })
 
-  it('認不得的顏色寫法直接報錯，不會變成 NaN 被略過；主題都有找到', () => {
+  it('認不得的顏色寫法直接報錯，不會變成 NaN 被略過；主題清單讀得到', () => {
     expect(() => parseColor('rgb(10% 20% 30%)')).toThrow()
     expect(() => parseColor('var(--color-bg)')).toThrow()
+    expect(themeIds("export type ThemeId = 'a' | 'b'")).toEqual(['a', 'b'])
     expect(Object.keys(THEMES)).toEqual(expect.arrayContaining(['timeline', 'archive', 'terminal']))
   })
 
@@ -86,7 +101,10 @@ describe('主題的錯誤色對比', () => {
     expect(bg[3], '--color-bg 要是不透明的，半透明的底色才有東西可以疊').toBe(1)
     const error = parseColor(t['--color-error'])
     const low = SURFACES
-      .map(surface => ({ surface, ratio: contrast(error, over(parseColor(t[surface]), bg)) }))
+      .map(surface => {
+        const below = over(parseColor(t[surface]), bg)
+        return { surface, ratio: contrast(over(error, below), below) }
+      })
       .filter(({ ratio }) => ratio < AA_NORMAL_TEXT)
       .map(({ surface, ratio }) => `${surface} ${ratio.toFixed(2)}`)
     expect(low, `${theme} 的 --color-error（${t['--color-error']}）對比不足：\n${low.join('\n')}`).toEqual([])
