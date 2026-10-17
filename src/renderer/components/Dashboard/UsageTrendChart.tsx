@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import type { DailyUsage } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
-import { CHART_TOOLTIP_STYLE } from '../TokenBudget/chartConstants'
+import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../TokenBudget/chartConstants'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -53,6 +53,7 @@ export default function UsageTrendChart({ data }: Props) {
             />
             <Tooltip
               contentStyle={CHART_TOOLTIP_STYLE}
+              itemStyle={CHART_TOOLTIP_ITEM_STYLE}
               formatter={(value, name) => {
                 const num = Number(value)
                 return name === 'totalTokens'

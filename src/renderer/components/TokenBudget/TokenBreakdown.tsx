@@ -3,7 +3,7 @@ import { PieChart, Pie, ResponsiveContainer, Tooltip, Legend } from 'recharts'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
 import { useI18n } from '../../i18n/useI18n'
-import { TOKEN_COLORS, CHART_TOOLTIP_STYLE } from './chartConstants'
+import { TOKEN_COLORS, CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from './chartConstants'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -44,6 +44,7 @@ export default function TokenBreakdown({ stats }: Props) {
           <Tooltip
             formatter={(value) => formatTokens(Number(value))}
             contentStyle={CHART_TOOLTIP_STYLE}
+            itemStyle={CHART_TOOLTIP_ITEM_STYLE}
           />
           <Legend
             formatter={(value) => <span className={styles.legendText}>{value}</span>}
