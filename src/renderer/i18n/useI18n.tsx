@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { translate, type Locale, type MessageKey, type TranslateParams } from './messages'
 
 interface I18nContextValue {
@@ -26,6 +26,11 @@ function detectInitialLocale(): Locale {
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(detectInitialLocale)
+
+  // index.html ships lang="zh-TW"; screen readers pick their voice from it, so it has to follow the UI language
+  useEffect(() => {
+    document.documentElement.lang = locale
+  }, [locale])
 
   const setLocale = useCallback((l: Locale) => {
     try {

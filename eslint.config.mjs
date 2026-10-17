@@ -42,6 +42,8 @@ export default tseslint.config(
     },
   },
   {
-    ignores: ['out/', 'dist/', 'node_modules/']
+    // .claude/（本機驗證工具）與 .draft/（草稿）在 .gitignore 裡、CI 看不到，但 flat config 不讀 .gitignore：
+    // 不列在這裡，本機 `pnpm lint` 會掃進去報錯，--fix 還會就地改那些檔。
+    ignores: ['out/', 'dist/', 'node_modules/', '.claude/', '.draft/']
   }
 )

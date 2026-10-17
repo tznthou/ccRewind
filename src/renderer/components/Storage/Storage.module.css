@@ -251,13 +251,15 @@
 }
 
 .dangerButton {
-  color: var(--color-danger, #dc2626);
-  border-color: var(--color-danger, #dc2626);
+  color: var(--color-error);
+  border-color: var(--color-error);
 }
 
 .dangerButton:hover:not(:disabled) {
-  background: var(--color-danger, #dc2626);
-  color: #fff;
+  background: var(--color-error);
+  /* Not #fff: the terminal theme's error red is light, and white on it is 2.8:1. Swapping the pair keeps the
+     contrast of the resting state (error text on --color-bg) in every theme. */
+  color: var(--color-bg);
 }
 
 .ghostButton {
@@ -317,7 +319,7 @@
 
 .ruleBadgeDelete {
   border-color: rgba(220, 38, 38, 0.3);
-  color: var(--color-danger, #dc2626);
+  color: var(--color-error);
 }
 
 .removeConfirm {
@@ -430,7 +432,7 @@
   border: 1px solid rgba(220, 38, 38, 0.3);
   border-radius: var(--radius-sm);
   font-size: var(--font-size-sm);
-  color: var(--color-danger, #dc2626);
+  color: var(--color-error);
 }
 
 .checkboxRow {
@@ -451,7 +453,7 @@
 }
 
 .errorText {
-  color: var(--color-danger, #dc2626);
+  color: var(--color-error);
   font-size: var(--font-size-sm);
 }
 
