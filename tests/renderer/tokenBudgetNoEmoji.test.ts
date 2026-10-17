@@ -8,15 +8,17 @@ import { LOCALES, messages } from '../../src/renderer/i18n/messages'
  * Token Budget 面板不用 emoji：emoji 不跟著主題變色，各平台的字型也畫得不一樣。面板的圖示一律用 EventIcon 的 SVG。
  *
  * emoji 進得了面板的路有兩條，都要擋：
- *   1. 元件原始碼裡的字（含 CSS 的 `content`，以及用跳脫序列寫的）
+ *   1. 元件原始碼裡的字（含 CSS 的 `content`，以及寫成 JS／CSS 跳脫序列或 HTML 字元參照的）
  *   2. 經 `t()` 回來的 catalog 值：掃元件原始碼永遠看不到它（儲存空間的警告符號就是走這條顯示的）
  *
  * 註解不算：repo 習慣在註解裡寫警告符號。
  * 用 `\p{Extended_Pictographic}`：手寫 Unicode 區段會漏鬧鐘（U+23F0 在 Misc Technical），
  * `\p{Emoji_Presentation}` 會漏警告符號（U+26A0 預設是文字樣式），`\p{Emoji}` 會把數字與 `#`、`*` 都算進去。
  *
- * 已知抓不到：字串裡的 `//`（例如網址）會被當成註解開頭，同一行後面的內容不掃；這個目錄沒有網址。
- * 已知誤報：被跳脫的反斜線（兩個反斜線再接 u 與十六進位）也會被解開、當成 emoji；這個目錄也沒有。
+ * 它擋的是「順手寫進一個 emoji」這種最常見的漏法，不是形式驗證：逐行掃、不認得字串，所以
+ *   - 已知抓不到：字串裡的 `//`（例如網址）會被當成註解開頭，同一行後面不掃；字串或正則裡的 `/*` 會被當成區塊註解
+ *     開頭，一直到下一個 `*\/` 之前的行都不掃。這個目錄兩種都沒有
+ *   - 已知誤報：被跳脫的反斜線（兩個反斜線再接 u 與十六進位）也會被解開、當成 emoji；這個目錄也沒有
  */
 
 const TOKEN_BUDGET_DIR = fileURLToPath(new URL('../../src/renderer/components/TokenBudget', import.meta.url))
@@ -29,18 +31,18 @@ interface Hit {
 }
 
 /**
- * 原始碼裡用跳脫序列寫的字，畫出來一樣是 emoji，所以先解開再比：JS 的大括號與四位數兩種（代理對逐一解開後會接回同一個字），
- * CSS 是反斜線接 1–6 位十六進位（後面可以跟一個空白）
+ * 原始碼裡用跳脫序列寫的字，畫出來一樣是 emoji，所以先解開再比：JS 的大括號與四位數兩種（代理對逐一解開後會接回同一個字）、
+ * JSX 的 HTML 字元參照（十六進位與十進位）；CSS 是反斜線接 1–6 位十六進位（後面可以跟一個空白）
  */
 function decodeEscapes(code: string, css: boolean): string {
-  const char = (hex: string) => {
-    const cp = parseInt(hex, 16)
-    return cp > 0x10ffff ? '' : String.fromCodePoint(cp)
-  }
-  if (css) return code.replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, hex: string) => char(hex))
+  const char = (cp: number) => (cp > 0x10ffff ? '' : String.fromCodePoint(cp))
+  const hex = (h: string) => char(parseInt(h, 16))
+  if (css) return code.replace(/\\([0-9a-fA-F]{1,6})\s?/g, (_, h: string) => hex(h))
   return code
-    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, hex: string) => char(hex))
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/\\u\{([0-9a-fA-F]+)\}/g, (_, h: string) => hex(h))
+    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+    .replace(/&#x([0-9a-fA-F]+);/gi, (_, h: string) => hex(h))
+    .replace(/&#([0-9]+);/g, (_, d: string) => char(Number(d)))
 }
 
 /** 逐行去掉 `/* … *\/` 與 `//` 註解、解開跳脫序列後找 emoji。CSS 沒有 `//` 註解（不關掉會把 `url(https://…)` 當成註解），跳脫的寫法也跟 JS 不同 */
@@ -140,6 +142,15 @@ describe('Token Budget 面板不用 emoji', () => {
     ['代理對', `const icon = '${BS}uD83D${BS}uDCE6'`],
   ])('跳脫序列寫的 emoji 也抓得到（%s）', (_label, line) => {
     expect(findPictographs(line)).toEqual([{ line: 1, text: line }])
+  })
+
+  // Dashboard 的 ProjectHealth.tsx 就用字元參照寫箭頭，照抄這個寫法放進面板也要擋
+  it.each([
+    ['十六進位', '<span aria-hidden="true">&#x23F0;</span>'],
+    ['十進位', '<span aria-hidden="true">&#128230;</span>'],
+  ])('JSX 的 HTML 字元參照寫的 emoji 也抓得到（%s）', (_label, line) => {
+    expect(findPictographs(line)).toEqual([{ line: 1, text: line }])
+    expect(findPictographs('<span>&#9650; {recent}</span>')).toEqual([])
   })
 
   it('CSS 跳脫寫的 emoji 也抓得到，不是 emoji 的跳脫不算', () => {
