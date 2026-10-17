@@ -91,7 +91,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 | 功能 | 說明 |
 |------|------|
-| **Context Budget 視覺化** | Token 用量追蹤：對話長度圖、圓餅圖、熱力條，一眼看出每個 Session 燒了多少 token、cache 命中率多高 |
+| **Token Budget 視覺化** | 對話長度圖（橫軸是第幾次呼叫，標出壓縮與快取中斷）、Token 分布圓餅、輸出強度熱力條；說明與截圖見下方的 [Token Budget 面板](#token-budget-面板) |
 | **白話摘要** | 一句話講完這場對話（多長、呼叫幾次、內容最多累積到多少），依時間列出對話壓縮與快取中斷（閒置過期、換模型、原因不明），只在真的發生過時才給省 token 的建議，讓圖表不只好看還能看懂 |
 | **Token 熱力指示** | Assistant 訊息左側色碼條（綠=cache 命中佳、紅=高成本），Session 列表顯示 token 總量並可依 token 排序 |
 | **精確 Token 統計** | 自動偵測同一 API response 被拆成多個 JSONL entries 的情況，透過 requestId 去重避免 token 重複計算（修正 ~2.3x 膨脹） |
@@ -129,9 +129,55 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 </details>
 
+### Token Budget 面板
+
+在對話檢視按「顯示 Token Budget」，面板由上往下讀這場對話發生了什麼。下面三張截圖用的是合成的示範資料（見本節最後）。
+
+<p align="center">
+  <img src="docs/token-budget-story-zh.webp" alt="一句話與五張數字卡：這場對話 6 小時 22 分、84 次呼叫，內容最多累積到 342.8K token，是 1M 視窗的 34%；被壓縮 1 次，快取中斷 3 次" width="720" />
+</p>
+
+**一句話與五張數字卡**
+
+- 一句話講完這場對話：多長、幾次呼叫、內容最多累積到多少 token、有沒有被壓縮、快取有沒有中斷、中斷時重寫了多少。「呼叫」是送給模型的一次請求，一次提問帶出的每一輪工具往返都各算一次
+- **時長**是第一次到最後一次呼叫，中間離開的時間也算在內；側欄優先顯示的則是扣掉閒置的活動時間
+- **最長 context** 只在有證據時換算成 1M 視窗的百分比：有某次呼叫超過 200K 才算 1M。沒有證據、最長又到 160K 以上時，會說看不出視窗是 200K 還是 1M，不從模型名稱猜
+- 完全沒有讀寫過快取的 session（例如不支援 prompt caching 的供應商），快取中斷卡顯示「—」，句子會說沒有用到 prompt 快取，而不是「快取沒有中斷」
+
+<p align="center">
+  <img src="docs/token-budget-chart-zh.webp" alt="對話長度圖：橫軸是第幾次呼叫，虛線標出壓縮，圓點與圖示標出三次快取中斷，上方是 1M 上限線" width="720" />
+</p>
+
+**對話長度圖**
+
+- 面積是每次呼叫送出的整段對話長度，橫軸是第幾次呼叫
+- 虛線標出發生在兩次呼叫之間的壓縮（同一段空檔裡有好幾則摘要也只畫一條）；壓縮 5 次以內會在線上加圖示，超過 20 次改成淡色實線
+- 圓點是**重寫量最大的 5 次快取中斷**，圖示表示原因：時鐘是離開太久、快取過期，互換箭頭是換模型，問號是原因不明。其餘的中斷在下方清單
+- **快取中斷**的判斷：某次呼叫從快取讀到的不到上一次 prompt 的一半，prompt 卻沒有縮小（仍有上一次的八成以上）；前提是上一次有用到快取、這次有寫入快取，而且不是壓縮後的第一次呼叫。前後兩次的模型都已知而且不同，算換模型；不是換模型、距上一次呼叫又有 60 分鐘以上，算離開太久；其餘是原因不明。**重寫量**只算上一次的 prompt 這次沒讀到的部分，回來後新貼上的內容不算
+- 上限線可以切換「無／200K／1M」：有 1M 證據時預設畫 1M，否則不畫；切換只改參考線，不會改句子與數字卡
+- 滑鼠停在某次呼叫上，會列出那次的所有事件，包括沒畫成圓點的
+
+<p align="center">
+  <img src="docs/token-budget-events-zh.webp" alt="「發生了什麼」依時間列出換模型、離開太久、壓縮、原因不明四件事；「可以省的地方」列出三條建議；最下面是收合的詳細數據" width="720" />
+</p>
+
+**發生了什麼、可以省的地方**
+
+- 「發生了什麼」依時間列出每次壓縮與快取中斷，超過 6 件時先分類彙總，可以展開完整清單。最後一次呼叫之後才發生的壓縮也算進次數，排在最後，標明量不到前後
+- 「可以省的地方」只列這場真的發生過的情況，各附本場的數字：離開 1 小時以上（離開前先 `/compact`，回來要重寫的只剩摘要）、換模型（模型與 effort 盡量在開頭選好）、找不出原因的中斷（進行中的對話可以用 Claude Code 的 `/usage` 看最近一次快取失效最可能的原因，找得出來時才會列）
+- 「詳細數據」預設收合：總量、Token 分布圓餅、輸出強度熱力條
+
+**已知限制**
+
+- 呼叫數比圖表的像素寬度還多的長 session，滑鼠只停得到其中一部分呼叫，指著標記時可能跳出隔壁那次；所有事件仍列在清單裡
+- 「有呼叫超過 200K 就是 1M 視窗」假設視窗只有 200K 與 1M 兩種，程式不看是哪個模型
+- 快取能留多久要看計費方式：訂閱方案額度內的主對話是 1 小時，用 API key 或超出方案額度時預設 5 分鐘。離開太久的 60 分鐘門檻，是用一位使用者（訂閱方案）的資料校準的
+
+> **關於截圖**：這幾張圖是在 app 裡實際開出來的，資料則是合成的：專案、對話內容與 token 數字都是虛構的，刻意讓一場對話同時出現壓縮、三種快取中斷與超過 200K 的 context，不是任何人的真實使用紀錄。資料由 [`scripts/readme-fixture.mjs`](scripts/readme-fixture.mjs) 產生，同一份資料可以重現這些截圖。
+
 ### 三種佈景主題
 
-一鍵切換三種視覺風格，搭配內建 Context Budget 儀表板。
+一鍵切換三種視覺風格。下面是同一場示範對話的 Token Budget 面板（一句話、數字卡與對話長度圖）在三種主題下的樣子。
 
 <table>
   <tr>
@@ -140,9 +186,9 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
     <td align="center"><strong>💻 終端回憶 Terminal</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/theme-archive.webp" alt="Archive 主題 — 暖色調檔案室風格，搭配 Context Budget 儀表板" width="320" /></td>
-    <td><img src="docs/theme-timeline.webp" alt="Timeline 主題 — 冷色調時間線風格，搭配 Context Budget 儀表板" width="320" /></td>
-    <td><img src="docs/theme-terminal.webp" alt="Terminal 主題 — 深色終端風格，搭配 Context Budget 儀表板" width="320" /></td>
+    <td><img src="docs/theme-archive-zh.webp" alt="Archive 主題（暖色調檔案室風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
+    <td><img src="docs/theme-timeline-zh.webp" alt="Timeline 主題（冷色調時間線風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
+    <td><img src="docs/theme-terminal-zh.webp" alt="Terminal 主題（深色終端風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
   </tr>
 </table>
 

@@ -91,7 +91,7 @@ Built for depth, not breadth.
 
 | Feature | Description |
 |---------|-------------|
-| **Context Budget** | Token breakdown (input/output/cache), conversation length chart, output intensity heat bar — see at a glance how many tokens each session burned and how well cache hit |
+| **Token Budget charts** | Conversation length chart (by call, with compactions and cache breaks marked), token breakdown pie, output intensity heat bar; see [The Token Budget panel](#the-token-budget-panel) below for screenshots and how to read them |
 | **Plain-language summary** | One sentence on the session (how long, how many calls, how large the context got), compactions and cache breaks in time order (idle expiry, model switch or unknown), and token-saving advice only when it applies — so the charts aren't just pretty, they're readable |
 | **Token Heat Indicators** | Color bar on the left of assistant messages (green = good cache hit, red = high cost). Session list shows total tokens and supports token-based sorting |
 | **Accurate Token Stats** | Detects when a single API response is split into multiple JSONL entries and deduplicates via requestId, fixing ~2.3x token inflation |
@@ -129,9 +129,55 @@ Built for depth, not breadth.
 
 </details>
 
+### The Token Budget panel
+
+In the conversation view, press "Show Token Budget" and the panel reads top to bottom as what happened in the session. The three screenshots below use synthetic demo data (see the note at the end of this section).
+
+<p align="center">
+  <img src="docs/token-budget-story-en.webp" alt="The sentence and the five number cards: this session ran 6 h 22 min over 84 calls, and the context peaked at 342.8K tokens, 34% of a 1M window; compacted once, the cache broke 3 times" width="720" />
+</p>
+
+**The sentence and the five number cards**
+
+- One sentence on the session: how long it ran, how many calls, how far the context grew, whether it was compacted, whether the cache broke and how much was rewritten. A "call" is one request to the model; every tool round trip that a single prompt sets off counts as its own call
+- **Duration** runs from the first to the last call and includes time away; the sidebar leads with active time, which leaves idle gaps out
+- **Longest context** is turned into a share of a 1M window only with evidence: a call over 200K. Without evidence, when the context reached 160K or more, it says the window could be 200K or 1M; it never guesses from the model name
+- A session that never read or wrote the cache (a provider without prompt caching, for example) shows a dash on the cache-break card, and the sentence says it didn't use prompt caching instead of saying the cache never broke
+
+<p align="center">
+  <img src="docs/token-budget-chart-en.webp" alt="The conversation length chart: calls along the bottom, dashed lines at compactions, dots and icons at three cache breaks, and the 1M limit line at the top" width="720" />
+</p>
+
+**The conversation length chart**
+
+- The area is the whole conversation sent with each call, with calls along the bottom
+- Dashed lines mark compactions that happened between two calls (several summaries in the same gap share one line); with 5 compactions or fewer the lines also get an icon, and above 20 they turn faint and solid
+- Dots mark **the 5 cache breaks that rewrote the most**, with an icon for the cause: a clock for away too long (the cache expired), opposite arrows for a model switch, and a question mark for an unknown cause. The other breaks are in the list below
+- **A cache break** is a call that read less than half of the previous prompt from the cache even though the prompt did not shrink (it is still at least 80% of the previous one), provided the previous call used the cache, this call wrote to it, and the call is not the first one after a compaction. Two known, different models on the two calls count as a model switch; otherwise, 60 minutes or more since the previous call counts as away too long; anything else is an unknown cause. **Rewritten** counts only the part of the previous prompt this call didn't read, so new content pasted after coming back is not counted
+- The limit line switches between None, 200K and 1M: it defaults to 1M when there is evidence of a 1M window, and to none otherwise; switching moves only the reference line, never the sentence or the cards
+- Resting the mouse on a call lists everything that happened at it, including events not drawn as dots
+
+<p align="center">
+  <img src="docs/token-budget-events-en.webp" alt="What happened lists the model switch, the time away, the compaction and the unexplained break in time order; Where to save lists three suggestions; the collapsed Details section is at the bottom" width="720" />
+</p>
+
+**What happened, and where to save**
+
+- "What happened" lists every compaction and cache break in time order, summarised by kind above 6 events, with a button to list them all. A compaction after the last call also counts; it comes last, marked as having no measurable before and after
+- "Where to save" lists only what actually happened in this session, each with this session's numbers: away for an hour or more (run `/compact` before stepping away, so only the summary needs rewriting when you return), a model switch (pick the model and effort at the start when you can), and breaks with no clear cause (in a live conversation, Claude Code's `/usage` can show the likely cause of the most recent cache miss, when it can identify one)
+- "Details" is collapsed by default: totals, the token breakdown pie and the output intensity bar
+
+**Known limits**
+
+- In a long session with more calls than the chart is wide in pixels, the mouse can rest on only some of the calls, and pointing at a marker can show the call next to it; every event is still in the list
+- Reading a call over 200K as proof of a 1M window assumes that a window is either 200K or 1M; the code does not look at the model
+- How long the cache lasts depends on billing: one hour for the main conversation within a subscription's usage, five minutes by default with an API key or over the plan's usage. The 60-minute threshold for away too long was calibrated on one user's data (a subscription)
+
+> **About the screenshots**: they were taken in the app, but the data is synthetic: the projects, the conversations and the token counts are all made up, shaped so that one session shows a compaction, all three causes of a cache break and a context over 200K. It is nobody's real usage. The data comes from [`scripts/readme-fixture.mjs`](scripts/readme-fixture.mjs), and the same data reproduces these screenshots.
+
 ### Three Themes
 
-Switch between three visual themes with one click, each with the built-in Context Budget dashboard.
+Switch between three visual themes with one click. Below is the same demo session's Token Budget panel (the sentence, the number cards and the conversation length chart) in each theme.
 
 <table>
   <tr>
@@ -140,9 +186,9 @@ Switch between three visual themes with one click, each with the built-in Contex
     <td align="center"><strong>💻 Terminal</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/theme-archive.webp" alt="Archive theme — warm-toned file cabinet style with Context Budget dashboard" width="320" /></td>
-    <td><img src="docs/theme-timeline.webp" alt="Timeline theme — cool-toned timeline style with Context Budget dashboard" width="320" /></td>
-    <td><img src="docs/theme-terminal.webp" alt="Terminal theme — dark terminal style with Context Budget dashboard" width="320" /></td>
+    <td><img src="docs/theme-archive-en.webp" alt="The Token Budget panel in the Archive theme (warm-toned file cabinet style): the sentence, the number cards and the conversation length chart" width="320" /></td>
+    <td><img src="docs/theme-timeline-en.webp" alt="The Token Budget panel in the Timeline theme (cool-toned timeline style): the sentence, the number cards and the conversation length chart" width="320" /></td>
+    <td><img src="docs/theme-terminal-en.webp" alt="The Token Budget panel in the Terminal theme (dark terminal style): the sentence, the number cards and the conversation length chart" width="320" /></td>
   </tr>
 </table>
 
