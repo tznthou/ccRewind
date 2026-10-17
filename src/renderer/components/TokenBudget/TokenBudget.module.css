@@ -284,6 +284,31 @@
   flex-shrink: 0;
 }
 
+/* ── EventIcon（事件清單、建議、圖例、圖上的標記） ── */
+
+/* 單色，跟著主題的文字色：種類的顏色已經由清單的左色條與圖上的點表達，圖示不再上色
+   （比過照 tone 上色的樣稿：琥珀色在兩個亮色主題的對比只有 1.7–2.1:1） */
+.eventIcon {
+  color: var(--color-text);
+}
+
+/* 圖上圖示的墊底，跟中斷點的外圈（ReferenceDot 的 stroke）同色 */
+.eventIconHalo {
+  fill: var(--color-bg);
+  stroke: var(--color-bg);
+}
+
+/* 清單與圖例的圖示跟著字級縮放；圖上的固定 14px，跟圖表的文字一樣不縮放 */
+.insightIcon .eventIcon {
+  width: calc(14px * var(--font-scale));
+  height: calc(14px * var(--font-scale));
+}
+
+.chartLegend .eventIcon {
+  width: calc(12px * var(--font-scale));
+  height: calc(12px * var(--font-scale));
+}
+
 /* ── TokenBreakdown ── */
 
 .legendText {
@@ -388,9 +413,12 @@
   background: rgba(59, 130, 246, 0.06);
 }
 
+/* 跟標題第一行同高（標題 line-height 1.4），圖示對齊第一行的中線 */
 .insightIcon {
   flex-shrink: 0;
-  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  height: 1.4em;
 }
 
 .insightBody {
