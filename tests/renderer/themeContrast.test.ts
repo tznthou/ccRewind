@@ -4,15 +4,17 @@ import { fileURLToPath } from 'node:url'
 
 /**
  * 錯誤色（--color-error）的字在每個主題、每種會出現的底色上都要讀得清楚：WCAG AA 對一般大小的字要求 4.5:1。
- * timeline 原本的 #dc3545 在下面五種底色上只有 4.06–4.37。
+ * timeline 原本的 #dc3545 在下面三種底色上只有 4.07–4.37。
  *
- * 底色取錯誤色的字實際出現的地方：對話區的錯誤（--color-bg）、側欄（--color-bg-sidebar）、
- * 泡泡上的「已捨棄分支」徽章（--color-bubble-user／-assistant）、錯誤畫面的說明框（--color-bubble-system）。
+ * 底色取錯誤色的字實際出現的地方：對話區的錯誤（--color-bg）、側欄（--color-bg-sidebar）、錯誤畫面的說明框（--color-bubble-system）。
  * 主題只寫跟 :root 不同的 token，其餘沿用 :root；半透明的底色疊在該主題的 --color-bg 上算。
+ *
+ * 泡泡上的「已捨棄分支」徽章不在這裡：整個泡泡刻意淡化成 opacity 0.7，徽章的字與泡泡底色一起疊在頁面底色上，
+ * 實際對比約 3:1（timeline 3.25–3.39）。把它當成畫在不透明泡泡上算，會在一個畫面上不存在的組合報綠。
  */
 
 const GLOBAL_CSS = readFileSync(fileURLToPath(new URL('../../src/renderer/styles/global.css', import.meta.url)), 'utf-8')
-const SURFACES = ['--color-bg', '--color-bg-sidebar', '--color-bubble-user', '--color-bubble-assistant', '--color-bubble-system']
+const SURFACES = ['--color-bg', '--color-bg-sidebar', '--color-bubble-system']
 const AA_NORMAL_TEXT = 4.5
 
 type Rgba = [number, number, number, number]

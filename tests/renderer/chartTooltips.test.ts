@@ -10,6 +10,9 @@ import ts from 'typescript'
  * 所以每個 recharts 的 <Tooltip> 都要自己畫內容（content），或用 itemStyle 把字換成主題的文字色。
  *
  * 用 TypeScript 的 parser 找元素、不用正則：Tooltip 的 props 常常跨行，content 裡還會再包一個 JSX 元素。
+ *
+ * 已知抓不到：只認具名匯入的 Tooltip（`import * as R` 再寫 `<R.Tooltip>`、或自己包一層再匯出的都看不到）；
+ * 只看有沒有 itemStyle，不看裡面有沒有設 color。目前 renderer 的 Tooltip 都是具名匯入，itemStyle 都是共用的常數。
  */
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
