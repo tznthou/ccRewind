@@ -7,6 +7,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.0] - 2026-10-17
+
+### Changed
+
+- **The Token Budget panel now tells the session's story along a timeline** ([#134](https://github.com/tznthou/ccRewind/pull/134)): the panel used to open with a few totals, two charts and a list of insights. It now reads top to bottom as what happened in the conversation:
+  - **One sentence** with how long it ran, how many calls, how far the context grew, whether it was compacted, whether the cache broke and how much was rewritten, with the key numbers in bold. Below it, five number cards: Duration, Calls, Longest context, Compactions and Cache breaks. Duration runs from the first to the last call and includes time away (the sidebar leads with active time, which leaves idle gaps out). A session that never read or wrote the cache says it didn't use prompt caching, instead of saying the cache never broke
+  - **"Conversation length (by call)" chart**: calls along the bottom, every compaction marked, and the 5 cache breaks that rewrote the most marked by cause, with a plain-language legend below. Resting the mouse on a call lists everything that happened at it, including events not drawn as markers. The limit line switches between None, 200K and 1M: it defaults to 1M when some call went past 200K, and to none otherwise; switching moves only the reference line, never the sentence or the cards
+  - **"What happened"**: every compaction and cache break in time order, summarised by kind above 6 events, with a button to list them all. A compaction after the last call also counts; it comes last, marked as having no measurable before and after
+  - **"Where to save"**: only what actually happened in this session (away for an hour or more, a model switch, breaks with no known cause), each with this session's numbers. When the session didn't use prompt caching, it says none of these cache suggestions apply
+  - The totals, the token breakdown pie and the output intensity bar moved into a collapsed "Details" section
+  - Opening the panel on one of the maintainer's sessions with 4,084 calls went from 323 ms to 186 ms (median of five)
+  - ⚠️ In a long session with more calls than the chart is wide in pixels, the mouse can rest on only some of the calls, and pointing at a marker can show the call next to it; every event is still in the list below the chart. Of the 1,801 sessions in the maintainer's index, 5 have more than 450 calls
+  - ⚠️ Reading a call over 200K as proof of a 1M window assumes that a window is either 200K or 1M, and the code does not look at the model: a model with a window in between would read as 1M once one of its calls passed 200K. In the maintainer's index, all 65,892 calls over 200K are Claude models
+- **The panel's event icons are SVG instead of emoji** ([#135](https://github.com/tznthou/ccRewind/pull/135)): the four kinds of event (compaction, away too long, model switch, unknown cause) were marked with emoji, which ignore the theme and look different on every platform. They are now line icons drawn the same way as the theme switcher's, in the theme's text colour; the kind's colour stays on the list's left bar and the chart's dot. A cache break with no known cause is now a circled question mark, because it is informational rather than a warning. Icons in the lists and the legend grow with the font size setting
+- **Development dependency updates**: typescript-eslint 8.71.2 ([#130](https://github.com/tznthou/ccRewind/pull/130)), and the `.node-version` file used for local development set to Node.js 22.23.3 ([#131](https://github.com/tznthou/ccRewind/pull/131)), matching CI and the release builds. Both are used only for development, testing and building, and neither is packaged into the app
+
+### Removed
+
+- **Four insights, and guessing the window size from the model name** ([#134](https://github.com/tznthou/ccRewind/pull/134)): the context spike, output hotspot, growth trend and context limit insights are gone. Measured on the maintainer's index (1,801 main sessions with token data): the output hotspot appeared in 81.5% of sessions with three or more calls and repeated the output intensity bar, and "growth slowed" was presented as the cache working better, which it does not measure. The window size is now read only from evidence, a call over 200K for a 1M window. The same model in the same month had sessions that went past 200K and sessions compacted at 170K, so the name says nothing about the window
+
+### Fixed
+
+- **"The cache only lasts 5 minutes" now says "by default"** ([#135](https://github.com/tznthou/ccRewind/pull/135)): a cache break with no known cause, 5 minutes or more after the previous call, came with the note "with an API key or over your plan's usage, the cache only lasts 5 minutes". Five minutes is the default there; Claude Code's `promptCacheTtl` setting or `CLAUDE_CODE_PROMPT_CACHE_TTL` environment variable can raise it to an hour
+
 ## [1.26.1] - 2026-10-15
 
 ### Fixed
