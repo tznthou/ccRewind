@@ -1015,7 +1015,7 @@ describe('Phase 3.5: getToolDistribution', () => {
   })
 
   it('aggregates tool counts across sessions', () => {
-    const dist = db.getToolDistribution()
+    const dist = db.getToolDistribution(null, 0)
     expect(dist.length).toBeGreaterThanOrEqual(3)
 
     const read = dist.find(d => d.name === 'Read')!
@@ -1037,7 +1037,7 @@ describe('Phase 3.5: getToolDistribution', () => {
       messages: [],
     })
 
-    const dist = db.getToolDistribution('proj-td')
+    const dist = db.getToolDistribution('proj-td', 0)
     const grep = dist.find(d => d.name === 'Grep')
     expect(grep).toBeUndefined()
   })
@@ -1062,7 +1062,7 @@ describe('Phase 3.5: getTagDistribution', () => {
   })
 
   it('aggregates tag counts across sessions', () => {
-    const dist = db.getTagDistribution()
+    const dist = db.getTagDistribution(null, 0)
     const bugFix = dist.find(d => d.name === 'bug-fix')!
     expect(bugFix.count).toBe(2) // appears in both sessions
 
@@ -1103,7 +1103,7 @@ describe('Phase 3.5: getWorkPatterns', () => {
   })
 
   it('returns 24 hours with counts', () => {
-    const patterns = db.getWorkPatterns()
+    const patterns = db.getWorkPatterns(null, 0)
     expect(patterns.hourly).toHaveLength(24)
 
     const hour9 = patterns.hourly.find(h => h.hour === 9)!
@@ -1118,7 +1118,7 @@ describe('Phase 3.5: getWorkPatterns', () => {
   })
 
   it('returns average duration', () => {
-    const patterns = db.getWorkPatterns()
+    const patterns = db.getWorkPatterns(null, 0)
     // (3600 + 1800 + 900) / 3 = 2100
     expect(patterns.avgDurationSeconds).toBe(2100)
   })

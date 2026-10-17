@@ -22,7 +22,7 @@ const RANGE_OPTIONS: ReadonlyArray<{ days: number; labelKey: MessageKey }> = [
 
 interface ProjectOption {
   id: string
-  /** 完整路徑，滑鼠停留時顯示 */
+  /** 完整路徑，放在 title：收合時滑鼠停在下拉上看得到；macOS 展開後是原生選單，不一定顯示選項的 title */
   name: string
   /** 下拉顯示的文字：跟其他專案不撞名的最短尾段 */
   label: string

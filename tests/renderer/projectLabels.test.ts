@@ -23,6 +23,10 @@ describe('projectLabels', () => {
     expect(projectLabels(['/a/app/', 'C:\\work\\app', 'D:\\work\\app'])).toEqual(['a/app', 'C:\\work\\app', 'D:\\work\\app'])
   })
 
+  it('根目錄不會變成空白選項', () => {
+    expect(projectLabels(['/', '/Users/me/app'])).toEqual(['/', 'app'])
+  })
+
   it('完整路徑相同時回傳完整路徑（不會無限往前補）', () => {
     expect(projectLabels(['/a/app', '/a/app'])).toEqual(['/a/app', '/a/app'])
   })

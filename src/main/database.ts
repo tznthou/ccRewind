@@ -1262,7 +1262,7 @@ export class Database {
    * 每日使用趨勢（session 數 + token 消耗）。
    * session 數只算主對話；token 連 subagent 一起加，那是實際燒掉的量（parent 的總量不含 subagent）。
    */
-  getUsageStats(projectId?: string | null, days = 30): DailyUsage[] {
+  getUsageStats(projectId: string | null, days: number): DailyUsage[] {
     let sql = `
       SELECT date(started_at) AS date,
              SUM(CASE WHEN id ${Database.EXCLUDE_SUBAGENTS} THEN 1 ELSE 0 END) AS session_count,
@@ -1325,7 +1325,7 @@ export class Database {
   }
 
   /** 工具分佈（從 tools_used CSV 欄位聚合）；days = 0 為全部期間 */
-  getToolDistribution(projectId?: string | null, days = 0): DistributionItem[] {
+  getToolDistribution(projectId: string | null, days: number): DistributionItem[] {
     let sql = `SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (days > 0) {
@@ -1360,7 +1360,7 @@ export class Database {
   }
 
   /** 標籤分佈（從 tags CSV 欄位聚合）；days = 0 為全部期間 */
-  getTagDistribution(projectId?: string | null, days = 0): DistributionItem[] {
+  getTagDistribution(projectId: string | null, days: number): DistributionItem[] {
     let sql = `SELECT tags FROM sessions WHERE tags IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (days > 0) {
@@ -1390,7 +1390,7 @@ export class Database {
   }
 
   /** 工作模式（時段分佈 + 平均 session 長度）；days = 0 為全部期間 */
-  getWorkPatterns(projectId?: string | null, days = 0): WorkPatterns {
+  getWorkPatterns(projectId: string | null, days: number): WorkPatterns {
     let hourSql = `
       SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
       FROM sessions
@@ -1438,7 +1438,7 @@ export class Database {
   // ── Phase 4: Dashboard 進階功能 ──
 
   /** 效率趨勢：每日 token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
-  getEfficiencyTrend(projectId?: string | null, days = 30): DailyEfficiency[] {
+  getEfficiencyTrend(projectId: string | null, days: number): DailyEfficiency[] {
     let sql = `
       SELECT date(started_at) AS date,
              COUNT(*) AS session_count,

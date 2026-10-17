@@ -12,8 +12,9 @@ function parseOptionalString(v: unknown): string | null {
 }
 
 /**
- * 儀表板區間天數：0 = 全部期間（刻意放行，儀表板的「全部」就是送 0）；正數四捨五入後夾在 1–365；
- * 其他值（非數字、NaN、負數）用預設 30 天。0 本來就能查全部期間，所以 365 只是正規化，不是查詢量的上限。
+ * 儀表板區間天數：0 = 全部期間（刻意放行，儀表板的「全部」就是送 0）；正數四捨五入後夾在 1–365（超過 365 一律當 365）；
+ * 其他值（非數字、NaN、負數）用預設 30 天。0 本來就能查全部期間，所以夾值不是在限制查詢量，只是把值正規化。
+ * 這是儀表板區間唯一決定預設值的地方：DB 層的 days 是必填。
  */
 function parseRangeDays(v: unknown): number {
   if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 30
