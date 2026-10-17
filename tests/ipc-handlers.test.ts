@@ -427,6 +427,45 @@ describe('IPC Handlers', () => {
     })
   })
 
+  describe('dashboard range (days)', () => {
+    it('stats:usage passes 0 through as "all time" instead of clamping it to one day', () => {
+      const spy = vi.spyOn(db, 'getUsageStats')
+      getHandler('stats:usage')(event, null, 0)
+      expect(spy).toHaveBeenCalledWith(null, 0)
+    })
+
+    it.each([
+      [7.4, 7],
+      [500, 365],
+      [-5, 30],
+      ['7', 30], // 字串不轉成數字：拒收，用預設
+      [Number.NaN, 30],
+      [undefined, 30],
+    ])('stats:usage turns days=%s into %s', (input, expected) => {
+      const spy = vi.spyOn(db, 'getUsageStats')
+      getHandler('stats:usage')(event, null, input)
+      expect(spy).toHaveBeenCalledWith(null, expected)
+    })
+
+    it.each([
+      ['stats:efficiency', 'getEfficiencyTrend'],
+      ['stats:tools', 'getToolDistribution'],
+      ['stats:tags', 'getTagDistribution'],
+      ['stats:patterns', 'getWorkPatterns'],
+    ] as const)('%s parses days the same way and passes it on', (channel, method) => {
+      const spy = vi.spyOn(db, method)
+      const handler = getHandler(channel)
+      handler(event, 'proj-1', 90)
+      expect(spy).toHaveBeenLastCalledWith('proj-1', 90)
+      handler(event, null, 0)
+      expect(spy).toHaveBeenLastCalledWith(null, 0)
+      handler(event, null, 500)
+      expect(spy).toHaveBeenLastCalledWith(null, 365)
+      handler(event, null, -5)
+      expect(spy).toHaveBeenLastCalledWith(null, 30)
+    })
+  })
+
   describe('sendIndexerStatus', () => {
     it('broadcasts status to all windows', () => {
       const mockSend = vi.fn()

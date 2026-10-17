@@ -90,9 +90,9 @@ export default function DashboardPage() {
       try {
         const results = await Promise.allSettled([
           window.api.getUsageStats(projectFilter, range),
-          window.api.getToolDistribution(projectFilter),
-          window.api.getTagDistribution(projectFilter),
-          window.api.getWorkPatterns(projectFilter),
+          window.api.getToolDistribution(projectFilter, range),
+          window.api.getTagDistribution(projectFilter, range),
+          window.api.getWorkPatterns(projectFilter, range),
           window.api.getEfficiencyTrend(projectFilter, range),
           window.api.getWasteSessions(projectFilter),
         ])

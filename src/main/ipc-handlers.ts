@@ -11,6 +11,17 @@ function parseOptionalString(v: unknown): string | null {
   return v != null && typeof v === 'string' ? v : null
 }
 
+/**
+ * 儀表板區間天數：0 = 全部期間（刻意放行，儀表板的「全部」就是送 0）；正數四捨五入後夾在 1–365；
+ * 其他值（非數字、NaN、負數）用預設 30 天。0 本來就能查全部期間，所以 365 只是正規化，不是查詢量的上限。
+ */
+function parseRangeDays(v: unknown): number {
+  if (typeof v !== 'number' || !Number.isFinite(v)) return 30
+  const d = Math.round(v)
+  if (d === 0) return 0
+  return d < 0 ? 30 : Math.min(d, 365)
+}
+
 const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** 將 unknown 轉為 ExclusionRuleInput（IPC 參數驗證用；DB 層 normalizeRule 會做日期格式嚴驗） */
@@ -129,34 +140,27 @@ export function registerIpcHandlers(db: Database): void {
   // ── Phase 3.5: 統計儀表板 ──
 
   ipcMain.handle('stats:usage', (_event, projectId?: unknown, days?: unknown) => {
-    const pid = parseOptionalString(projectId)
-    const d = typeof days === 'number' && Number.isFinite(days) ? Math.max(1, Math.min(Math.round(days), 365)) : 30
-    return db.getUsageStats(pid, d)
+    return db.getUsageStats(parseOptionalString(projectId), parseRangeDays(days))
   })
 
   ipcMain.handle('stats:projects', () => db.getProjectStats())
 
-  ipcMain.handle('stats:tools', (_event, projectId?: unknown) => {
-    const pid = parseOptionalString(projectId)
-    return db.getToolDistribution(pid)
+  ipcMain.handle('stats:tools', (_event, projectId?: unknown, days?: unknown) => {
+    return db.getToolDistribution(parseOptionalString(projectId), parseRangeDays(days))
   })
 
-  ipcMain.handle('stats:tags', (_event, projectId?: unknown) => {
-    const pid = parseOptionalString(projectId)
-    return db.getTagDistribution(pid)
+  ipcMain.handle('stats:tags', (_event, projectId?: unknown, days?: unknown) => {
+    return db.getTagDistribution(parseOptionalString(projectId), parseRangeDays(days))
   })
 
-  ipcMain.handle('stats:patterns', (_event, projectId?: unknown) => {
-    const pid = parseOptionalString(projectId)
-    return db.getWorkPatterns(pid)
+  ipcMain.handle('stats:patterns', (_event, projectId?: unknown, days?: unknown) => {
+    return db.getWorkPatterns(parseOptionalString(projectId), parseRangeDays(days))
   })
 
   // ── Phase 4: Dashboard 進階功能 ──
 
   ipcMain.handle('stats:efficiency', (_event, projectId?: unknown, days?: unknown) => {
-    const pid = parseOptionalString(projectId)
-    const d = Number.isFinite(days) ? (days as number) : 30
-    return db.getEfficiencyTrend(pid, d)
+    return db.getEfficiencyTrend(parseOptionalString(projectId), parseRangeDays(days))
   })
 
   ipcMain.handle('stats:waste', (_event, projectId?: unknown, limit?: unknown) => {
