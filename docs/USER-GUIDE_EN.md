@@ -55,11 +55,13 @@ Click the Dashboard icon (four-square grid) in the title bar to switch to the cr
 - **Project Health**: Replaces the old project ranking — each project shows an outcome stacked bar (committed/tested/in-progress/quick-qa/unknown), a 7-day trend arrow, and average tokens per record
 - **Unresolved Sessions**: Lists sessions with the highest token consumption but no commit or test outcome, showing intent, token count, duration, file count, and outcome badge. Click any entry to jump straight to its replay
 - **Tool Usage / Tags**: Donut charts showing tool usage frequency and tag distribution respectively
-- **Work Patterns**: 24-hour activity heatmap plus average session duration — your most productive hours at a glance
+- **Work Patterns**: 24-hour heatmap in local time of when sessions start, plus average session duration
 
-The project dropdown in the top-right filters all charts simultaneously to a specific project.
+The project dropdown in the top-right narrows the usage and efficiency trends, tool usage, tags, work patterns and unresolved sessions to one project; project health is hidden while a project is selected.
 
-The 7D / 30D / 90D / All range applies to the usage and efficiency trends, tool usage, tags and work patterns; project health and unresolved sessions always cover all time (project health's trend arrow compares the last 7 days with the 7 days before them). The statistics include sessions whose original JSONL Claude Code has already cleaned up (the ones marked "Archived" in the sidebar). Session counts cover main sessions only, not subagents; the usage trend's tokens add what subagents used, and the efficiency trend counts main sessions only.
+The 7D / 30D / 90D / All range applies to the usage and efficiency trends, tool usage, tags and work patterns; project health and unresolved sessions always cover all time. 7D is today and the 6 days before it — 7 calendar days, starting at local midnight — and 30D and 90D work the same way. Hours and dates follow the computer's current time zone: the heatmap shows local hours, and the daily data points change day at local midnight. Project health's trend arrow compares the last 7 days (including today so far) with the same stretch a week earlier (from midnight 13 days ago to the same time of day 7 days ago): each is six whole days plus one more day from midnight up to that time; around a daylight-saving change, the end point and the lengths can be off by an hour. ccRewind only has each session's time in UTC, not the time zone you were in, so after travelling or changing time zones, past sessions are shown in your current time zone too.
+
+The statistics include sessions whose original JSONL Claude Code has already cleaned up (the ones marked "Archived" in the sidebar). Session counts cover main sessions only, not subagents; the usage trend's tokens add what subagents used, and the efficiency trend counts main sessions only.
 
 ## Cross-Session Archaeology
 
