@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.27.2] - 2026-10-18
+
+### Fixed
+
+- **The dashboard uses local time** ([#142](https://github.com/tznthou/ccRewind/pull/142)): sessions' start times are stored in UTC, and the dashboard used them as they were to group hours and dates — the known limitation v1.27.1 said would be fixed in the next release. Hours, dates and ranges now follow the computer's current time zone, matching the times shown in the conversation view and in related sessions
+  - **Work patterns heatmap**: hours are local. They used to be UTC hours, off from local time by your time zone's offset (8 hours earlier in Taiwan)
+  - **Dates in the usage and efficiency trends**: days change at local midnight. They used to change at UTC midnight, so sessions started during part of the day were counted on the previous or the next day (in Taiwan, sessions started before 8 a.m. went to the previous day)
+  - **7D / 30D / 90D start at local midnight, and 7D means 7 calendar days**: a range is today plus the N−1 days before it, from local midnight. It used to start at UTC midnight N days back, so 7D covered today plus the 7 days before it, 8 calendar days in all, and 30D and 90D each had an extra day
+  - **Project health's trend arrow compares the same stretch a week earlier**: "recent" is the last 7 local days, including today so far; "previous" runs from local midnight 13 days ago to the same time of day 7 days ago. Each is six whole days plus one more day from midnight up to that time; around a daylight-saving change, the end point and the lengths can be off by an hour. Recent used to be 8 calendar days against 7 previous days, which tilted the arrow upward. The number beside the arrow is still the recent count
+  - **What changes after upgrading**: the heatmap moves to local hours (8 hours later in Taiwan); some sessions move to the previous or the next day; 7D / 30D / 90D start later, so sessions and tokens from the stretch they no longer cover drop out; project health arrows may point a different way. This release does not change the database
+  - ⚠️ Past sessions are shown in your current time zone: ccRewind only has each session's time in UTC, not the time zone you were in, so after travelling or changing time zones, earlier sessions are also grouped by hour and date in the computer's current time zone
+  - ⚠️ The sidebar search's 7 / 30 / 90-day filter and the storage page's "exclude by date range" still compare UTC dates; this release does not change them. A session whose local date differs from its UTC date counts as the previous or the next day there: east of UTC, one started within as many hours after midnight as the offset (before 8 a.m. in Taiwan); west of UTC, one started within that many hours before midnight
+
+### Changed
+
+- **Development**: the dashboard queries take an optional `now`, which tests use to pin the current time, because SQLite's `'now'` reads the OS clock and a test's fake timers cannot reach it; the app itself does not pass it and uses the current time. Tests switch the time zone per test with `tests/fixtures/timeZone.ts`, which fails the test unless both SQLite and JavaScript followed. Three existing dashboard test groups whose expectations were written in UTC now run pinned to UTC ([#142](https://github.com/tznthou/ccRewind/pull/142))
+
 ## [1.27.1] - 2026-10-17
 
 ### Fixed
