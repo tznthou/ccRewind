@@ -3,7 +3,7 @@
 // worker_threads 裡改了沒效果，時區名打錯也不報錯、兩邊都靜默變成 UTC（2026-10-18 實測）。
 // 所以切完先拿固定時刻驗證兩邊真的換了，沒換就丟錯，不讓測試在錯的時區裡跑出「剛好通過」。
 import BetterSqlite3 from 'better-sqlite3'
-import { onTestFinished, vi } from 'vitest'
+import { onTestFinished } from 'vitest'
 
 // 一月、七月各一個：有夏令時間的時區兩季時差不同，只驗一季會放過「剛好那一季對上」
 const PROBES = ['2026-01-15T12:00:00.000Z', '2026-07-15T12:00:00.000Z']
@@ -60,11 +60,13 @@ export function assertTimeZoneInEffect(timeZone: string): void {
   }
 }
 
-/** 這個測試改用 timeZone 跑，測試結束自動還原 */
+/** 這個測試改用 timeZone 跑，測試結束把 TZ 還原成原值；只動 TZ，不像 vi.unstubAllEnvs() 會連別的 env stub 一起清掉 */
 export function useTimeZone(timeZone: string): void {
-  vi.stubEnv('TZ', timeZone)
+  const original = process.env.TZ
+  process.env.TZ = timeZone
   onTestFinished(() => {
-    vi.unstubAllEnvs()
+    if (original === undefined) delete process.env.TZ
+    else process.env.TZ = original
   })
   assertTimeZoneInEffect(timeZone)
 }

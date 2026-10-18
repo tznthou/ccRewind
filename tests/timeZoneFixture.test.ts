@@ -4,6 +4,8 @@ import BetterSqlite3 from 'better-sqlite3'
 import { assertTimeZoneInEffect, timeZoneMismatches, useTimeZone, wallClockIn } from './fixtures/timeZone'
 
 const ORIGINAL_TZ = process.env.TZ
+// 載入時實際生效的時區：還原後 SQLite 與 JS 都要回到它，環境變數回來了不代表時區回來了
+const ORIGINAL_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 /** 停在 UTC 的本地時間：C 函式庫或 JS 沒跟著換時，CI 上看到的就是這個 */
 const utcWallClock = (instant: string): string => instant.slice(0, 19).replace('T', ' ')
@@ -26,9 +28,10 @@ describe('useTimeZone', () => {
     expect(new Date('2026-10-17T16:30:00.000Z').getHours()).toBe(12)
   })
 
-  // 依賴上一條先跑：vitest 同檔照宣告順序執行
+  // 依賴上一條先跑：vitest 同檔照宣告順序執行（用 -t 單跑這條時，前面沒人切過時區，兩個斷言都會空轉通過）
   it('puts TZ back after the previous test', () => {
     expect(process.env.TZ).toBe(ORIGINAL_TZ)
+    assertTimeZoneInEffect(ORIGINAL_ZONE)
   })
 
   it('rejects a misspelled zone name instead of running in UTC', () => {
