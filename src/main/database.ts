@@ -216,6 +216,14 @@ function rangeStart(days: number, now: Date): string {
   return localMidnightBefore(now, days - 1)
 }
 
+/** now 往前 7 天的同一個鐘面時間（照當地年月日時分建構：中間隔著夏令時間切換也是同一個鐘面時間），格式同上 */
+function sameTimeWeekBefore(now: Date): string {
+  return new Date(
+    now.getFullYear(), now.getMonth(), now.getDate() - 7,
+    now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds(),
+  ).toISOString()
+}
+
 export class Database {
   private db: BetterSqlite3.Database
 
@@ -1552,11 +1560,14 @@ export class Database {
     }))
   }
 
-  /** 專案健康：outcome 分佈 + 活動趨勢（最近 7 天 vs 再往前 7 天，都從本地午夜起算）+ 效率 */
+  /** 專案健康：outcome 分佈 + 活動趨勢（最近 7 天 vs 前一週的同一段，照本地時間）+ 效率 */
   getProjectHealth(now: Date = new Date()): ProjectHealth[] {
-    // 前期＝[previousStart, recentStart)；SQL 的佔位依序是近期起點、前期起點、前期終點
+    // 近期＝最近 7 個本地日，含還沒過完的今天；前期從 13 天前的午夜到 7 天前的同一時刻，兩段一樣長。
+    // 前期若算到那天午夜，近期少了今天還沒過的部分，活動量沒變的專案也會顯示下降。
+    // SQL 的佔位依序是近期起點、前期起點、前期終點
     const recentStart = rangeStart(7, now)
     const previousStart = rangeStart(14, now)
+    const previousEnd = sameTimeWeekBefore(now)
     const rows = this.db.prepare(`
       SELECT s.project_id, p.display_name,
              SUM(CASE WHEN s.outcome_status = 'committed' THEN 1 ELSE 0 END) AS committed,
@@ -1578,7 +1589,7 @@ export class Database {
       WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
       GROUP BY s.project_id
       ORDER BY recent_count DESC, committed + tested DESC
-    `).all(recentStart, previousStart, recentStart) as Array<{
+    `).all(recentStart, previousStart, previousEnd) as Array<{
       project_id: string
       display_name: string
       committed: number

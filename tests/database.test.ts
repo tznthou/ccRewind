@@ -1636,18 +1636,33 @@ describe('dashboard local time', () => {
     expect(db.getUsageStats(null, 7, now).map(d => [d.date, d.sessionCount])).toEqual([['2026-03-04', 1]])
   })
 
-  it('getProjectHealth compares the last 7 local days with the 7 before them', () => {
+  it('getProjectHealth compares the last 7 local days with the same stretch a week earlier', () => {
     useTimeZone('Asia/Kolkata')
-    // 加爾各答 04-15 11:30（UTC+5:30）。近期＝04-09～04-15，起點 04-09 00:00＝2026-04-08T18:30:00.000Z；
-    // 前期＝04-02～04-08，起點 04-02 00:00＝2026-04-01T18:30:00.000Z
+    // 加爾各答 04-15 11:30（UTC+5:30）。近期＝04-09 00:00 到現在（6 天又 11.5 小時），起點 2026-04-08T18:30:00.000Z；
+    // 前期＝04-02 00:00 到 7 天前的同一時刻 04-08 11:30（＝2026-04-08T06:00:00.000Z），一樣長。
+    // 前期若算到 04-08 午夜，近期少了今天還沒過的部分，活動量沒變的專案也會顯示下降
     const now = new Date('2026-04-15T06:00:00.000Z')
-    seed('recent-first', '2026-04-08T18:30:00.000Z', { projectId: 'proj-local-h' })
-    seed('previous-last', '2026-04-08T18:29:59.000Z', { projectId: 'proj-local-h' })
-    seed('previous-first', '2026-04-01T18:30:00.000Z', { projectId: 'proj-local-h' })
-    seed('older', '2026-04-01T18:29:59.000Z', { projectId: 'proj-local-h' })
+    seed('recent-first', '2026-04-08T18:30:00.000Z', { projectId: 'proj-local-h' }) // 04-09 00:00:00 → 近期
+    seed('after-cutoff', '2026-04-08T18:29:59.000Z', { projectId: 'proj-local-h' }) // 04-08 23:59:59 → 都不算
+    seed('at-cutoff', '2026-04-08T06:00:00.000Z', { projectId: 'proj-local-h' }) // 04-08 11:30:00 → 都不算（前期不含終點）
+    seed('previous-last', '2026-04-08T05:59:59.000Z', { projectId: 'proj-local-h' }) // 04-08 11:29:59 → 前期
+    seed('previous-first', '2026-04-01T18:30:00.000Z', { projectId: 'proj-local-h' }) // 04-02 00:00:00 → 前期
+    seed('older', '2026-04-01T18:29:59.000Z', { projectId: 'proj-local-h' }) // 04-01 23:59:59 → 都不算
 
     const h = db.getProjectHealth(now).find(p => p.projectId === 'proj-local-h')!
     expect([h.recentCount, h.previousCount]).toEqual([1, 2])
+  })
+
+  it('getProjectHealth cuts the previous stretch at the same wall-clock time across a DST change', () => {
+    useTimeZone('America/New_York')
+    // 現在是紐約 03-10 11:00（EDT，03-08 才切夏令時間）；7 天前的同一時刻是 03-03 11:00（EST）＝2026-03-03T16:00:00.000Z。
+    // 直接減 7×24 小時會落在 15:00Z（EST 10:00），把 10:30 那場排掉
+    const now = new Date('2026-03-10T15:00:00.000Z')
+    seed('before-cutoff', '2026-03-03T15:30:00.000Z', { projectId: 'proj-local-dst' }) // 紐約 03-03 10:30（EST）→ 前期
+    seed('after-cutoff', '2026-03-03T16:30:00.000Z', { projectId: 'proj-local-dst' }) // 紐約 03-03 11:30（EST）→ 都不算
+
+    const h = db.getProjectHealth(now).find(p => p.projectId === 'proj-local-dst')!
+    expect([h.recentCount, h.previousCount]).toEqual([0, 1])
   })
 })
 
