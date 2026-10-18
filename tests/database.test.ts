@@ -6,6 +6,7 @@ import { Database } from '../src/main/database'
 import type { IndexSessionParams, MessageInput } from '../src/main/database'
 import { BACKFILL_HAS_REMOTE_CONTROL_SQL } from '../src/main/migrations'
 import { SUMMARY_VERSION } from '../src/main/summarizer'
+import { useTimeZone } from './fixtures/timeZone'
 
 let tmpDir: string
 let db: Database
@@ -921,6 +922,8 @@ describe('Phase 3: structured summary fields', () => {
 
 describe('Phase 3.5: getUsageStats', () => {
   beforeEach(() => {
+    // 期望的日期照 UTC 寫：儀表板用本地時間後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這組不是在測時區）
+    useTimeZone('UTC')
     db.indexSession({
       sessionId: 'usage-001', projectId: 'proj-u', projectDisplayName: '/test/u',
       title: 'Day 1 session', messageCount: 1, filePath: '/tmp/u1.jsonl', fileSize: 0,
@@ -1076,6 +1079,8 @@ describe('Phase 3.5: getTagDistribution', () => {
 
 describe('Phase 3.5: getWorkPatterns', () => {
   beforeEach(() => {
+    // 期望的時段照 UTC 寫：儀表板用本地時間後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這組不是在測時區）
+    useTimeZone('UTC')
     db.indexSession({
       sessionId: 'wp-001', projectId: 'proj-wp', projectDisplayName: '/test/wp',
       title: 'Morning session', messageCount: 0, filePath: '/tmp/wp1.jsonl', fileSize: 0,
@@ -1214,6 +1219,8 @@ describe('Phase 3.5: getRelatedSessions', () => {
 
 describe('Phase 4: getEfficiencyTrend', () => {
   beforeEach(() => {
+    // 期望的日期照 UTC 寫：儀表板用本地時間後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這組不是在測時區）
+    useTimeZone('UTC')
     // Session with 10 JSONL records, 5000 total tokens => 500 tokens per record
     db.indexSession({
       sessionId: 'eff-001', projectId: 'proj-eff', projectDisplayName: '/test/eff',
@@ -1516,6 +1523,131 @@ describe('dashboard scope: archived sessions and subagents', () => {
     seed('r-gone', { startedAt: daysAgo(200), files: ['/src/a.ts'], archived: true })
     seedSubagent('r-target', 'r-target/agent-a', { files: ['/src/a.ts', '/src/b.ts'] }) // 守門：subagent 不推薦
     expect(db.getRelatedSessions('r-target').map(r => r.sessionId)).toEqual(['r-gone'])
+  })
+})
+
+// ── 儀表板用本地時間（v1.27.2） ──
+// started_at 存 UTC（…Z）。時段、每日分組、區間邊界都照電腦目前的時區算，跟 app 其他地方一樣。
+// 「最近 N 天」＝今天加前 N−1 天、從本地午夜起算：7D 就是 7 個日曆天，專案健康的近期與前期各 7 天。
+// 「現在」由呼叫端傳進來：SQL 的 'now' 讀作業系統時鐘，vitest 的假時間改不到它（2026-10-18 實測）。
+// 時區避開 Asia/Taipei 與 UTC（維護者本機與 CI 的預設）：切換沒生效時，測試不會在其中一邊剛好通過。
+
+describe('dashboard local time', () => {
+  // 「現在」都選過去的日期：跟跑測試那天同一天的話，查詢沒用傳進來的 now、改讀真實時鐘，結果也一樣，測不出來
+  // 紐約 04-15 11:00（EDT，UTC−4）。7D＝04-09～04-15，起點是紐約 04-09 00:00＝2026-04-09T04:00:00.000Z
+  const NY_NOW = new Date('2026-04-15T15:00:00.000Z')
+
+  interface LocalSeed {
+    projectId?: string
+    toolsUsed?: string
+    tags?: string
+  }
+
+  function seed(sessionId: string, startedAt: string, opts: LocalSeed = {}): void {
+    const projectId = opts.projectId ?? 'proj-local'
+    db.indexSession({
+      sessionId, projectId, projectDisplayName: `/test/${projectId}`,
+      title: sessionId, messageCount: 1, filePath: `/tmp/${sessionId}.jsonl`, fileSize: 0,
+      fileMtime: '2026-01-01T00:00:00.000Z',
+      startedAt, endedAt: null,
+      toolsUsed: opts.toolsUsed, tags: opts.tags,
+      messages: [msg({ type: 'assistant', role: 'assistant', sequence: 0, inputTokens: 100, outputTokens: 50 })],
+    })
+  }
+
+  it('getWorkPatterns buckets hours in local time, DST included', () => {
+    useTimeZone('America/New_York')
+    seed('winter', '2026-03-02T03:30:00.000Z') // 紐約 03-01 22:30（EST，UTC−5）
+    seed('summer', '2026-07-01T14:00:00.000Z') // 紐約 07-01 10:00（EDT，UTC−4）
+
+    expect(db.getWorkPatterns(null, 0).hourly.filter(h => h.count > 0)).toEqual([
+      { hour: 10, count: 1 },
+      { hour: 22, count: 1 },
+    ])
+  })
+
+  it('getWorkPatterns handles half-hour offsets', () => {
+    useTimeZone('Asia/Kolkata')
+    seed('early', '2026-10-17T03:15:00.000Z') // 加爾各答 10-17 08:45（UTC+5:30）
+    seed('late', '2026-10-17T20:45:00.000Z') // 加爾各答 10-18 02:15
+
+    expect(db.getWorkPatterns(null, 0).hourly.filter(h => h.count > 0)).toEqual([
+      { hour: 2, count: 1 },
+      { hour: 8, count: 1 },
+    ])
+  })
+
+  it('getUsageStats groups days by the local date', () => {
+    useTimeZone('Pacific/Kiritimati')
+    seed('before-midnight', '2026-10-16T09:59:59.000Z') // 基里巴斯 10-16 23:59:59（UTC+14）
+    seed('after-midnight', '2026-10-16T10:00:00.000Z') // 基里巴斯 10-17 00:00:00
+
+    expect(db.getUsageStats(null, 0).map(d => [d.date, d.sessionCount])).toEqual([
+      ['2026-10-16', 1],
+      ['2026-10-17', 1],
+    ])
+  })
+
+  it('getEfficiencyTrend groups days by the local date', () => {
+    useTimeZone('America/New_York')
+    seed('evening', '2026-11-01T03:30:00.000Z') // 紐約 10-31 23:30（EDT；11-01 02:00 才切回 EST）
+    seed('past-midnight', '2026-11-01T04:30:00.000Z') // 紐約 11-01 00:30（EDT）
+
+    expect(db.getEfficiencyTrend(null, 0).map(d => [d.date, d.sessionCount])).toEqual([
+      ['2026-10-31', 1],
+      ['2026-11-01', 1],
+    ])
+  })
+
+  it.each([
+    ['getUsageStats', () => db.getUsageStats(null, 7, NY_NOW).reduce((s, d) => s + d.sessionCount, 0)],
+    ['getToolDistribution', () => db.getToolDistribution(null, 7, NY_NOW).reduce((s, d) => s + d.count, 0)],
+    ['getTagDistribution', () => db.getTagDistribution(null, 7, NY_NOW).reduce((s, d) => s + d.count, 0)],
+    ['getWorkPatterns', () => db.getWorkPatterns(null, 7, NY_NOW).hourly.reduce((s, h) => s + h.count, 0)],
+    ['getEfficiencyTrend', () => db.getEfficiencyTrend(null, 7, NY_NOW).reduce((s, d) => s + d.sessionCount, 0)],
+  ])('%s starts 7D at local midnight six days before now', (_name, countInRange) => {
+    useTimeZone('America/New_York')
+    // 紐約 04-09 00:00:00，起點那一刻要算進來：邊界字串少了毫秒（…00Z）會比 …00.000Z 大，把它排掉
+    seed('first-moment', '2026-04-09T04:00:00.000Z', { toolsUsed: 'Read:1', tags: 'docs' })
+    // 紐約 04-08 23:59:59，起點前一秒、同一個 UTC 日期：起點用 UTC 午夜、多算一天、或拿 datetime() 的空白分隔字串跟 …T…Z 比，都會把它算進來
+    seed('just-before', '2026-04-09T03:59:59.000Z', { toolsUsed: 'Read:1', tags: 'docs' })
+
+    expect(countInRange()).toBe(1)
+  })
+
+  it('getUsageStats shows seven local days for 7D', () => {
+    useTimeZone('America/New_York')
+    // 04-08～04-15 每天紐約早上 9 點（EDT，13:00Z）各一場
+    for (let day = 8; day <= 15; day++) seed(`day-${day}`, `2026-04-${String(day).padStart(2, '0')}T13:00:00.000Z`)
+
+    expect(db.getUsageStats(null, 7, NY_NOW).map(d => d.date)).toEqual([
+      '2026-04-09', '2026-04-10', '2026-04-11', '2026-04-12', '2026-04-13', '2026-04-14', '2026-04-15',
+    ])
+  })
+
+  it('getUsageStats finds local midnight on the other side of a DST change', () => {
+    useTimeZone('America/New_York')
+    // 現在是紐約 03-10 11:00（EDT，UTC−4，03-08 才切夏令時間）；7D 起點 03-04 00:00 那天還是 EST（UTC−5）＝2026-03-04T05:00:00.000Z。
+    // 從今天的本地午夜往回減 6×24 小時會帶著 EDT 的時差落在 04:00Z，把前一晚 23:30 那場算進來
+    const now = new Date('2026-03-10T15:00:00.000Z')
+    seed('first-hour', '2026-03-04T05:30:00.000Z') // 紐約 03-04 00:30（EST）
+    seed('evening-before', '2026-03-04T04:30:00.000Z') // 紐約 03-03 23:30（EST）
+
+    expect(db.getUsageStats(null, 7, now).map(d => [d.date, d.sessionCount])).toEqual([['2026-03-04', 1]])
+  })
+
+  it('getProjectHealth compares the last 7 local days with the 7 before them', () => {
+    useTimeZone('Asia/Kolkata')
+    // 加爾各答 04-15 11:30（UTC+5:30）。近期＝04-09～04-15，起點 04-09 00:00＝2026-04-08T18:30:00.000Z；
+    // 前期＝04-02～04-08，起點 04-02 00:00＝2026-04-01T18:30:00.000Z
+    const now = new Date('2026-04-15T06:00:00.000Z')
+    seed('recent-first', '2026-04-08T18:30:00.000Z', { projectId: 'proj-local-h' })
+    seed('previous-last', '2026-04-08T18:29:59.000Z', { projectId: 'proj-local-h' })
+    seed('previous-first', '2026-04-01T18:30:00.000Z', { projectId: 'proj-local-h' })
+    seed('older', '2026-04-01T18:29:59.000Z', { projectId: 'proj-local-h' })
+
+    const h = db.getProjectHealth(now).find(p => p.projectId === 'proj-local-h')!
+    expect([h.recentCount, h.previousCount]).toEqual([1, 2])
   })
 })
 
