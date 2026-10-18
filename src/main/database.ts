@@ -198,11 +198,40 @@ function mapExclusionRuleRow(r: ExclusionRuleRow): ExclusionRule {
   }
 }
 
+/**
+ * now 的本地日期往前 daysAgo 天的本地午夜，轉成 UTC 的 ISO 字串（…T…Z，含毫秒）。
+ * 跟 started_at 同格式（Claude Code 寫在 JSONL 的時間戳原樣存進來），可以直接比字串；
+ * SQLite 的 datetime() 用空白分隔（2026-10-12 04:00:00），拿來跟 …T…Z 比會錯（'T' 比空白大）。
+ * 用當地年月日建構：那一天的午夜照那一天的時差算，中間隔著夏令時間切換也對。
+ */
+function localMidnightBefore(now: Date, daysAgo: number): string {
+  return new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysAgo).toISOString()
+}
+
+/**
+ * 儀表板「最近 days 天」的起點：今天加前 days − 1 天，7D 就是 7 個日曆天。
+ * now 由呼叫端傳入：SQL 的 'now' 直接讀作業系統時鐘，測試釘不住「現在」。
+ */
+function rangeStart(days: number, now: Date): string {
+  return localMidnightBefore(now, days - 1)
+}
+
+/** now 往前 7 天的同一個鐘面時間（照當地年月日時分建構：中間隔著夏令時間切換也是同一個鐘面時間），格式同上 */
+function sameTimeWeekBefore(now: Date): string {
+  return new Date(
+    now.getFullYear(), now.getMonth(), now.getDate() - 7,
+    now.getHours(), now.getMinutes(), now.getSeconds(), now.getMilliseconds(),
+  ).toISOString()
+}
+
 export class Database {
   private db: BetterSqlite3.Database
 
   /** Subagent 排除子查詢：用於所有面向使用者的 query，只顯示主 session */
   private static readonly EXCLUDE_SUBAGENTS = 'NOT IN (SELECT id FROM subagent_sessions)'
+
+  /** started_at 的本地日期：SQLite 的 'localtime' 照程序的時區算，跟 app 其他地方一樣用電腦目前的時區 */
+  private static readonly LOCAL_DATE = "date(started_at, 'localtime')"
 
   constructor(dbPath: string) {
     // :memory: 不需要建目錄
@@ -1259,12 +1288,12 @@ export class Database {
   // ── Phase 3.5: Dashboard Stats ──
 
   /**
-   * 每日使用趨勢（session 數 + token 消耗）。
+   * 每日使用趨勢（session 數 + token 消耗），日期照本地時間分。
    * session 數只算主對話；token 連 subagent 一起加，那是實際燒掉的量（parent 的總量不含 subagent）。
    */
-  getUsageStats(projectId: string | null, days: number): DailyUsage[] {
+  getUsageStats(projectId: string | null, days: number, now: Date = new Date()): DailyUsage[] {
     let sql = `
-      SELECT date(started_at) AS date,
+      SELECT ${Database.LOCAL_DATE} AS date,
              SUM(CASE WHEN id ${Database.EXCLUDE_SUBAGENTS} THEN 1 ELSE 0 END) AS session_count,
              COALESCE(SUM(total_input_tokens), 0) + COALESCE(SUM(total_output_tokens), 0) AS total_tokens
       FROM sessions
@@ -1273,15 +1302,15 @@ export class Database {
     const params: (string | number)[] = []
 
     if (days > 0) {
-      sql += ` AND started_at >= date('now', ?)`
-      params.push(`-${days} days`)
+      sql += ' AND started_at >= ?'
+      params.push(rangeStart(days, now))
     }
     if (projectId) {
       sql += ' AND project_id = ?'
       params.push(projectId)
     }
 
-    sql += ' GROUP BY date(started_at) ORDER BY date(started_at)'
+    sql += ` GROUP BY ${Database.LOCAL_DATE} ORDER BY ${Database.LOCAL_DATE}`
 
     const rows = this.db.prepare(sql).all(...params) as Array<{
       date: string
@@ -1325,12 +1354,12 @@ export class Database {
   }
 
   /** 工具分佈（從 tools_used CSV 欄位聚合）；days = 0 為全部期間 */
-  getToolDistribution(projectId: string | null, days: number): DistributionItem[] {
+  getToolDistribution(projectId: string | null, days: number, now: Date = new Date()): DistributionItem[] {
     let sql = `SELECT tools_used FROM sessions WHERE tools_used IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (days > 0) {
-      sql += ` AND started_at >= date('now', ?)`
-      params.push(`-${days} days`)
+      sql += ' AND started_at >= ?'
+      params.push(rangeStart(days, now))
     }
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1360,12 +1389,12 @@ export class Database {
   }
 
   /** 標籤分佈（從 tags CSV 欄位聚合）；days = 0 為全部期間 */
-  getTagDistribution(projectId: string | null, days: number): DistributionItem[] {
+  getTagDistribution(projectId: string | null, days: number, now: Date = new Date()): DistributionItem[] {
     let sql = `SELECT tags FROM sessions WHERE tags IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}`
     const params: string[] = []
     if (days > 0) {
-      sql += ` AND started_at >= date('now', ?)`
-      params.push(`-${days} days`)
+      sql += ' AND started_at >= ?'
+      params.push(rangeStart(days, now))
     }
     if (projectId) {
       sql += ' AND project_id = ?'
@@ -1389,10 +1418,10 @@ export class Database {
       .sort((a, b) => b.count - a.count)
   }
 
-  /** 工作模式（時段分佈 + 平均 session 長度）；days = 0 為全部期間 */
-  getWorkPatterns(projectId: string | null, days: number): WorkPatterns {
+  /** 工作模式（時段分佈照本地時間 + 平均 session 長度）；days = 0 為全部期間 */
+  getWorkPatterns(projectId: string | null, days: number, now: Date = new Date()): WorkPatterns {
     let hourSql = `
-      SELECT CAST(strftime('%H', started_at) AS INTEGER) AS hour, COUNT(*) AS count
+      SELECT CAST(strftime('%H', started_at, 'localtime') AS INTEGER) AS hour, COUNT(*) AS count
       FROM sessions
       WHERE started_at IS NOT NULL AND id ${Database.EXCLUDE_SUBAGENTS}
     `
@@ -1405,9 +1434,9 @@ export class Database {
     const params: string[] = []
 
     if (days > 0) {
-      hourSql += ` AND started_at >= date('now', ?)`
-      durationSql += ` AND started_at >= date('now', ?)`
-      params.push(`-${days} days`)
+      hourSql += ' AND started_at >= ?'
+      durationSql += ' AND started_at >= ?'
+      params.push(rangeStart(days, now))
     }
     if (projectId) {
       hourSql += ' AND project_id = ?'
@@ -1437,10 +1466,10 @@ export class Database {
 
   // ── Phase 4: Dashboard 進階功能 ──
 
-  /** 效率趨勢：每日 token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
-  getEfficiencyTrend(projectId: string | null, days: number): DailyEfficiency[] {
+  /** 效率趨勢：每日（本地日期）token 總量 ÷ message_count（JSONL 記錄數，非對話輪次；欄位名沿用舊稱） */
+  getEfficiencyTrend(projectId: string | null, days: number, now: Date = new Date()): DailyEfficiency[] {
     let sql = `
-      SELECT date(started_at) AS date,
+      SELECT ${Database.LOCAL_DATE} AS date,
              COUNT(*) AS session_count,
              SUM(message_count) AS total_turns,
              CASE WHEN SUM(message_count) > 0
@@ -1456,15 +1485,15 @@ export class Database {
     const params: (string | number)[] = []
 
     if (days > 0) {
-      sql += ` AND started_at >= date('now', ?)`
-      params.push(`-${days} days`)
+      sql += ' AND started_at >= ?'
+      params.push(rangeStart(days, now))
     }
     if (projectId) {
       sql += ' AND project_id = ?'
       params.push(projectId)
     }
 
-    sql += ' GROUP BY date(started_at) ORDER BY date(started_at)'
+    sql += ` GROUP BY ${Database.LOCAL_DATE} ORDER BY ${Database.LOCAL_DATE}`
 
     const rows = this.db.prepare(sql).all(...params) as Array<{
       date: string
@@ -1531,8 +1560,14 @@ export class Database {
     }))
   }
 
-  /** 專案健康：outcome 分佈 + 活動趨勢 + 效率 */
-  getProjectHealth(): ProjectHealth[] {
+  /** 專案健康：outcome 分佈 + 活動趨勢（最近 7 天 vs 前一週的同一段，照本地時間）+ 效率 */
+  getProjectHealth(now: Date = new Date()): ProjectHealth[] {
+    // 近期＝最近 7 個本地日，含還沒過完的今天；前期從 13 天前的午夜到 7 天前的同一時刻，兩段一樣長。
+    // 前期若算到那天午夜，近期少了今天還沒過的部分，活動量沒變的專案也會顯示下降。
+    // SQL 的佔位依序是近期起點、前期起點、前期終點
+    const recentStart = rangeStart(7, now)
+    const previousStart = rangeStart(14, now)
+    const previousEnd = sameTimeWeekBefore(now)
     const rows = this.db.prepare(`
       SELECT s.project_id, p.display_name,
              SUM(CASE WHEN s.outcome_status = 'committed' THEN 1 ELSE 0 END) AS committed,
@@ -1540,8 +1575,8 @@ export class Database {
              SUM(CASE WHEN s.outcome_status = 'in-progress' THEN 1 ELSE 0 END) AS in_progress,
              SUM(CASE WHEN s.outcome_status = 'quick-qa' THEN 1 ELSE 0 END) AS quick_qa,
              SUM(CASE WHEN s.outcome_status IS NULL THEN 1 ELSE 0 END) AS unknown,
-             SUM(CASE WHEN s.started_at >= date('now', '-7 days') THEN 1 ELSE 0 END) AS recent_count,
-             SUM(CASE WHEN s.started_at >= date('now', '-14 days') AND s.started_at < date('now', '-7 days') THEN 1 ELSE 0 END) AS previous_count,
+             SUM(CASE WHEN s.started_at >= ? THEN 1 ELSE 0 END) AS recent_count,
+             SUM(CASE WHEN s.started_at >= ? AND s.started_at < ? THEN 1 ELSE 0 END) AS previous_count,
              CASE WHEN SUM(s.message_count) > 0
                THEN CAST(
                  (COALESCE(SUM(s.total_input_tokens), 0) + COALESCE(SUM(s.total_output_tokens), 0))
@@ -1554,7 +1589,7 @@ export class Database {
       WHERE s.id ${Database.EXCLUDE_SUBAGENTS}
       GROUP BY s.project_id
       ORDER BY recent_count DESC, committed + tested DESC
-    `).all() as Array<{
+    `).all(recentStart, previousStart, previousEnd) as Array<{
       project_id: string
       display_name: string
       committed: number
