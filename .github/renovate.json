@@ -21,7 +21,8 @@
     "schedule": [
       "before 6am on monday"
     ],
-    "automerge": true
+    "automerge": true,
+    "minimumReleaseAge": null
   },
   "vulnerabilityAlerts": {
     "labels": [
@@ -33,7 +34,7 @@
   "osvVulnerabilityAlerts": true,
   "packageRules": [
     {
-      "description": "Electron/native stack — Chromium + Node ABI 高風險，永遠手動 review",
+      "description": "Electron/native stack — Chromium + Node ABI 高風險，永遠手動 review。package.json 釘精確版本，lock file maintenance 重新解析時才動不到它們",
       "matchPackageNames": [
         "electron",
         "better-sqlite3",
