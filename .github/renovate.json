@@ -70,6 +70,7 @@
         "react-dom",
         "vite",
         "eslint",
+        "typescript-eslint",
         "/^@eslint\\//",
         "/^@typescript-eslint\\//"
       ],
