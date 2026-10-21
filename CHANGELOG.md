@@ -25,7 +25,7 @@
 
 - **依賴更新**：Electron 41.10.7、React 與 React DOM 19.3.1、`@tanstack/react-virtual` 3.14.20，開發用的 ESLint 10.12.0、vite 6.4.4、globals 17.13.0（[#132](https://github.com/tznthou/ccRewind/pull/132)），vitest 與 `@vitest/coverage-v8` 4.1.12（[#144](https://github.com/tznthou/ccRewind/pull/144)）；typescript-eslint 的版本範圍調到 ^8.71.2，實際安裝的版本原本就是 8.71.2（[#143](https://github.com/tznthou/ccRewind/pull/143)）
 - **開發**：pnpm 不再解析發布未滿 3 天的版本（`minimumReleaseAge`，[#146](https://github.com/tznthou/ccRewind/pull/146)）；Renovate 的 lock file maintenance 改成自動合併，Electron、better-sqlite3、electron-builder、electron-vite 改成精確版本、只走手動核准的群組更新（[#147](https://github.com/tznthou/ccRewind/pull/147)）；typescript-eslint 的 patch 併入自動合併的群組（[#145](https://github.com/tznthou/ccRewind/pull/145)）。只影響開發
-- **開發**：本地日期的換算放在 `src/shared/localDate.ts`，main 與 renderer 共用；側欄搜尋的日期計算抽到 `searchOptions.ts`，在 node 環境測。原本照 UTC 寫期望值的七條排除規則測試改成固定在 UTC 跑，本來就在測 UTC 語意的那一條改寫成本地日期的版本（[#148](https://github.com/tznthou/ccRewind/pull/148)）
+- **開發**：本地日期的換算放在 `src/shared/localDate.ts`，main 與 renderer 共用；側欄搜尋的日期計算抽到 `searchOptions.ts`，在 node 環境測。排除規則與搜尋的 SQL 不用 SQLite 的 `'localtime'`，起訖時刻在 JavaScript 算；測試裡 SQLite 跟 JavaScript 用同一個時區，行為測試分不出兩種寫法，所以 `tests/dateFilterTimeZoneSource.test.ts` 直接讀原始碼檢查。原本照 UTC 寫期望值的七條排除規則測試改成固定在 UTC 跑，本來就在測 UTC 語意的那一條改寫成本地日期的版本（[#148](https://github.com/tznthou/ccRewind/pull/148)）
 
 ## [1.27.2] - 2026-10-18
 
