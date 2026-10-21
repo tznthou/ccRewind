@@ -173,7 +173,7 @@ export type SearchSortBy = 'rank' | 'date'
 
 /** 搜尋選項（日期過濾 + 排序） */
 export interface SearchOptions {
-  dateFrom?: string   // ISO date, e.g. '2026-04-01'
+  dateFrom?: string   // 本地日期 YYYY-MM-DD（電腦目前的時區），e.g. '2026-04-01'
   dateTo?: string
   sortBy?: SearchSortBy  // 預設 'rank'
 }
@@ -337,8 +337,8 @@ export type ExclusionMode = 'delete' | 'rule-only'
 export interface ExclusionRule {
   id: number
   projectId: string | null
-  dateFrom: string | null  // ISO date YYYY-MM-DD
-  dateTo: string | null    // ISO date YYYY-MM-DD
+  dateFrom: string | null  // 本地日期 YYYY-MM-DD（電腦目前的時區）
+  dateTo: string | null    // 本地日期 YYYY-MM-DD（電腦目前的時區）
   mode: ExclusionMode
   createdAt: string
 }

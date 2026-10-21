@@ -1,7 +1,7 @@
 import type { StorageStats } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { formatBytes } from '../../utils/formatBytes'
-import { formatDateOnly } from '../../utils/formatTime'
+import { formatLocalDateOnly } from '../../utils/formatTime'
 import styles from './Storage.module.css'
 
 interface Props {
@@ -28,8 +28,9 @@ export default function StorageOverviewCards({ stats }: Props) {
       </div>
       <div className={styles.card}>
         <div className={styles.cardLabel}>{t('storage.overview.timeRange')}</div>
-        <div className={styles.cardValue}>{formatDateOnly(stats.earliestTimestamp)}</div>
-        <div className={styles.cardSub}>→ {formatDateOnly(stats.latestTimestamp)}</div>
+        {/* 本地日期：挑「依日期範圍排除」的範圍時會參考它，要跟規則一樣照電腦目前的時區 */}
+        <div className={styles.cardValue}>{formatLocalDateOnly(stats.earliestTimestamp)}</div>
+        <div className={styles.cardSub}>→ {formatLocalDateOnly(stats.latestTimestamp)}</div>
       </div>
     </div>
   )

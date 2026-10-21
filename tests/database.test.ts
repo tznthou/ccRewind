@@ -6,6 +6,8 @@ import { Database } from '../src/main/database'
 import type { IndexSessionParams, MessageInput } from '../src/main/database'
 import { BACKFILL_HAS_REMOTE_CONTROL_SQL } from '../src/main/migrations'
 import { SUMMARY_VERSION } from '../src/main/summarizer'
+import { matchesExclusionRule } from '../src/main/indexer'
+import type { ExclusionRule } from '../src/shared/types'
 import { useTimeZone } from './fixtures/timeZone'
 
 let tmpDir: string
@@ -1735,6 +1737,16 @@ describe('exclusion_rules schema (v16)', () => {
       db.addExclusionRule({ projectId: null, dateFrom: null, dateTo: '2026/01/01' }),
     ).toThrow(/YYYY-MM-DD/)
   })
+
+  it('normalize: rejects dates that do not exist (they would roll over to another month)', () => {
+    expect(() =>
+      db.previewExclusion({ projectId: null, dateFrom: '2026-02-30', dateTo: null }),
+    ).toThrow(/2026-02-30/)
+    expect(() =>
+      db.applyExclusion({ projectId: null, dateFrom: null, dateTo: '2026-13-01' }),
+    ).toThrow(/2026-13-01/)
+    expect(db.getExclusionRules()).toEqual([])
+  })
 })
 
 describe('getInactiveSessions input validation', () => {
@@ -1922,6 +1934,105 @@ describe('applyExclusion', () => {
     // 重新索引就能把它收回自己名下。summary_version 必須歸零讓 summaryStale 排隊，
     // 否則 mtime 不變 + 版本是最新 = 這輩子不會再被索引，磁碟有檔案卻永久讀不到。
     expect(rows.find(r => r.id === 's-replay')!.summary_version).toBeNull()
+  })
+})
+
+interface LocalDateBoundary {
+  zone: string
+  dateFrom: string
+  dateTo: string
+  /** [id, started_at, 本地日期在範圍內] */
+  sessions: Array<[string, string, boolean]>
+}
+// 排除規則與側欄搜尋共用的日期邊界：每個時區一組，起點前 1 ms、起點、終點最後 1 ms、終點後一刻。
+// 照 UTC 日期比的話，東邊的起點那一刻與西邊的終點最後一刻都不算，起點前與終點後反而算進來
+const LOCAL_DATE_BOUNDARIES: LocalDateBoundary[] = [
+  {
+    zone: 'Pacific/Kiritimati', dateFrom: '2026-10-10', dateTo: '2026-10-12',
+    sessions: [
+      ['before-start', '2026-10-09T09:59:59.999Z', false], // 基里巴斯（UTC+14）10-09 23:59:59.999
+      ['first-moment', '2026-10-09T10:00:00.000Z', true], // 10-10 00:00，UTC 還是 10-09
+      ['last-moment', '2026-10-12T09:59:59.999Z', true], // 10-12 23:59:59.999
+      ['after-end', '2026-10-12T10:00:00.000Z', false], // 10-13 00:00，UTC 還是 10-12
+    ],
+  },
+  {
+    zone: 'America/New_York', dateFrom: '2026-10-31', dateTo: '2026-11-01',
+    sessions: [
+      ['before-start', '2026-10-31T03:59:59.999Z', false], // 紐約 10-30 23:59:59.999（EDT），UTC 已是 10-31
+      ['first-moment', '2026-10-31T04:00:00.000Z', true], // 10-31 00:00（EDT）
+      ['last-moment', '2026-11-02T04:59:59.999Z', true], // 11-01 23:59:59.999（EST，那天 25 小時），UTC 已是 11-02
+      ['after-end', '2026-11-02T05:00:00.000Z', false], // 11-02 00:00（EST）
+    ],
+  },
+]
+
+describe('exclusion by date range follows local dates (preview, apply and the indexer agree)', () => {
+  it.each(LOCAL_DATE_BOUNDARIES)('$zone', ({ zone, dateFrom, dateTo, sessions }) => {
+    useTimeZone(zone)
+    // 訊息數用 1 / 2 / 4 / 8：場數碰巧一樣時（照 UTC 比也是 2 場），預覽的訊息數仍分得出是哪幾場
+    sessions.forEach(([id, startedAt], i) => seedSession(id, 'proj-local', '/local', startedAt, 2 ** i))
+    const input = { projectId: null, dateFrom, dateTo }
+    const inRange = sessions.filter(([, , covered]) => covered)
+    const expectedIds = inRange.map(([id]) => id).sort()
+    const expectedMessages = sessions.reduce((sum, [, , covered], i) => (covered ? sum + 2 ** i : sum), 0)
+
+    const rule: ExclusionRule = { id: 1, ...input, mode: 'delete', createdAt: '2026-10-21 00:00:00' }
+    expect(sessions.filter(([, startedAt]) => matchesExclusionRule('proj-local', startedAt, rule)).map(([id]) => id).sort())
+      .toEqual(expectedIds)
+
+    const preview = db.previewExclusion(input)
+    expect([preview.sessionCount, preview.messageCount]).toEqual([expectedIds.length, expectedMessages])
+
+    db.applyExclusion(input)
+    const remaining = new Set(db.rawAll<{ id: string }>('SELECT id FROM sessions').map(r => r.id))
+    expect(sessions.map(([id]) => id).filter(id => !remaining.has(id)).sort()).toEqual(expectedIds)
+  })
+})
+
+describe('an end date of 9999-12-31 ("no end") is read the same by the preview and the indexer', () => {
+  it.each(['UTC', 'America/New_York'])('%s', (zone) => {
+    useTimeZone(zone)
+    seedSession('far-end', 'proj-far', '/far', '2026-10-20T12:00:00.000Z', 1)
+    const input = { projectId: null, dateFrom: '2026-01-01', dateTo: '9999-12-31' }
+    const rule: ExclusionRule = { id: 1, ...input, mode: 'delete', createdAt: '2026-10-21 00:00:00' }
+
+    expect(matchesExclusionRule('proj-far', '2026-10-20T12:00:00.000Z', rule)).toBe(true)
+    expect(db.previewExclusion(input).sessionCount).toBe(1)
+  })
+})
+
+describe('search date filters ignore dates that do not exist', () => {
+  it('drops the filter instead of rolling over or failing', () => {
+    useTimeZone('America/New_York')
+    seedSession('october', 'proj-dates', '/dates', '2026-10-20T12:00:00.000Z', 1)
+    // 02-30 換成本地午夜會滾到 03-02（迄日就變成 03-02 為止，10 月那場被濾掉）；格式不對的會算不出時刻
+    for (const options of [{ dateTo: '2026-02-30' }, { dateFrom: 'not-a-date' }]) {
+      expect(db.searchSessions('session', null, 0, 100, options).results.map(r => r.sessionId)).toEqual(['october'])
+      expect([...new Set(db.search('msg', null, 0, 100, options).results.map(r => r.sessionId))]).toEqual(['october'])
+    }
+  })
+})
+
+describe('search date filters follow local dates', () => {
+  it.each(LOCAL_DATE_BOUNDARIES)('message search, $zone', ({ zone, dateFrom, dateTo, sessions }) => {
+    useTimeZone(zone)
+    sessions.forEach(([id, startedAt]) => seedSession(id, 'proj-local', '/local', startedAt))
+    const expected = sessions.filter(([, , covered]) => covered).map(([id]) => id).sort()
+
+    // 每場的訊息內容都是「msg N in <id>」
+    const page = db.search('msg', null, 0, 100, { dateFrom, dateTo })
+    expect([...new Set(page.results.map(r => r.sessionId))].sort()).toEqual(expected)
+  })
+
+  it.each(LOCAL_DATE_BOUNDARIES)('session search, $zone', ({ zone, dateFrom, dateTo, sessions }) => {
+    useTimeZone(zone)
+    sessions.forEach(([id, startedAt]) => seedSession(id, 'proj-local', '/local', startedAt))
+    const expected = sessions.filter(([, , covered]) => covered).map(([id]) => id).sort()
+
+    // 每場的標題都是「session <id>」
+    const page = db.searchSessions('session', null, 0, 100, { dateFrom, dateTo })
+    expect(page.results.map(r => r.sessionId).sort()).toEqual(expected)
   })
 })
 

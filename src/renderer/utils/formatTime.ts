@@ -1,3 +1,5 @@
+import { localDateOf } from '../../shared/localDate'
+
 export function formatDateTime(iso: string | null): string {
   if (!iso) return ''
   const d = new Date(iso)
@@ -18,6 +20,11 @@ export function formatTime(iso: string | null): string {
 export function formatDateOnly(iso: string | null): string {
   if (!iso) return '—'
   return iso.substring(0, 10)
+}
+
+/** 時間戳在電腦目前時區的日期（YYYY-MM-DD）；沒有或解析不了回 '—' */
+export function formatLocalDateOnly(iso: string | null): string {
+  return (iso ? localDateOf(iso) : null) ?? '—'
 }
 
 export function formatDuration(seconds: number | null): string {

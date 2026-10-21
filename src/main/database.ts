@@ -2,6 +2,7 @@ import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+import { isCalendarDate, localMidnightIso } from '../shared/localDate'
 import { migrations } from './migrations'
 import { COMPACT_SUMMARY_PREFIX, collapseDuplicateUsageRows, toolNamesPerCall, type ToolRow } from './tokenStats'
 
@@ -712,6 +713,16 @@ export class Database {
     return row !== undefined
   }
 
+  /**
+   * 已完整索引（summary_version 不是 NULL）的 session 在 DB 裡那份的 started_at 與 project_id；不在 DB、或
+   * summary_version 是 NULL 回 undefined。已完整索引的列 started_at 也可能是 NULL（純 replay 補寫的 metadata-only parent）
+   */
+  getIndexedCopy(sessionId: string): { startedAt: string | null; projectId: string } | undefined {
+    const row = this.db.prepare('SELECT started_at, project_id FROM sessions WHERE id = ? AND summary_version IS NOT NULL')
+      .get(sessionId) as { started_at: string | null; project_id: string } | undefined
+    return row && { startedAt: row.started_at, projectId: row.project_id }
+  }
+
   // ── Session tasks（~/.claude/tasks/{sessionId}/{N}.json）──
 
   /** UPSERT 一筆 session task，PK 為 (session_id, task_id) */
@@ -1012,13 +1023,15 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
-      if (options?.dateFrom) {
-        sql += ' AND date(s.started_at) >= ?'
-        params.push(options.dateFrom)
+      // 日期是電腦目前時區的日期，起訖換成本地午夜的時刻在 JS 算，跟排除規則同一套（buildExclusionWhere）。
+      // 不是真的日期就不篩：02-30 會滾到別的月份，格式不對的算不出時刻
+      if (options?.dateFrom && isCalendarDate(options.dateFrom)) {
+        sql += ' AND julianday(s.started_at) >= julianday(?)'
+        params.push(localMidnightIso(options.dateFrom))
       }
-      if (options?.dateTo) {
-        sql += ' AND date(s.started_at) <= ?'
-        params.push(options.dateTo)
+      if (options?.dateTo && isCalendarDate(options.dateTo)) {
+        sql += ' AND julianday(s.started_at) < julianday(?)'
+        params.push(localMidnightIso(options.dateTo, 1))
       }
 
       sql += options?.sortBy === 'date' ? ' ORDER BY m.timestamp DESC, m.id DESC' : ' ORDER BY rank, m.id DESC'
@@ -1084,13 +1097,14 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
-      if (options?.dateFrom) {
-        sql += ' AND date(s.started_at) >= ?'
-        params.push(options.dateFrom)
+      // 同 search()：起訖換成本地午夜的時刻在 JS 算，不是真的日期就不篩
+      if (options?.dateFrom && isCalendarDate(options.dateFrom)) {
+        sql += ' AND julianday(s.started_at) >= julianday(?)'
+        params.push(localMidnightIso(options.dateFrom))
       }
-      if (options?.dateTo) {
-        sql += ' AND date(s.started_at) <= ?'
-        params.push(options.dateTo)
+      if (options?.dateTo && isCalendarDate(options.dateTo)) {
+        sql += ' AND julianday(s.started_at) < julianday(?)'
+        params.push(localMidnightIso(options.dateTo, 1))
       }
 
       sql += options?.sortBy === 'date' ? ' ORDER BY s.started_at DESC, s.rowid DESC' : ' ORDER BY rank, s.rowid DESC'
@@ -1710,9 +1724,9 @@ export class Database {
 
   /**
    * 將規則 normalize + 嚴格驗證：
-   * - 空字串 / 僅空白 → null（防止 `DATE(x) >= ''` 對非 null date 恆真）
-   * - 日期欄位必須符合 YYYY-MM-DD（防止無效日期讓 `DATE('bad')` 回 NULL，
-   *   整個 date 條件被靜默跳過，再配上 null projectId 可能誤刪全庫）
+   * - 空字串 / 僅空白 → null（空字串的條件會被當成沒有條件，再配上 null projectId 就是全庫）
+   * - 日期欄位必須是真的 YYYY-MM-DD 日期：起訖要換成本地午夜的時刻，格式不對算不出時刻，
+   *   不存在的日期（02-30）會滾到別的月份，範圍跟使用者選的不一樣
    */
   private normalizeRule(rule: ExclusionRuleInput): ExclusionRuleInput {
     const norm = (v: string | null): string | null => {
@@ -1724,12 +1738,11 @@ export class Database {
     if (!r.projectId && !r.dateFrom && !r.dateTo) {
       throw new Error('Exclusion rule requires at least one non-empty criterion')
     }
-    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-    if (r.dateFrom != null && !DATE_RE.test(r.dateFrom)) {
-      throw new Error(`dateFrom must be YYYY-MM-DD, got: ${r.dateFrom}`)
+    if (r.dateFrom != null && !isCalendarDate(r.dateFrom)) {
+      throw new Error(`dateFrom must be a real date in YYYY-MM-DD, got: ${r.dateFrom}`)
     }
-    if (r.dateTo != null && !DATE_RE.test(r.dateTo)) {
-      throw new Error(`dateTo must be YYYY-MM-DD, got: ${r.dateTo}`)
+    if (r.dateTo != null && !isCalendarDate(r.dateTo)) {
+      throw new Error(`dateTo must be a real date in YYYY-MM-DD, got: ${r.dateTo}`)
     }
     return r
   }
@@ -1742,13 +1755,17 @@ export class Database {
       clauses.push('project_id = ?')
       params.push(rule.projectId)
     }
+    // 規則的日期是電腦目前時區的日期：起日的本地午夜起、迄日隔天的本地午夜前。這兩個時刻在 JS 算，SQL 只比時刻、
+    // 不用 'localtime'，跟 indexer 的 matchesExclusionRule 讀同一份時區資料（SQLite 的 'localtime' 走作業系統的
+    // 時區資料），預覽、刪除與之後索引時的判斷才不會分岔：分岔的話，這裡刪掉的對話下一輪會被索引回來。
+    // julianday 跟 JS 的 Date 一樣，先把帶 offset 的時間戳換成同一時刻再比
     if (rule.dateFrom != null) {
-      clauses.push('started_at IS NOT NULL AND DATE(started_at) >= ?')
-      params.push(rule.dateFrom)
+      clauses.push('started_at IS NOT NULL AND julianday(started_at) >= julianday(?)')
+      params.push(localMidnightIso(rule.dateFrom))
     }
     if (rule.dateTo != null) {
-      clauses.push('started_at IS NOT NULL AND DATE(started_at) <= ?')
-      params.push(rule.dateTo)
+      clauses.push('started_at IS NOT NULL AND julianday(started_at) < julianday(?)')
+      params.push(localMidnightIso(rule.dateTo, 1))
     }
     return { clause: clauses.join(' AND '), params }
   }

@@ -28,7 +28,7 @@ ccRewind offers two search modes, toggled via radio buttons next to the search b
 
 Below the search bar, filter controls let you narrow results:
 
-- **Date range**: All / 7 days / 30 days / 90 days for quick temporal filtering
+- **Date range**: All / 7 days / 30 days / 90 days for quick temporal filtering. Dates follow the computer's current time zone: 7 days starts at local midnight 7 days ago, so it covers 8 calendar days including today, and 30 and 90 days work the same way (the dashboard's 7D is 7 calendar days, so the two differ)
 - **Sort order**: Relevance (FTS5 rank) or Newest first (chronological), auto-re-searches on change
 
 Both modes support "All projects / Current project" scope filtering. Search result groups display the session date, and session search results show outcome status badges.
@@ -77,9 +77,9 @@ Claude Code has its own periodic cleanup for the raw JSONL under `~/.claude/proj
 
 Click the cylindrical database icon in the title bar to open the storage page:
 
-- **Overview cards**: DB size (including WAL/SHM sidecars), counts of sessions / messages / projects, earliest-to-latest activity span
+- **Overview cards**: DB size (including WAL/SHM sidecars), counts of sessions / messages / projects, earliest-to-latest activity span (dates in the computer's current time zone)
 - **Project breakdown**: each project shown with a visual size bar sorted by bytes descending, with a one-click "Exclude this project" button per row
-- **Date-range exclusion**: a collapsed advanced panel with a project picker plus two native date inputs; a debounced live preview shows how many sessions / messages / bytes match as you pick conditions. You can submit even when nothing matches, to block future sessions ahead of time
+- **Date-range exclusion**: a collapsed advanced panel with a project picker plus two native date inputs (dates in the computer's current time zone, both days included); a debounced live preview shows the matching session and message counts and their estimated size as you pick conditions. You can submit even when nothing matches, to block future sessions ahead of time. A rule does not record the time zone it was created in: after a time zone change it covers different sessions, and sessions indexed while in another time zone stay after changing back
 - **Existing rules**: listed with each rule's type (Data kept / Data deleted) and a remove button — after removal, matching sessions whose original JSONL is still on disk are rebuilt on the next index run; removing a "Data deleted" rule explains this first
 - **Unified confirm dialog**: excluding first asks what to do with existing data — "Keep data, stop indexing new sessions" (the default: indexed sessions stay and keep updating, only new ones are blocked) or "Delete data and stop indexing new sessions". Only deleting requires the "I understand this is irreversible" checkbox and shows the hit ratio plus a red banner above 50%; when nothing matches, only keeping is available. Nothing to type; backdrop, buttons, options and checkbox are all frozen during apply to prevent double-submit
 - **Database compaction** (v1.9.1): SQLite does not shrink the file on DELETE — removed rows become free pages inside the same file. When reclaimable space (live `freelist_count × page_size`) crosses 10 MB, a "Compact database" card appears on the storage page. Confirming runs `VACUUM` to reorganize the file layout (typically 10-30 s). The UI is emphatic that this operation **only reorganizes file structure and never deletes any conversation, session, or message** — closing the common misread of "reclaimable" as "about to be erased"
