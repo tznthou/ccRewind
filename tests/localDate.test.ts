@@ -59,6 +59,13 @@ describe('localMidnightIso', () => {
     expect(localMidnightIso('2026-11-01', 1)).toBe('2026-11-02T05:00:00.000Z')
     expect(localMidnightIso('2026-01-31', 1)).toBe('2026-02-01T05:00:00.000Z')
   })
+
+  it('stays within four-digit years: past 9999 it gives the last moment of 9999', () => {
+    useTimeZone('America/New_York')
+    // 9999-12-31 的隔天是一萬年，toISOString 會變成 +010000-…，SQLite 的 julianday 讀不懂
+    expect(localMidnightIso('9999-12-31', 1)).toBe('9999-12-31T23:59:59.999Z')
+    expect(localMidnightIso('9999-12-31')).toBe('9999-12-31T05:00:00.000Z')
+  })
 })
 
 describe('isCalendarDate', () => {

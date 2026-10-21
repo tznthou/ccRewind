@@ -1,5 +1,5 @@
-// 電腦目前時區的日期（YYYY-MM-DD）。main 的排除規則與 renderer 的側欄搜尋、儲存頁共用；
-// 格式跟 SQLite 的 date(x, 'localtime') 一樣，兩邊可以直接比字串。
+// 電腦目前時區的日期（YYYY-MM-DD）。main 的排除規則與 renderer 的側欄搜尋、儲存頁共用。
+// SQL 端的日期條件也用這裡的 localMidnightIso 換算，不用 SQLite 的 'localtime'（兩邊的時區資料可能不同源）。
 
 /** d 在電腦目前時區的日期 */
 export function formatLocalDate(d: Date): string {
@@ -32,5 +32,7 @@ export function isCalendarDate(date: string): boolean {
  */
 export function localMidnightIso(date: string, days = 0): string {
   const [y, m, d] = date.split('-').map(Number)
-  return new Date(y, m - 1, d + days).toISOString()
+  const iso = new Date(y, m - 1, d + days).toISOString()
+  // 9999-12-31 的隔天是一萬年，toISOString 寫成 +010000-…，SQLite 的日期函式讀不懂：用 9999 年的最後一刻代替
+  return iso.startsWith('+') ? '9999-12-31T23:59:59.999Z' : iso
 }

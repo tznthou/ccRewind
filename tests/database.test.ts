@@ -1990,6 +1990,18 @@ describe('exclusion by date range follows local dates (preview, apply and the in
   })
 })
 
+describe('an end date of 9999-12-31 ("no end") is read the same by the preview and the indexer', () => {
+  it.each(['UTC', 'America/New_York'])('%s', (zone) => {
+    useTimeZone(zone)
+    seedSession('far-end', 'proj-far', '/far', '2026-10-20T12:00:00.000Z', 1)
+    const input = { projectId: null, dateFrom: '2026-01-01', dateTo: '9999-12-31' }
+    const rule: ExclusionRule = { id: 1, ...input, mode: 'delete', createdAt: '2026-10-21 00:00:00' }
+
+    expect(matchesExclusionRule('proj-far', '2026-10-20T12:00:00.000Z', rule)).toBe(true)
+    expect(db.previewExclusion(input).sessionCount).toBe(1)
+  })
+})
+
 describe('search date filters follow local dates', () => {
   it.each(LOCAL_DATE_BOUNDARIES)('message search, $zone', ({ zone, dateFrom, dateTo, sessions }) => {
     useTimeZone(zone)

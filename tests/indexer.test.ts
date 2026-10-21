@@ -1572,6 +1572,92 @@ describe('runIndexer — phase 3 只擋這一刻不在 DB、或還是 provisiona
     expect(db.previewExclusion(range).sessionCount).toBe(0)
   })
 
+  it('規則判過、卻沒刪的 resume 那場，帶回被刪的 replay 內容時照樣擋下', async () => {
+    // resumed 本身是「規則涵蓋、卻還在 DB」的那種（改照本地日期解讀的舊規則、換時區）：DB 那份在範圍內。
+    // owner 被刪之後它重新索引，replay 的 entries 不再被去重，開始時間提早到 owner 的時間（仍在範圍內）。
+    // 只看「DB 那份被涵蓋」會放行，被刪的內容整段寫進 resumed 名下
+    const baseDir = path.join(tmpDir, 'projects')
+    const ownerLines = [
+      { type: 'user', uuid: 'drift-o1', timestamp: '2024-06-05T10:00:00.000Z', sessionId: 'sess-drift-owner', message: { role: 'user', content: 'owner question' } },
+      { type: 'assistant', uuid: 'drift-o2', parentUuid: 'drift-o1', timestamp: '2024-06-05T10:00:05.000Z', sessionId: 'sess-drift-owner', message: { role: 'assistant', content: 'owner answer' } },
+    ]
+    const own = (uuid: string, timestamp: string, content: string) => ({
+      type: 'user', uuid, timestamp, sessionId: 'sess-drift-resumed', message: { role: 'user', content },
+    })
+    // owner 與 resumed 放在不同專案：owner 用專案規則刪掉，resumed 不受影響
+    await createProject(baseDir, '-Users-drift-owner', { 'sess-drift-owner': ownerLines })
+    await createProject(baseDir, '-Users-drift-resumed', {
+      'sess-drift-resumed': [...ownerLines, own('drift-r1', '2024-06-07T10:00:00.000Z', 'resumed own')],
+    })
+    const older = new Date('2024-06-05T11:00:00.000Z')
+    const newer = new Date('2024-06-07T11:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-drift-owner', 'sess-drift-owner.jsonl'), older, older)
+    await utimes(path.join(baseDir, '-Users-drift-resumed', 'sess-drift-resumed.jsonl'), newer, newer)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-drift-resumed').map(m => m.contentText)).toEqual(['resumed own'])
+
+    db.applyExclusion({ projectId: '-Users-drift-owner', dateFrom: null, dateTo: null })
+    // 涵蓋 resumed 的日期規則，直接寫入、沒刪到它（06-05、06-07 10:00Z 在任何時區都落在 06-01～06-10）
+    db.rawExec("INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '2024-06-01', '2024-06-10', 'delete')")
+
+    await createProject(baseDir, '-Users-drift-resumed', {
+      'sess-drift-resumed': [...ownerLines, own('drift-r1', '2024-06-07T10:00:00.000Z', 'resumed own'), own('drift-r2', '2024-06-07T10:05:00.000Z', 'one more')],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-drift-resumed', 'sess-drift-resumed.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-drift-resumed').map(m => m.contentText)).not.toContain('owner question')
+  })
+
+  it('對話檔搬進被排除的專案時，用 DB 裡那份的專案判斷，照樣擋下', async () => {
+    // DB 那份屬於 A，不被 B 的規則涵蓋；拿這次掃到的 B 去比，會判成「DB 那份本來就被涵蓋」而放行
+    const baseDir = path.join(tmpDir, 'projects')
+    const lines = [{
+      type: 'user', uuid: 'moved-u1', timestamp: '2024-06-05T10:00:00.000Z', sessionId: 'sess-moved',
+      message: { role: 'user', content: 'moved between projects' },
+    }]
+    await createProject(baseDir, '-Users-move-a', { 'sess-moved': lines })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    db.upsertProject('-Users-move-b', 'move-b')
+    db.applyExclusion({ projectId: '-Users-move-b', dateFrom: null, dateTo: null })
+
+    await rm(path.join(baseDir, '-Users-move-a', 'sess-moved.jsonl'))
+    await createProject(baseDir, '-Users-move-b', { 'sess-moved': lines })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, '-Users-move-b', 'sess-moved.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.rawAll<{ project_id: string }>("SELECT project_id FROM sessions WHERE id = 'sess-moved'"))
+      .toEqual([{ project_id: '-Users-move-a' }])
+  })
+
+  it('DB 那份只被其中一條規則涵蓋時，照樣擋下（每一條涵蓋這次內容的規則都要涵蓋 DB 那份）', async () => {
+    // A 涵蓋 DB 那份與這次解析出的開始時間；B 只涵蓋這次的。B 這條規則從沒判過 DB 那份，不能算「判過卻沒刪」
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-two-rules'
+    // 06-03、06-08 10:00Z 在任何時區都分別落在 A（06-01～06-10）與 B（06-07～06-09）判斷的那一側
+    await createProject(baseDir, project, {
+      'sess-two-rules': [{
+        type: 'user', uuid: 'two-u1', timestamp: '2024-06-08T10:00:00.000Z', sessionId: 'sess-two-rules',
+        message: { role: 'user', content: 'parsed start is inside both rules' },
+      }],
+    })
+    const filePath = path.join(baseDir, project, 'sess-two-rules.jsonl')
+    // DB 那份：已完整索引、started_at 只落在 A；mtime 跟磁碟不同，這輪一定重新索引
+    db.indexSession({
+      sessionId: 'sess-two-rules', projectId: project, projectDisplayName: 'two-rules', title: null, messageCount: 0,
+      filePath, fileSize: 0, fileMtime: '2024-06-03T11:00:00.000Z',
+      startedAt: '2024-06-03T10:00:00.000Z', endedAt: null, summaryVersion: SUMMARY_VERSION, messages: [],
+    })
+    db.rawExec("INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '2024-06-01', '2024-06-10', 'delete')")
+    db.rawExec("INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '2024-06-07', '2024-06-09', 'delete')")
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-two-rules')).toEqual([])
+  })
+
   it('規則建立後才補寫的純 replay parent，之後長出範圍內的內容，照樣擋下', async () => {
     // 純 replay 的 metadata-only parent 補寫時拿當前 SUMMARY_VERSION、started_at 是 NULL：它在 DB 裡「已完整索引」，
     // 但規則只用 replay 的舊時間判過它。等它長出自己的內容、日期落進範圍，DB 那份並不在範圍內 → 照樣擋
@@ -1723,12 +1809,13 @@ describe('runIndexer — 舊版照 UTC 日期建的規則，改照本地日期�
       message: { role: 'user', content: `line ${n} of ${sessionId}` },
     })
 
-    // 規則出現前就索引好的那場：本地日期在範圍內、UTC 日期不在，照 UTC 比的舊版沒刪到它
+    // 先索引好的那場：本地日期在範圍內、UTC 日期不在。照 UTC 比的舊版沒刪到它（刪除資料）、也沒擋到它（保留資料）
     await createProject(baseDir, project, { 'sess-local-only': [line('sess-local-only', 1, localOnly)] })
     await runIndexer(db, undefined, baseDir, tasksDir)
     expect(db.getMessages('sess-local-only')).toHaveLength(1)
 
-    // 舊版建的規則：直接寫入規則列。rule-only 也不寫保留快照——它保留的是建立當下就在的，上面那場在之後才進 DB
+    // 舊版建的規則：直接寫入規則列，所以不會刪到上面那場。rule-only 也不寫保留快照：模擬上面那場是規則建立之後
+    // 才進 DB 的（照 UTC 比沒擋到它），保留快照裡沒有它
     db.rawExec(`INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '${dateFrom}', '${dateTo}', '${mode}')`)
 
     await createProject(baseDir, project, {

@@ -114,15 +114,18 @@ function matchesAnyRule(
 }
 
 /**
- * phase 3 寫入前的檢查要放行的那種：這一刻已完整索引在 DB，而且 DB 裡那份本來就被同樣的規則涵蓋——
- * 規則判過它卻沒刪（照 UTC 日期建的舊規則改成本地日期解讀、換了時區）。DB 那份不被涵蓋、這次解析出來
- * 才被涵蓋的，是內容變化把它帶進範圍：resume 那場在 owner 被刪掉後，replay 的 entries 不再被去重，
- * startedAt 退回 owner 的時間；純 replay 補寫的 parent（started_at 是 NULL）長出自己的內容。這些照樣擋。
+ * phase 3 寫入前的檢查要放行的那種：這一刻已完整索引在 DB，而且 DB 裡那份（它自己的專案與開始時間）本來就被
+ * 每一條涵蓋這次內容的規則涵蓋——規則判過它卻沒刪（照 UTC 日期建的舊規則改成本地日期解讀、換了時區）。
+ * 內容變化把它帶進範圍的照樣擋：resume 那場在 owner 被刪掉後，replay 的 entries 不再被去重，startedAt
+ * 提早到 owner 的時間（DB 那份在範圍外，或在範圍內但比這次晚）；純 replay 補寫的 parent（started_at 是 NULL）
+ * 長出自己的內容；對話檔被搬進被排除的專案。
  * 現查 DB、不用 phase 2 的快照：快照取在 phase 3 開始前，之後可能已被刪除。
  */
-function coveredWhileIndexed(db: Database, sessionId: string, projectId: string, covering: ExclusionRule[]): boolean {
-  const indexed = db.getIndexedStartedAt(sessionId)
-  return indexed !== undefined && covering.every(r => matchesExclusionRule(projectId, indexed.startedAt, r))
+function coveredWhileIndexed(db: Database, sessionId: string, startedAt: string | null, covering: ExclusionRule[]): boolean {
+  const indexed = db.getIndexedCopy(sessionId)
+  if (indexed === undefined) return false
+  if (startedAt != null && indexed.startedAt != null && Date.parse(startedAt) < Date.parse(indexed.startedAt)) return false
+  return covering.every(r => matchesExclusionRule(indexed.projectId, indexed.startedAt, r))
 }
 
 /**
@@ -504,7 +507,7 @@ export async function runIndexer(
     // summary_version 是 NULL 的不算已完整索引、內容變化才被帶進範圍的，都照樣擋。
     const covering = rulesGoverning(db, db.getExclusionRules(), s.sessionId)
       .filter(r => matchesExclusionRule(s.projectId, startedAt, r))
-    if (covering.length > 0 && !coveredWhileIndexed(db, s.sessionId, s.projectId, covering)) {
+    if (covering.length > 0 && !coveredWhileIndexed(db, s.sessionId, startedAt, covering)) {
       excludedSessionIds.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
       continue

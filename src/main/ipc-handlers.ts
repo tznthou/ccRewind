@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { randomUUID } from 'node:crypto'
 import type { Database } from './database'
 import type { ExclusionMode, ExclusionRuleInput, IndexerStatus, SearchOptions } from '../shared/types'
+import { isCalendarDate } from '../shared/localDate'
 import { exportSessionAsMarkdown } from './exporter'
 import { triggerIndexer } from './indexer'
 import { checkForUpdates, getUpdateState, openReleasePage, dismissUpdate } from './updater'
@@ -21,8 +22,6 @@ function parseRangeDays(v: unknown): number {
   if (v === 0) return 0
   return Math.min(Math.max(Math.round(v), 1), 365)
 }
-
-const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 /** 將 unknown 轉為 ExclusionRuleInput（IPC 參數驗證用；DB 層 normalizeRule 會做日期格式嚴驗） */
 function parseExclusionRuleInput(v: unknown): ExclusionRuleInput {
@@ -51,8 +50,9 @@ function parseSearchOptions(v: unknown): SearchOptions | undefined {
   if (v == null || typeof v !== 'object') return undefined
   const obj = v as Record<string, unknown>
   const opts: SearchOptions = {}
-  if (typeof obj.dateFrom === 'string' && ISO_DATE_RE.test(obj.dateFrom)) opts.dateFrom = obj.dateFrom
-  if (typeof obj.dateTo === 'string' && ISO_DATE_RE.test(obj.dateTo)) opts.dateTo = obj.dateTo
+  // 要是真的日期：起訖會換成本地午夜的時刻，02-30 會滾到 03-02、0050 年會被 Date 當成 1950 年
+  if (typeof obj.dateFrom === 'string' && isCalendarDate(obj.dateFrom)) opts.dateFrom = obj.dateFrom
+  if (typeof obj.dateTo === 'string' && isCalendarDate(obj.dateTo)) opts.dateTo = obj.dateTo
   if (obj.sortBy === 'rank' || obj.sortBy === 'date') opts.sortBy = obj.sortBy
   return opts
 }

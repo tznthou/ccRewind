@@ -714,13 +714,13 @@ export class Database {
   }
 
   /**
-   * 已完整索引（summary_version 不是 NULL）的 session 在 DB 裡的 started_at；不在 DB、或 summary_version 是 NULL 回 undefined。
-   * 回物件而不是字串：已完整索引的列 started_at 也可能是 NULL（純 replay 補寫的 metadata-only parent）
+   * 已完整索引（summary_version 不是 NULL）的 session 在 DB 裡那份的 started_at 與 project_id；不在 DB、或
+   * summary_version 是 NULL 回 undefined。已完整索引的列 started_at 也可能是 NULL（純 replay 補寫的 metadata-only parent）
    */
-  getIndexedStartedAt(sessionId: string): { startedAt: string | null } | undefined {
-    const row = this.db.prepare('SELECT started_at FROM sessions WHERE id = ? AND summary_version IS NOT NULL')
-      .get(sessionId) as { started_at: string | null } | undefined
-    return row && { startedAt: row.started_at }
+  getIndexedCopy(sessionId: string): { startedAt: string | null; projectId: string } | undefined {
+    const row = this.db.prepare('SELECT started_at, project_id FROM sessions WHERE id = ? AND summary_version IS NOT NULL')
+      .get(sessionId) as { started_at: string | null; project_id: string } | undefined
+    return row && { startedAt: row.started_at, projectId: row.project_id }
   }
 
   // ── Session tasks（~/.claude/tasks/{sessionId}/{N}.json）──

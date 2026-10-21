@@ -11,7 +11,7 @@ const DATE_RANGE_DAYS: Record<Exclude<DateRange, 'all'>, number> = {
 
 /**
  * 側欄搜尋的篩選條件。N 天＝從 N 天前的本地午夜起算，含今天共 N+1 個日曆天（儀表板的 7D 是 7 個，兩邊不同）。
- * 日期是電腦目前時區的日期，main 端用 date(started_at, 'localtime') 比。now 給測試釘住「現在」。
+ * 日期是電腦目前時區的日期，main 端把它換成本地午夜的時刻（localMidnightIso）再比。now 給測試釘住「現在」。
  */
 export function buildSearchOptions(dateRange: DateRange, sortBy: SearchSortBy, now: Date = new Date()): SearchOptions | undefined {
   let dateFrom: string | undefined
