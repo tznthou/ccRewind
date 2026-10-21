@@ -3,32 +3,14 @@ import { useAppState, useAppDispatch } from '../../context/AppContext'
 import { useI18n } from '../../i18n/useI18n'
 import type { MessageKey } from '../../i18n/messages'
 import type { SearchScope, SearchOptions, SearchSortBy } from '../../../shared/types'
+import { buildSearchOptions, type DateRange } from './searchOptions'
 import styles from './SearchBar.module.css'
-
-type DateRange = 'all' | '7d' | '30d' | '90d'
 
 const DATE_RANGE_KEYS: Record<DateRange, MessageKey> = {
   all: 'sidebar.searchBar.dateRange.all',
   '7d': 'sidebar.searchBar.dateRange.7d',
   '30d': 'sidebar.searchBar.dateRange.30d',
   '90d': 'sidebar.searchBar.dateRange.90d',
-}
-
-const DATE_RANGE_DAYS: Record<Exclude<DateRange, 'all'>, number> = {
-  '7d': 7,
-  '30d': 30,
-  '90d': 90,
-}
-
-function buildSearchOptions(dateRange: DateRange, sortBy: SearchSortBy): SearchOptions | undefined {
-  let dateFrom: string | undefined
-  if (dateRange !== 'all') {
-    const d = new Date()
-    d.setDate(d.getDate() - DATE_RANGE_DAYS[dateRange])
-    dateFrom = d.toISOString().slice(0, 10)
-  }
-  if (!dateFrom && sortBy === 'rank') return undefined
-  return { dateFrom, sortBy }
 }
 
 export default function SearchBar() {

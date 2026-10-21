@@ -5,6 +5,7 @@ import { mkdtemp, rm, mkdir, writeFile, chmod, readFile, readdir, stat, utimes }
 import { Database } from '../src/main/database'
 import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
 import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
+import { useTimeZone } from './fixtures/timeZone'
 
 let tmpDir: string
 let tasksDir: string
@@ -1019,6 +1020,8 @@ describe('matchesExclusionRule', () => {
   })
 
   it('dateFrom-only rule: matches dates >= dateFrom (inclusive)', () => {
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const rule = mkRule({ dateFrom: '2024-06-01' })
     expect(matchesExclusionRule('any', '2024-06-01T00:00:00.000Z', rule)).toBe(true)
     expect(matchesExclusionRule('any', '2024-06-02T00:00:00.000Z', rule)).toBe(true)
@@ -1026,6 +1029,8 @@ describe('matchesExclusionRule', () => {
   })
 
   it('dateTo-only rule: matches dates <= dateTo (inclusive)', () => {
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const rule = mkRule({ dateTo: '2024-06-30' })
     expect(matchesExclusionRule('any', '2024-06-30T23:59:59.000Z', rule)).toBe(true)
     expect(matchesExclusionRule('any', '2024-06-01T00:00:00.000Z', rule)).toBe(true)
@@ -1033,6 +1038,8 @@ describe('matchesExclusionRule', () => {
   })
 
   it('date range rule: matches only within [from, to]', () => {
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const rule = mkRule({ dateFrom: '2024-06-01', dateTo: '2024-06-30' })
     expect(matchesExclusionRule('p', '2024-06-15T12:00:00.000Z', rule)).toBe(true)
     expect(matchesExclusionRule('p', '2024-05-31T00:00:00.000Z', rule)).toBe(false)
@@ -1055,14 +1062,35 @@ describe('matchesExclusionRule', () => {
     expect(matchesExclusionRule('-p1', null, mkRule({ projectId: '-p1' }))).toBe(true)
   })
 
-  it('normalizes timezone offset to UTC date (aligned with SQL DATE semantics)', () => {
-    // 防回歸：原版用 substring(0,10) 對非 Z timestamp 會跟 SQL DATE() 的
-    // UTC-normalized 結果分歧，造成 applyExclusion 刪了但 skip 不命中 → 被重建。
-    // '2024-07-01T00:30:00+08:00' 的 UTC 時間是 2024-06-30T16:30:00Z，日期歸 2024-06-30
+  it('date range covers local days east of UTC: from local midnight of the first day to the end of the last', () => {
+    useTimeZone('Pacific/Kiritimati')
+    // 基里巴斯（UTC+14）的本地午夜是前一天的 10:00Z
+    const rule = mkRule({ dateFrom: '2026-10-10', dateTo: '2026-10-12' })
+    expect(matchesExclusionRule('p', '2026-10-09T09:59:59.999Z', rule)).toBe(false) // 10-09 23:59:59.999
+    expect(matchesExclusionRule('p', '2026-10-09T10:00:00.000Z', rule)).toBe(true) // 10-10 00:00，UTC 還是 10-09
+    expect(matchesExclusionRule('p', '2026-10-12T09:59:59.999Z', rule)).toBe(true) // 10-12 23:59:59.999
+    expect(matchesExclusionRule('p', '2026-10-12T10:00:00.000Z', rule)).toBe(false) // 10-13 00:00，UTC 還是 10-12
+  })
+
+  it('date range covers local days west of UTC, across the end of DST', () => {
+    useTimeZone('America/New_York')
+    // 11-01 02:00 EDT 撥回 EST：10-31 的午夜是 04:00Z，11-02 的午夜是 05:00Z
+    const rule = mkRule({ dateFrom: '2026-10-31', dateTo: '2026-11-01' })
+    expect(matchesExclusionRule('p', '2026-10-31T03:59:59.999Z', rule)).toBe(false) // 10-30 23:59:59.999 EDT，UTC 已是 10-31
+    expect(matchesExclusionRule('p', '2026-10-31T04:00:00.000Z', rule)).toBe(true) // 10-31 00:00 EDT
+    expect(matchesExclusionRule('p', '2026-11-02T04:59:59.999Z', rule)).toBe(true) // 11-01 23:59:59.999 EST，UTC 已是 11-02
+    expect(matchesExclusionRule('p', '2026-11-02T05:00:00.000Z', rule)).toBe(false) // 11-02 00:00 EST
+  })
+
+  it('converts an offset timestamp to the instant, then takes its local date', () => {
+    // 規格改成本地日期（v1.27.3）之前，這條測的是「換算成 UTC 日期、對齊 SQL 的 DATE()」。
+    // 防的回歸不變：直接取字串前 10 碼，帶 offset 的時間戳會歸錯日
+    useTimeZone('America/New_York')
     const rule = mkRule({ dateFrom: '2024-06-30', dateTo: '2024-06-30' })
-    expect(matchesExclusionRule('p', '2024-07-01T00:30:00+08:00', rule)).toBe(true)
-    // 同理 '2024-06-30T23:30:00-05:00' UTC = 2024-07-01 → 不在 06-30 範圍
-    expect(matchesExclusionRule('p', '2024-06-30T23:30:00-05:00', rule)).toBe(false)
+    // +08:00 的 07-01 09:30 是 07-01T01:30Z，紐約 06-30 21:30 → 在範圍
+    expect(matchesExclusionRule('p', '2024-07-01T09:30:00+08:00', rule)).toBe(true)
+    // +08:00 的 06-30 09:30 是 06-30T01:30Z，紐約 06-29 21:30 → 不在範圍
+    expect(matchesExclusionRule('p', '2024-06-30T09:30:00+08:00', rule)).toBe(false)
   })
 
   it('invalid timestamp with date rule: conservative false (do not skip)', () => {
@@ -1110,6 +1138,8 @@ describe('runIndexer exclusion rules', () => {
   })
 
   it('session outside rule date range is indexed normally', async () => {
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-test-excl3', {
       'sess-old': sampleSession1, // 2024-06-01
@@ -1135,6 +1165,8 @@ describe('runIndexer exclusion rules', () => {
   })
 
   it('cross-day session attributed by first timestamp (start date)', async () => {
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const crossDay = [
       {
         type: 'user', uuid: 'uc', timestamp: '2024-06-30T23:59:00.000Z',
@@ -1252,6 +1284,8 @@ describe('runIndexer exclusion rules', () => {
   it('summary_version 為 null 的 provisional parent 仍要重評 exclusion rule', async () => {
     // 補寫進去的 metadata-only parent 下一輪就成了 existing。若 exclusion 只看 !existing，
     // 它等於拿到永久豁免——parent 恢復可讀後整段被索引回來，使用者設的日期範圍形同虛設。
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const baseDir = path.join(tmpDir, 'projects')
     await createProject(baseDir, '-Users-prov', { 'sess-prov': sampleSession1 })
     const filePath = path.join(baseDir, '-Users-prov', 'sess-prov.jsonl')
@@ -1423,6 +1457,8 @@ describe('runIndexer — rule-only 規則（只擋新 session，保留的照常�
   it('規則建立後才出現、主檔暫時讀不到的新 session，權限回來後照樣被日期規則擋下', async (ctx) => {
     // 主檔讀不到 → 日期比對拿不到 timestamp、保守不匹配 → phase 4 為了接住 subagent 補寫一列
     // provisional parent。「row 在不在」若被當成「建規則時就在」，下一輪它就繞過了規則
+    // 期望照 UTC 寫：排除規則改用本地日期後，結果跟著跑測試那台電腦的時區走，釘住 UTC 才穩定（這條不是在測時區）
+    useTimeZone('UTC')
     const baseDir = path.join(tmpDir, 'projects')
     db.addExclusionRule({ projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-30' })
 
@@ -1447,6 +1483,170 @@ describe('runIndexer — rule-only 規則（只擋新 session，保留的照常�
 
     // 權限回來、日期讀得到了：它是規則建立後才出現的，規則要照樣擋下
     expect(db.getMessages('sess-ro-late')).toEqual([])
+  })
+})
+
+describe('runIndexer — phase 3 只擋這一刻不在 DB、或還是 provisional 的 session', () => {
+  it('已完整索引、還在 DB 的 session 後來被規則涵蓋，繼續寫入時新內容照常寫進來，subagent 也不被封存', async () => {
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-p3-kept', { 'sess-p3-kept': sampleSession1 })
+    await addSubagent(baseDir, '-Users-p3-kept', 'sess-p3-kept', 'agent-p3-kept')
+    // 規則外另一個帶 subagent 的 session：封存只在「這輪至少掃到一個 subagent」時才跑，
+    // 少了它，被跳過的 subagent 會因為封存根本沒執行而逃過，測試就量不到
+    await createProject(baseDir, '-Users-p3-other', {
+      'sess-p3-other': [{
+        type: 'user', uuid: 'p3-other-u1', timestamp: '2024-06-02T10:00:00.000Z',
+        sessionId: 'sess-p3-other', message: { role: 'user', content: 'unrelated' },
+      }],
+    })
+    await addSubagent(baseDir, '-Users-p3-other', 'sess-p3-other', 'agent-p3-other')
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-p3-kept')).toHaveLength(2)
+
+    // 規則涵蓋它、它卻還在 DB：規則改照本地日期解讀後的舊規則、換時區、startedAt 跟 DB 裡的不同，
+    // 都會留下這個狀態。直接寫入規則列，不經 applyExclusion，所以它沒被刪
+    db.rawExec("INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES ('-Users-p3-kept', NULL, NULL, 'delete')")
+
+    // session 繼續寫入：追加一則訊息，mtime 設成明確不同的時間，確保這輪一定重新索引
+    const filePath = path.join(baseDir, '-Users-p3-kept', 'sess-p3-kept.jsonl')
+    await createProject(baseDir, '-Users-p3-kept', {
+      'sess-p3-kept': [...sampleSession1, {
+        type: 'user', uuid: 'p3-kept-more', parentUuid: 'a1', timestamp: '2024-06-01T10:05:00.000Z',
+        sessionId: 'sess-p3-kept', message: { role: 'user', content: 'one more thing' },
+      }],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(filePath, t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // 擋在寫入前的話：內容停在規則出現那一刻、mtime 不更新所以每輪重新解析，
+    // 而且它進了 excludedSessionIds，phase 4 跳過它的 subagent，封存再把它當成磁碟上消失
+    expect(db.getMessages('sess-p3-kept')).toHaveLength(3)
+    expect(db.getAllSessionMtimes().get('sess-p3-kept')?.mtime).toBe((await stat(filePath)).mtime.toISOString())
+    const rows = db.rawAll<{ archived: number }>(
+      "SELECT archived FROM sessions WHERE id = 'sess-p3-kept/agent-p3-kept'",
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].archived).toBe(0)
+  })
+
+  it('provisional parent 在索引途中被日期規則涵蓋，phase 3 照樣不寫入', async () => {
+    // provisional（summary_version NULL）不算已完整索引：phase 2 對它照樣套規則，phase 3 也一樣。
+    // 只看「在不在 DB」的話，它會在這裡被當成已索引放行、內容整段補齊
+    const baseDir = path.join(tmpDir, 'projects')
+    await createProject(baseDir, '-Users-p3-prov', { 'sess-p3-prov': sampleSession1 })
+    const filePath = path.join(baseDir, '-Users-p3-prov', 'sess-p3-prov.jsonl')
+    const st = await stat(filePath)
+    db.indexSession({
+      sessionId: 'sess-p3-prov',
+      projectId: '-Users-p3-prov',
+      projectDisplayName: 'p3-prov',
+      title: null,
+      messageCount: 0,
+      filePath,
+      fileSize: st.size,
+      fileMtime: st.mtime.toISOString(),
+      startedAt: null,
+      endedAt: null,
+      summaryVersion: null,
+      messages: [],
+    })
+
+    // phase 2 時還沒有規則 → 進佇列；開始索引的那一刻才建日期規則。
+    // started_at 是 NULL，applyExclusion 的日期條件比不到它，它還留在 DB
+    let fired = false
+    const excludeMidRun: ProgressCallback = (p) => {
+      if (p.phase === 'indexing' && !fired) {
+        fired = true
+        // 範圍放寬到前後一個月：sampleSession1 的 06-01 10:00Z 在任何時區都落在裡面（這條不是在測時區）
+        db.applyExclusion({ projectId: null, dateFrom: '2024-05-01', dateTo: '2024-07-31' })
+      }
+    }
+    await runIndexer(db, excludeMidRun, baseDir, tasksDir)
+
+    expect(fired).toBe(true)
+    expect(db.hasSession('sess-p3-prov')).toBe(true)
+    expect(db.getMessages('sess-p3-prov')).toEqual([])
+  })
+})
+
+describe('runIndexer — 舊版照 UTC 日期建的規則，改照本地日期解讀後的下一輪索引', () => {
+  interface Upgrade {
+    zone: string
+    dateFrom: string
+    dateTo: string
+    /** UTC 日期在範圍內、本地日期不在：照 UTC 比會被刪掉、被擋下 */
+    utcOnly: string
+    /** 本地日期在範圍內、UTC 日期不在：照 UTC 比沒被刪，還在 DB */
+    localOnly: string
+    /** 兩種日期都在範圍內 */
+    both: string
+  }
+  const UPGRADES: Upgrade[] = [
+    {
+      zone: 'Pacific/Kiritimati', dateFrom: '2026-10-10', dateTo: '2026-10-12',
+      utcOnly: '2026-10-12T15:00:00.000Z', // 基里巴斯（UTC+14）10-13 05:00
+      localOnly: '2026-10-09T15:00:00.000Z', // 10-10 05:00
+      both: '2026-10-10T22:00:00.000Z', // 10-11 12:00
+    },
+    {
+      zone: 'America/New_York', dateFrom: '2026-10-31', dateTo: '2026-11-01',
+      utcOnly: '2026-10-31T02:00:00.000Z', // 紐約 10-30 22:00（EDT）
+      localOnly: '2026-11-02T02:00:00.000Z', // 11-01 21:00（EST）
+      both: '2026-10-31T16:00:00.000Z', // 10-31 12:00（EDT）
+    },
+  ]
+  const CASES = UPGRADES.flatMap(u => (['delete', 'rule-only'] as const).map(mode => ({ ...u, mode })))
+
+  it.each(CASES)('$zone, $mode', async ({ zone, dateFrom, dateTo, utcOnly, localOnly, both, mode }) => {
+    useTimeZone(zone)
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-upgrade'
+    const line = (sessionId: string, n: number, timestamp: string) => ({
+      type: 'user', uuid: `${sessionId}-u${n}`, timestamp, sessionId,
+      message: { role: 'user', content: `line ${n} of ${sessionId}` },
+    })
+
+    // 規則出現前就索引好的那場：本地日期在範圍內、UTC 日期不在，照 UTC 比的舊版沒刪到它
+    await createProject(baseDir, project, { 'sess-local-only': [line('sess-local-only', 1, localOnly)] })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-local-only')).toHaveLength(1)
+
+    // 舊版建的規則：直接寫入規則列。rule-only 也不寫保留快照——它保留的是建立當下就在的，上面那場在之後才進 DB
+    db.rawExec(`INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '${dateFrom}', '${dateTo}', '${mode}')`)
+
+    await createProject(baseDir, project, {
+      // 照 UTC 被刪掉或擋下、原始檔還在的
+      'sess-utc-only': [line('sess-utc-only', 1, utcOnly)],
+      // 規則出現後才有的新對話
+      'sess-both': [line('sess-both', 1, both)],
+      // 已在 DB 的那場繼續寫入
+      'sess-local-only': [line('sess-local-only', 1, localOnly), line('sess-local-only', 2, localOnly)],
+    })
+    const t = new Date('2026-12-01T00:00:00.000Z')
+    await utimes(path.join(baseDir, project, 'sess-local-only.jsonl'), t, t)
+
+    // provisional parent：主檔先前讀不到時補寫的一列，這次讀得到；本地日期在範圍內、UTC 日期不在
+    await createProject(baseDir, project, { 'sess-prov': [line('sess-prov', 1, localOnly)] })
+    const provPath = path.join(baseDir, project, 'sess-prov.jsonl')
+    const st = await stat(provPath)
+    db.indexSession({
+      sessionId: 'sess-prov', projectId: project, projectDisplayName: 'upgrade', title: null, messageCount: 0,
+      filePath: provPath, fileSize: st.size, fileMtime: st.mtime.toISOString(),
+      startedAt: null, endedAt: null, summaryVersion: null, messages: [],
+    })
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    // (a) 照 UTC 會被擋的，本地日期在範圍外 → 內容回到索引
+    expect(db.getMessages('sess-utc-only')).toHaveLength(1)
+    // (b) 本地日期在範圍內、已完整索引在 DB → 照常更新（子超 10-21 裁決：留著、照常更新）
+    expect(db.getMessages('sess-local-only')).toHaveLength(2)
+    // (c) 本地日期在範圍內的新對話 → 擋下
+    expect(db.hasSession('sess-both')).toBe(false)
+    // (d) 本地日期在範圍內的 provisional → 照樣擋，內容不補齊
+    expect(db.hasSession('sess-prov')).toBe(true)
+    expect(db.getMessages('sess-prov')).toEqual([])
   })
 })
 

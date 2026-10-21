@@ -1,6 +1,7 @@
 import path from 'node:path'
 import { readFile, stat } from 'node:fs/promises'
 import type { ExclusionRule, IndexerProgress, IndexerStatus, ParsedLine, ParsedSession, ScannedTask, ParsedTaskContent } from '../shared/types'
+import { localDateOf } from '../shared/localDate'
 import type { Database, MessageInput } from './database'
 import { scanProjects, scanSubagents, scanTasks, DEFAULT_BASE_DIR, DEFAULT_TASKS_BASE_DIR } from './scanner'
 import { logSafe, logSafeError } from './logSafe'
@@ -54,9 +55,10 @@ export async function readFirstTimestamp(
 
 /**
  * 對應 database.buildExclusionWhere 的純 JS 版本，用於 indexer 階段 skip 判斷。
- * 日期比對採 UTC date（new Date → toISOString）以對齊 SQLite `DATE(started_at)`——
- * 後者對帶 offset 的 timestamp 會先 normalize 到 UTC 再截日期。invalid timestamp
- * 視為保守不匹配，避免誤 skip。沒 timestamp 時若 rule 有 date range → 不匹配。
+ * 規則的日期是電腦目前時區的日期：先把 timestamp（含 offset）換算成同一時刻，再取本地日期，
+ * 對齊 SQL 端的 date(started_at, 'localtime')。兩邊各讀一份時區資料（這裡是 JS 內建的 ICU，
+ * SQLite 走作業系統），資料不一致時邊界那幾場可能判得不一樣。invalid timestamp 視為保守
+ * 不匹配，避免誤 skip。沒 timestamp 時若 rule 有 date range → 不匹配。
  */
 export function matchesExclusionRule(
   projectId: string,
@@ -66,9 +68,8 @@ export function matchesExclusionRule(
   if (rule.projectId != null && rule.projectId !== projectId) return false
   if (rule.dateFrom != null || rule.dateTo != null) {
     if (firstTimestamp == null) return false
-    const d = new Date(firstTimestamp)
-    if (Number.isNaN(d.getTime())) return false
-    const date = d.toISOString().substring(0, 10)
+    const date = localDateOf(firstTimestamp)
+    if (date == null) return false
     if (rule.dateFrom != null && date < rule.dateFrom) return false
     if (rule.dateTo != null && date > rule.dateTo) return false
   }
@@ -485,7 +486,13 @@ export async function runIndexer(
     // rule-only 規則在這裡一樣只管它建立當下不在 DB 裡的 session（rulesGoverning）。少了這層，
     // 被保留的 session 一重新索引就被擋在這裡：內容停在建規則那一刻、mtime 不更新所以每輪重跑，
     // 而且它進了 excludedSessionIds，phase 4 會跳過它的 subagent，封存再把它們當成磁碟上消失。
-    if (matchesAnyRule(rulesGoverning(db, db.getExclusionRules(), s.sessionId), s.projectId, startedAt)) {
+    //
+    // 這一刻還完整索引在 DB 裡的（summary_version 不是 NULL）也不擋，跟 phase 2 的 alreadyIndexed
+    // 同一個判準。中途被 applyExclusion 刪掉的，這一刻已經不在 DB，照樣擋；provisional 也照樣擋。
+    // 「符合規則卻還在 DB」的是規則沒刪到的：照 UTC 日期建的舊規則改成本地日期解讀、換了時區、
+    // 解析出的 startedAt 跟 DB 裡的不同。擋下它們不會讓它們離開 DB，只會落入上面那串後果。
+    // 現查 DB、不用 phase 2 的快照：快照取在這個迴圈開始前，之後可能已被刪除。
+    if (!db.isFullyIndexed(s.sessionId) && matchesAnyRule(rulesGoverning(db, db.getExclusionRules(), s.sessionId), s.projectId, startedAt)) {
       excludedSessionIds.add(s.sessionId)
       console.warn(`[indexer] session ${logSafe(s.sessionId)} was excluded while this run was in progress; not writing it back`)
       continue

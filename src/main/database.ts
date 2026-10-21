@@ -233,6 +233,9 @@ export class Database {
   /** started_at 的本地日期：SQLite 的 'localtime' 照程序的時區算，跟 app 其他地方一樣用電腦目前的時區 */
   private static readonly LOCAL_DATE = "date(started_at, 'localtime')"
 
+  /** 同上，給 sessions 表別名為 s 的查詢（側欄搜尋的日期篩選） */
+  private static readonly SESSION_LOCAL_DATE = "date(s.started_at, 'localtime')"
+
   constructor(dbPath: string) {
     // :memory: 不需要建目錄
     if (dbPath !== ':memory:') {
@@ -712,6 +715,12 @@ export class Database {
     return row !== undefined
   }
 
+  /** session 在 DB 裡、而且已完整索引（summary_version 不是 NULL，不是 provisional parent）*/
+  isFullyIndexed(sessionId: string): boolean {
+    const row = this.db.prepare('SELECT 1 FROM sessions WHERE id = ? AND summary_version IS NOT NULL').get(sessionId)
+    return row !== undefined
+  }
+
   // ── Session tasks（~/.claude/tasks/{sessionId}/{N}.json）──
 
   /** UPSERT 一筆 session task，PK 為 (session_id, task_id) */
@@ -1013,11 +1022,11 @@ export class Database {
         params.push(projectId)
       }
       if (options?.dateFrom) {
-        sql += ' AND date(s.started_at) >= ?'
+        sql += ` AND ${Database.SESSION_LOCAL_DATE} >= ?`
         params.push(options.dateFrom)
       }
       if (options?.dateTo) {
-        sql += ' AND date(s.started_at) <= ?'
+        sql += ` AND ${Database.SESSION_LOCAL_DATE} <= ?`
         params.push(options.dateTo)
       }
 
@@ -1085,11 +1094,11 @@ export class Database {
         params.push(projectId)
       }
       if (options?.dateFrom) {
-        sql += ' AND date(s.started_at) >= ?'
+        sql += ` AND ${Database.SESSION_LOCAL_DATE} >= ?`
         params.push(options.dateFrom)
       }
       if (options?.dateTo) {
-        sql += ' AND date(s.started_at) <= ?'
+        sql += ` AND ${Database.SESSION_LOCAL_DATE} <= ?`
         params.push(options.dateTo)
       }
 
@@ -1710,9 +1719,9 @@ export class Database {
 
   /**
    * 將規則 normalize + 嚴格驗證：
-   * - 空字串 / 僅空白 → null（防止 `DATE(x) >= ''` 對非 null date 恆真）
-   * - 日期欄位必須符合 YYYY-MM-DD（防止無效日期讓 `DATE('bad')` 回 NULL，
-   *   整個 date 條件被靜默跳過，再配上 null projectId 可能誤刪全庫）
+   * - 空字串 / 僅空白 → null（防止 `date(x, 'localtime') >= ''` 對非 null date 恆真）
+   * - 日期欄位必須符合 YYYY-MM-DD（日期條件是比字串：`<= 'not-a-date'` 對每個日期都成立，
+   *   再配上 null projectId 會誤刪全庫）
    */
   private normalizeRule(rule: ExclusionRuleInput): ExclusionRuleInput {
     const norm = (v: string | null): string | null => {
@@ -1742,12 +1751,13 @@ export class Database {
       clauses.push('project_id = ?')
       params.push(rule.projectId)
     }
+    // 規則的日期是電腦目前時區的日期，跟 indexer 的 matchesExclusionRule 同一個判準
     if (rule.dateFrom != null) {
-      clauses.push('started_at IS NOT NULL AND DATE(started_at) >= ?')
+      clauses.push(`started_at IS NOT NULL AND ${Database.LOCAL_DATE} >= ?`)
       params.push(rule.dateFrom)
     }
     if (rule.dateTo != null) {
-      clauses.push('started_at IS NOT NULL AND DATE(started_at) <= ?')
+      clauses.push(`started_at IS NOT NULL AND ${Database.LOCAL_DATE} <= ?`)
       params.push(rule.dateTo)
     }
     return { clause: clauses.join(' AND '), params }
