@@ -1632,6 +1632,30 @@ describe('runIndexer — phase 3 只擋這一刻不在 DB、或還是 provisiona
       .toEqual([{ project_id: '-Users-move-a' }])
   })
 
+  it('DB 那份沒有開始時間（純 replay 補寫的 parent）時不放行，專案規則也一樣', async () => {
+    // 正常流程走不到這個狀態：刪除型的專案規則建立時就把整個專案刪光，保留資料型會把它放進快照。
+    // 直接寫入規則列造出來，確認豁免不會只因為「專案對得上」就讓沒判過時間的列長出內容
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-null-start'
+    await createProject(baseDir, project, {
+      'sess-null-start': [{
+        type: 'user', uuid: 'null-start-u1', timestamp: '2024-06-05T10:00:00.000Z', sessionId: 'sess-null-start',
+        message: { role: 'user', content: 'content grown after the placeholder' },
+      }],
+    })
+    const filePath = path.join(baseDir, project, 'sess-null-start.jsonl')
+    db.indexSession({
+      sessionId: 'sess-null-start', projectId: project, projectDisplayName: 'null-start', title: null, messageCount: 0,
+      filePath, fileSize: 0, fileMtime: '2024-06-01T00:00:00.000Z',
+      startedAt: null, endedAt: null, summaryVersion: SUMMARY_VERSION, messages: [],
+    })
+    db.rawExec(`INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES ('${project}', NULL, NULL, 'delete')`)
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-null-start')).toEqual([])
+  })
+
   it('DB 那份只被其中一條規則涵蓋時，照樣擋下（每一條涵蓋這次內容的規則都要涵蓋 DB 那份）', async () => {
     // A 涵蓋 DB 那份與這次解析出的開始時間；B 只涵蓋這次的。B 這條規則從沒判過 DB 那份，不能算「判過卻沒刪」
     const baseDir = path.join(tmpDir, 'projects')

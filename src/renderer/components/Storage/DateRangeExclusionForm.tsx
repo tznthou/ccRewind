@@ -3,14 +3,13 @@ import type { ExclusionPreview, ExclusionRuleInput, ProjectBreakdown } from '../
 import { useI18n } from '../../i18n/useI18n'
 import { lastSegment } from '../../utils/pathDisplay'
 import ExclusionPreviewSummary from './ExclusionPreviewSummary'
+import { buildDateRangeRule } from './dateRangeRule'
 import styles from './Storage.module.css'
 
 interface Props {
   projects: ProjectBreakdown[]
   onSubmit: (rule: ExclusionRuleInput) => void
 }
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
   const { t } = useI18n()
@@ -21,13 +20,10 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
   const [previewError, setPreviewError] = useState<string | null>(null)
 
   // 組合當前 rule input；無任何條件 → null（後續 early return）
-  const rule: ExclusionRuleInput | null = useMemo(() => {
-    const pid = projectId || null
-    const df = dateFrom && DATE_RE.test(dateFrom) ? dateFrom : null
-    const dt = dateTo && DATE_RE.test(dateTo) ? dateTo : null
-    if (!pid && !df && !dt) return null
-    return { projectId: pid, dateFrom: df, dateTo: dt }
-  }, [projectId, dateFrom, dateTo])
+  const rule: ExclusionRuleInput | null = useMemo(
+    () => buildDateRangeRule(projectId, dateFrom, dateTo),
+    [projectId, dateFrom, dateTo],
+  )
 
   // User 改任一欄位 → 立即清掉 preview（避免顯示舊規則的 stale 數字），
   // 由 effect 在 debounce 後重抓。做在 handler 而非 effect，避開 react-hooks/set-state-in-effect。

@@ -124,6 +124,8 @@ function matchesAnyRule(
 function coveredWhileIndexed(db: Database, sessionId: string, startedAt: string | null, covering: ExclusionRule[]): boolean {
   const indexed = db.getIndexedCopy(sessionId)
   if (indexed === undefined) return false
+  // DB 那份沒有開始時間（純 replay 補寫的 parent），規則從沒用時間判過它
+  if (startedAt != null && indexed.startedAt == null) return false
   if (startedAt != null && indexed.startedAt != null && Date.parse(startedAt) < Date.parse(indexed.startedAt)) return false
   return covering.every(r => matchesExclusionRule(indexed.projectId, indexed.startedAt, r))
 }

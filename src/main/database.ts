@@ -1023,12 +1023,13 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
-      // 日期是電腦目前時區的日期，起訖換成本地午夜的時刻在 JS 算，跟排除規則同一套（buildExclusionWhere）
-      if (options?.dateFrom) {
+      // 日期是電腦目前時區的日期，起訖換成本地午夜的時刻在 JS 算，跟排除規則同一套（buildExclusionWhere）。
+      // 不是真的日期就不篩：02-30 會滾到別的月份，格式不對的算不出時刻
+      if (options?.dateFrom && isCalendarDate(options.dateFrom)) {
         sql += ' AND julianday(s.started_at) >= julianday(?)'
         params.push(localMidnightIso(options.dateFrom))
       }
-      if (options?.dateTo) {
+      if (options?.dateTo && isCalendarDate(options.dateTo)) {
         sql += ' AND julianday(s.started_at) < julianday(?)'
         params.push(localMidnightIso(options.dateTo, 1))
       }
@@ -1096,12 +1097,12 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
-      // 同 search()：起訖換成本地午夜的時刻在 JS 算
-      if (options?.dateFrom) {
+      // 同 search()：起訖換成本地午夜的時刻在 JS 算，不是真的日期就不篩
+      if (options?.dateFrom && isCalendarDate(options.dateFrom)) {
         sql += ' AND julianday(s.started_at) >= julianday(?)'
         params.push(localMidnightIso(options.dateFrom))
       }
-      if (options?.dateTo) {
+      if (options?.dateTo && isCalendarDate(options.dateTo)) {
         sql += ' AND julianday(s.started_at) < julianday(?)'
         params.push(localMidnightIso(options.dateTo, 1))
       }

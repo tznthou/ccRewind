@@ -2002,6 +2002,18 @@ describe('an end date of 9999-12-31 ("no end") is read the same by the preview a
   })
 })
 
+describe('search date filters ignore dates that do not exist', () => {
+  it('drops the filter instead of rolling over or failing', () => {
+    useTimeZone('America/New_York')
+    seedSession('october', 'proj-dates', '/dates', '2026-10-20T12:00:00.000Z', 1)
+    // 02-30 換成本地午夜會滾到 03-02（迄日就變成 03-02 為止，10 月那場被濾掉）；格式不對的會算不出時刻
+    for (const options of [{ dateTo: '2026-02-30' }, { dateFrom: 'not-a-date' }]) {
+      expect(db.searchSessions('session', null, 0, 100, options).results.map(r => r.sessionId)).toEqual(['october'])
+      expect([...new Set(db.search('msg', null, 0, 100, options).results.map(r => r.sessionId))]).toEqual(['october'])
+    }
+  })
+})
+
 describe('search date filters follow local dates', () => {
   it.each(LOCAL_DATE_BOUNDARIES)('message search, $zone', ({ zone, dateFrom, dateTo, sessions }) => {
     useTimeZone(zone)
