@@ -224,7 +224,7 @@ describe('IPC Handlers', () => {
       // 搜尋的起訖要換成本地午夜的時刻：02-30 會滾到 03-02、0050 年會被 Date 當成 1950 年
       const spy = vi.spyOn(db, channel === 'search:query' ? 'search' : 'searchSessions')
       getHandler(channel)(event, 'Hello', null, 0, { dateFrom: '2026-02-30', dateTo: '2026-03-01', sortBy: 'date' })
-      getHandler(channel)(event, 'Hello', null, 0, { dateFrom: '0050-01-01' })
+      getHandler(channel)(event, 'Hello', null, 0, { dateFrom: '0050-01-01', dateTo: '2026-02-30' })
       expect(spy.mock.calls.map(c => c[4])).toEqual([{ dateTo: '2026-03-01', sortBy: 'date' }, {}])
     })
   })
