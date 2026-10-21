@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import type { ExclusionPreview, ExclusionRuleInput, ProjectBreakdown } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { lastSegment } from '../../utils/pathDisplay'
@@ -16,14 +16,26 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
   const [projectId, setProjectId] = useState<string>('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [dateFromIncomplete, setDateFromIncomplete] = useState(false)
+  const [dateToIncomplete, setDateToIncomplete] = useState(false)
+  const dateFromRef = useRef<HTMLInputElement>(null)
+  const dateToRef = useRef<HTMLInputElement>(null)
   const [preview, setPreview] = useState<ExclusionPreview | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
 
-  // 組合當前 rule input；無任何條件 → null（後續 early return）
-  const rule: ExclusionRuleInput | null = useMemo(
-    () => buildDateRangeRule(projectId, dateFrom, dateTo),
-    [projectId, dateFrom, dateTo],
+  // 組合當前 rule input；沒條件、或日期有填卻不是真的日期 → 沒有 rule（不預覽、不能送出）
+  const ruleState = useMemo(
+    () => buildDateRangeRule({ projectId, dateFrom, dateTo, dateFromIncomplete, dateToIncomplete }),
+    [projectId, dateFrom, dateTo, dateFromIncomplete, dateToIncomplete],
   )
+  const rule: ExclusionRuleInput | null = ruleState.status === 'ready' ? ruleState.rule : null
+
+  // 只填了一部分的日期欄位 value 是空字串：從空欄位打起時值沒變、onChange 不一定會觸發，
+  // 所以輸入時與離開欄位時都讀一次 validity.badInput（滑鼠點排除鈕前，欄位會先失去焦點）
+  const syncIncomplete = () => {
+    setDateFromIncomplete(dateFromRef.current?.validity.badInput ?? false)
+    setDateToIncomplete(dateToRef.current?.validity.badInput ?? false)
+  }
 
   // User 改任一欄位 → 立即清掉 preview（避免顯示舊規則的 stale 數字），
   // 由 effect 在 debounce 後重抓。做在 handler 而非 effect，避開 react-hooks/set-state-in-effect。
@@ -79,24 +91,30 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
             <label className={styles.fieldLabel}>{t('storage.dateRange.field.dateFrom')}</label>
             <input
               type="date"
+              ref={dateFromRef}
               className={styles.input}
               value={dateFrom}
-              onChange={e => { setDateFrom(e.target.value); resetPreview() }}
+              onChange={e => { setDateFrom(e.target.value); syncIncomplete(); resetPreview() }}
+              onBlur={syncIncomplete}
             />
           </div>
           <div className={styles.field}>
             <label className={styles.fieldLabel}>{t('storage.dateRange.field.dateTo')}</label>
             <input
               type="date"
+              ref={dateToRef}
               className={styles.input}
               value={dateTo}
-              onChange={e => { setDateTo(e.target.value); resetPreview() }}
+              onChange={e => { setDateTo(e.target.value); syncIncomplete(); resetPreview() }}
+              onBlur={syncIncomplete}
             />
           </div>
         </div>
 
         <div className={styles.previewBox}>
-          {!rule ? (
+          {ruleState.status === 'invalid-date' ? (
+            <span className={styles.errorText}>{t('storage.dateRange.preview.invalidDate')}</span>
+          ) : !rule ? (
             <span className={styles.previewEmpty}>{t('storage.dateRange.preview.empty')}</span>
           ) : previewError ? (
             <span className={styles.errorText}>{t('storage.dateRange.preview.failed', { message: previewError })}</span>
@@ -113,7 +131,14 @@ export default function DateRangeExclusionForm({ projects, onSubmit }: Props) {
           <button
             className={styles.button}
             disabled={!canSubmit}
-            onClick={() => rule && onSubmit(rule)}
+            onClick={() => {
+              // 最後再看一次欄位：只填了一部分的日期不能被當成沒填送出去
+              if (dateFromRef.current?.validity.badInput || dateToRef.current?.validity.badInput) {
+                syncIncomplete()
+                return
+              }
+              if (rule) onSubmit(rule)
+            }}
           >
             {t('storage.dateRange.submit')}
           </button>
