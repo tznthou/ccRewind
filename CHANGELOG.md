@@ -20,13 +20,14 @@
   - ⚠️ 依日期範圍選「刪除資料」之後，被刪的對話如果被 resume 過，而 resume 出來那場還留在索引裡，那場重新索引時可能帶回被刪的內容（沒有其他對話也留著這段內容時），開始時間因此提早、落進範圍，寫入就會被擋下：它在 ccRewind 裡停在上一次索引時的樣子，之後的新訊息不會出現、每次索引都重新解析一次，它的 subagent 也可能被標成已封存。之前的版本就是這樣，這一版沒有改變
   - ⚠️ 預覽仍只顯示總數（場數、訊息數、大小），沒有逐場清單
 - **側欄搜尋的 7 天／30 天／90 天篩選改用本地日期**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：以前用 UTC 日期比對，本地日期跟 UTC 日期不同的對話會被當成前一天或隔天。現在從 N 天前的本地午夜起算，含今天共 N+1 個日曆天，天數的定義沒變（儀表板的 7D 是 7 個日曆天，兩邊不同）
+- **依日期範圍排除的表單：日期沒填完整或不是有效日期時，不再當成沒填**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：以前日期欄位只填了一部分、或填的值不是有效日期（例如年份不是 4 位數），表單會把那一端當成沒填，範圍悄悄變寬，預覽和刪除都照變寬的範圍走。現在會提示「日期還沒填完整，或不是存在的日期」，排除鈕停用
 - **儲存空間頁的「時間範圍」卡改顯示本地日期**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：以前直接取時間戳的日期部分。時間戳是 UTC 時，在 UTC 以東的時區，午夜後、時差那幾個小時內的時刻會顯示成前一天；在 UTC 以西，午夜前、時差那幾個小時內的時刻會顯示成隔天
 
 ### Changed
 
 - **依賴更新**：Electron 41.10.7、React 與 React DOM 19.3.1、`@tanstack/react-virtual` 3.14.20，開發用的 ESLint 10.12.0、vite 6.4.4、globals 17.13.0（[#132](https://github.com/tznthou/ccRewind/pull/132)），vitest 與 `@vitest/coverage-v8` 4.1.12（[#144](https://github.com/tznthou/ccRewind/pull/144)）；typescript-eslint 的版本範圍調到 ^8.71.2，實際安裝的版本原本就是 8.71.2（[#143](https://github.com/tznthou/ccRewind/pull/143)）
 - **開發**：pnpm 不再解析發布未滿 3 天的版本（`minimumReleaseAge`，[#146](https://github.com/tznthou/ccRewind/pull/146)）；Renovate 的 lock file maintenance 改成自動合併，Electron、better-sqlite3、electron-builder、electron-vite 改成精確版本、只走手動核准的群組更新（[#147](https://github.com/tznthou/ccRewind/pull/147)）；typescript-eslint 的 patch 併入自動合併的群組（[#145](https://github.com/tznthou/ccRewind/pull/145)）。只影響開發
-- **開發**：本地日期的換算放在 `src/shared/localDate.ts`，main 與 renderer 共用；側欄搜尋的日期計算抽到 `searchOptions.ts`，在 node 環境測。排除規則與搜尋的 SQL 不用 SQLite 的 `'localtime'`，起訖時刻在 JavaScript 算；測試裡 SQLite 跟 JavaScript 用同一個時區，行為測試分不出兩種寫法，所以 `tests/dateFilterTimeZoneSource.test.ts` 直接讀原始碼檢查。原本照 UTC 寫期望值的七條排除規則測試改成固定在 UTC 跑，本來就在測 UTC 語意的那一條改寫成本地日期的版本（[#148](https://github.com/tznthou/ccRewind/pull/148)）
+- **開發**：本地日期的換算放在 `src/shared/localDate.ts`，main 與 renderer 共用；側欄搜尋的日期計算抽到 `searchOptions.ts`、日期範圍表單的規則組法抽到 `dateRangeRule.ts`，都在 node 環境測。排除規則與搜尋的 SQL 不用 SQLite 的 `'localtime'`，起訖時刻在 JavaScript 算；測試裡 SQLite 跟 JavaScript 用同一個時區，行為測試分不出兩種寫法，所以 `tests/dateFilterTimeZoneSource.test.ts` 直接讀原始碼檢查。原本照 UTC 寫期望值的七條排除規則測試改成固定在 UTC 跑，本來就在測 UTC 語意的那一條改寫成本地日期的版本（[#148](https://github.com/tznthou/ccRewind/pull/148)）
 
 ## [1.27.2] - 2026-10-18
 
