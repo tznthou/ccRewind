@@ -19,6 +19,13 @@ describe('buildSearchOptions', () => {
     expect(buildSearchOptions('7d', 'rank', now)).toEqual({ dateFrom: '2026-03-03', sortBy: 'rank' })
   })
 
+  it('counts calendar days, not 24-hour blocks, across the start of DST', () => {
+    useTimeZone('America/New_York')
+    // 紐約 03-10 00:30（EDT）。夏令時間開始那週少一小時：直接減 7×24 小時會落在 03-02 23:30（EST），差一天
+    const now = new Date('2026-03-10T04:30:00.000Z')
+    expect(buildSearchOptions('7d', 'rank', now)).toEqual({ dateFrom: '2026-03-03', sortBy: 'rank' })
+  })
+
   it('"all" sends no date: nothing at all when sorting by rank', () => {
     const now = new Date('2026-04-14T15:00:00.000Z')
     expect(buildSearchOptions('all', 'rank', now)).toBeUndefined()

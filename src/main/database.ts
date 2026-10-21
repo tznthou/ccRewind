@@ -2,6 +2,7 @@ import BetterSqlite3 from 'better-sqlite3'
 import { mkdirSync, statSync } from 'node:fs'
 import path from 'node:path'
 import type { Project, SessionMeta, Message, MessageContext, SearchPage, SearchOptions, SessionSearchPage, SessionTokenStats, SessionFile, FileOperation, OutcomeStatus, DailyUsage, ProjectStats, DistributionItem, WorkPatterns, DailyEfficiency, WasteSession, ProjectHealth, RelatedSession, FileHistoryEntry, SubagentSession, SessionTask, ExclusionRule, ExclusionRuleInput, ExclusionMode, ExclusionPreview, StorageStats, ProjectBreakdown, InactiveSession, DatabaseMaintenanceStats, CompactResult } from '../shared/types'
+import { isCalendarDate, localMidnightIso } from '../shared/localDate'
 import { migrations } from './migrations'
 import { COMPACT_SUMMARY_PREFIX, collapseDuplicateUsageRows, toolNamesPerCall, type ToolRow } from './tokenStats'
 
@@ -232,9 +233,6 @@ export class Database {
 
   /** started_at 的本地日期：SQLite 的 'localtime' 照程序的時區算，跟 app 其他地方一樣用電腦目前的時區 */
   private static readonly LOCAL_DATE = "date(started_at, 'localtime')"
-
-  /** 同上，給 sessions 表別名為 s 的查詢（側欄搜尋的日期篩選） */
-  private static readonly SESSION_LOCAL_DATE = "date(s.started_at, 'localtime')"
 
   constructor(dbPath: string) {
     // :memory: 不需要建目錄
@@ -715,10 +713,14 @@ export class Database {
     return row !== undefined
   }
 
-  /** session 在 DB 裡、而且已完整索引（summary_version 不是 NULL，不是 provisional parent）*/
-  isFullyIndexed(sessionId: string): boolean {
-    const row = this.db.prepare('SELECT 1 FROM sessions WHERE id = ? AND summary_version IS NOT NULL').get(sessionId)
-    return row !== undefined
+  /**
+   * 已完整索引（summary_version 不是 NULL）的 session 在 DB 裡的 started_at；不在 DB、或 summary_version 是 NULL 回 undefined。
+   * 回物件而不是字串：已完整索引的列 started_at 也可能是 NULL（純 replay 補寫的 metadata-only parent）
+   */
+  getIndexedStartedAt(sessionId: string): { startedAt: string | null } | undefined {
+    const row = this.db.prepare('SELECT started_at FROM sessions WHERE id = ? AND summary_version IS NOT NULL')
+      .get(sessionId) as { started_at: string | null } | undefined
+    return row && { startedAt: row.started_at }
   }
 
   // ── Session tasks（~/.claude/tasks/{sessionId}/{N}.json）──
@@ -1021,13 +1023,14 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
+      // 日期是電腦目前時區的日期，起訖換成本地午夜的時刻在 JS 算，跟排除規則同一套（buildExclusionWhere）
       if (options?.dateFrom) {
-        sql += ` AND ${Database.SESSION_LOCAL_DATE} >= ?`
-        params.push(options.dateFrom)
+        sql += ' AND julianday(s.started_at) >= julianday(?)'
+        params.push(localMidnightIso(options.dateFrom))
       }
       if (options?.dateTo) {
-        sql += ` AND ${Database.SESSION_LOCAL_DATE} <= ?`
-        params.push(options.dateTo)
+        sql += ' AND julianday(s.started_at) < julianday(?)'
+        params.push(localMidnightIso(options.dateTo, 1))
       }
 
       sql += options?.sortBy === 'date' ? ' ORDER BY m.timestamp DESC, m.id DESC' : ' ORDER BY rank, m.id DESC'
@@ -1093,13 +1096,14 @@ export class Database {
         sql += ' AND s.project_id = ?'
         params.push(projectId)
       }
+      // 同 search()：起訖換成本地午夜的時刻在 JS 算
       if (options?.dateFrom) {
-        sql += ` AND ${Database.SESSION_LOCAL_DATE} >= ?`
-        params.push(options.dateFrom)
+        sql += ' AND julianday(s.started_at) >= julianday(?)'
+        params.push(localMidnightIso(options.dateFrom))
       }
       if (options?.dateTo) {
-        sql += ` AND ${Database.SESSION_LOCAL_DATE} <= ?`
-        params.push(options.dateTo)
+        sql += ' AND julianday(s.started_at) < julianday(?)'
+        params.push(localMidnightIso(options.dateTo, 1))
       }
 
       sql += options?.sortBy === 'date' ? ' ORDER BY s.started_at DESC, s.rowid DESC' : ' ORDER BY rank, s.rowid DESC'
@@ -1719,9 +1723,9 @@ export class Database {
 
   /**
    * 將規則 normalize + 嚴格驗證：
-   * - 空字串 / 僅空白 → null（防止 `date(x, 'localtime') >= ''` 對非 null date 恆真）
-   * - 日期欄位必須符合 YYYY-MM-DD（日期條件是比字串：`<= 'not-a-date'` 對每個日期都成立，
-   *   再配上 null projectId 會誤刪全庫）
+   * - 空字串 / 僅空白 → null（空字串的條件會被當成沒有條件，再配上 null projectId 就是全庫）
+   * - 日期欄位必須是真的 YYYY-MM-DD 日期：起訖要換成本地午夜的時刻，格式不對算不出時刻，
+   *   不存在的日期（02-30）會滾到別的月份，範圍跟使用者選的不一樣
    */
   private normalizeRule(rule: ExclusionRuleInput): ExclusionRuleInput {
     const norm = (v: string | null): string | null => {
@@ -1733,12 +1737,11 @@ export class Database {
     if (!r.projectId && !r.dateFrom && !r.dateTo) {
       throw new Error('Exclusion rule requires at least one non-empty criterion')
     }
-    const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
-    if (r.dateFrom != null && !DATE_RE.test(r.dateFrom)) {
-      throw new Error(`dateFrom must be YYYY-MM-DD, got: ${r.dateFrom}`)
+    if (r.dateFrom != null && !isCalendarDate(r.dateFrom)) {
+      throw new Error(`dateFrom must be a real date in YYYY-MM-DD, got: ${r.dateFrom}`)
     }
-    if (r.dateTo != null && !DATE_RE.test(r.dateTo)) {
-      throw new Error(`dateTo must be YYYY-MM-DD, got: ${r.dateTo}`)
+    if (r.dateTo != null && !isCalendarDate(r.dateTo)) {
+      throw new Error(`dateTo must be a real date in YYYY-MM-DD, got: ${r.dateTo}`)
     }
     return r
   }
@@ -1751,14 +1754,17 @@ export class Database {
       clauses.push('project_id = ?')
       params.push(rule.projectId)
     }
-    // 規則的日期是電腦目前時區的日期，跟 indexer 的 matchesExclusionRule 同一個判準
+    // 規則的日期是電腦目前時區的日期：起日的本地午夜起、迄日隔天的本地午夜前。這兩個時刻在 JS 算，SQL 只比時刻、
+    // 不用 'localtime'，跟 indexer 的 matchesExclusionRule 讀同一份時區資料（SQLite 的 'localtime' 走作業系統的
+    // 時區資料），預覽、刪除與之後索引時的判斷才不會分岔：分岔的話，這裡刪掉的對話下一輪會被索引回來。
+    // julianday 跟 JS 的 Date 一樣，先把帶 offset 的時間戳換成同一時刻再比
     if (rule.dateFrom != null) {
-      clauses.push(`started_at IS NOT NULL AND ${Database.LOCAL_DATE} >= ?`)
-      params.push(rule.dateFrom)
+      clauses.push('started_at IS NOT NULL AND julianday(started_at) >= julianday(?)')
+      params.push(localMidnightIso(rule.dateFrom))
     }
     if (rule.dateTo != null) {
-      clauses.push(`started_at IS NOT NULL AND ${Database.LOCAL_DATE} <= ?`)
-      params.push(rule.dateTo)
+      clauses.push('started_at IS NOT NULL AND julianday(started_at) < julianday(?)')
+      params.push(localMidnightIso(rule.dateTo, 1))
     }
     return { clause: clauses.join(' AND '), params }
   }

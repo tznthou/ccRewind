@@ -1737,6 +1737,16 @@ describe('exclusion_rules schema (v16)', () => {
       db.addExclusionRule({ projectId: null, dateFrom: null, dateTo: '2026/01/01' }),
     ).toThrow(/YYYY-MM-DD/)
   })
+
+  it('normalize: rejects dates that do not exist (they would roll over to another month)', () => {
+    expect(() =>
+      db.previewExclusion({ projectId: null, dateFrom: '2026-02-30', dateTo: null }),
+    ).toThrow(/2026-02-30/)
+    expect(() =>
+      db.applyExclusion({ projectId: null, dateFrom: null, dateTo: '2026-13-01' }),
+    ).toThrow(/2026-13-01/)
+    expect(db.getExclusionRules()).toEqual([])
+  })
 })
 
 describe('getInactiveSessions input validation', () => {

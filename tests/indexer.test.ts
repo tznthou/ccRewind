@@ -4,6 +4,7 @@ import os from 'node:os'
 import { mkdtemp, rm, mkdir, writeFile, chmod, readFile, readdir, stat, utimes } from 'node:fs/promises'
 import { Database } from '../src/main/database'
 import { runIndexer, deduplicateTokensByRequestId, readFirstTimestamp, matchesExclusionRule, markAbandonedBranches, resolveNearestVersions, type ProgressCallback } from '../src/main/indexer'
+import { SUMMARY_VERSION } from '../src/main/summarizer'
 import type { ExclusionRule, IndexerProgress, ParsedLine } from '../src/shared/types'
 import { useTimeZone } from './fixtures/timeZone'
 
@@ -1528,6 +1529,121 @@ describe('runIndexer — phase 3 只擋這一刻不在 DB、或還是 provisiona
     )
     expect(rows).toHaveLength(1)
     expect(rows[0].archived).toBe(0)
+  })
+
+  it('resume 那場重新索引時帶回已被刪除規則刪掉的內容，照樣擋下', async () => {
+    // owner 在範圍內、被刪除規則刪掉；resumed 在範圍外開始，檔案裡 replay 了 owner 的 entries。owner 刪掉後
+    // UUID 空出來，resumed 重新索引時不再去重，startedAt 退回 owner 的時間、落進範圍。DB 裡那份（範圍外）
+    // 規則判過，這次解析出的內容規則沒判過：是內容變化把它帶進範圍，不是規則判過卻沒刪
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-p3-resume'
+    const ownerLines = [
+      { type: 'user', uuid: 'res-o1', timestamp: '2024-06-05T10:00:00.000Z', sessionId: 'sess-owner', message: { role: 'user', content: 'owner question' } },
+      { type: 'assistant', uuid: 'res-o2', parentUuid: 'res-o1', timestamp: '2024-06-05T10:00:05.000Z', sessionId: 'sess-owner', message: { role: 'assistant', content: 'owner answer' } },
+    ]
+    const later = (uuid: string, timestamp: string, content: string) => ({
+      type: 'user', uuid, timestamp, sessionId: 'sess-resumed', message: { role: 'user', content },
+    })
+    await createProject(baseDir, project, {
+      'sess-owner': ownerLines,
+      'sess-resumed': [...ownerLines, later('res-r1', '2024-06-20T10:00:00.000Z', 'resumed later')],
+    })
+    // owner 先索引才擁有那兩個 UUID（佇列照 mtime 升冪）
+    const older = new Date('2024-06-05T11:00:00.000Z')
+    const newer = new Date('2024-06-20T11:00:00.000Z')
+    await utimes(path.join(baseDir, project, 'sess-owner.jsonl'), older, older)
+    await utimes(path.join(baseDir, project, 'sess-resumed.jsonl'), newer, newer)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    expect(db.getMessages('sess-resumed').map(m => m.contentText)).toEqual(['resumed later'])
+
+    // 範圍放在月中：06-05 10:00Z 在任何時區都落在 06-01～06-10，06-20 都在範圍外（這條不是在測時區）
+    const range = { projectId: null, dateFrom: '2024-06-01', dateTo: '2024-06-10' }
+    db.applyExclusion(range)
+    expect(db.hasSession('sess-owner')).toBe(false)
+
+    await createProject(baseDir, project, {
+      'sess-resumed': [...ownerLines, later('res-r1', '2024-06-20T10:00:00.000Z', 'resumed later'), later('res-r2', '2024-06-21T10:00:00.000Z', 'one more')],
+    })
+    const t = new Date('2024-07-01T10:00:00.000Z')
+    await utimes(path.join(baseDir, project, 'sess-resumed.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-resumed').map(m => m.contentText)).not.toContain('owner question')
+    expect(db.previewExclusion(range).sessionCount).toBe(0)
+  })
+
+  it('規則建立後才補寫的純 replay parent，之後長出範圍內的內容，照樣擋下', async () => {
+    // 純 replay 的 metadata-only parent 補寫時拿當前 SUMMARY_VERSION、started_at 是 NULL：它在 DB 裡「已完整索引」，
+    // 但規則只用 replay 的舊時間判過它。等它長出自己的內容、日期落進範圍，DB 那份並不在範圍內 → 照樣擋
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-p3-replay'
+    // 07-01 10:00Z 在任何時區都早於 07-05，07-10 10:00Z 都晚於（這條不是在測時區）
+    db.addExclusionRule({ projectId: null, dateFrom: '2024-07-05', dateTo: null })
+    const shared = (sessionId: string) => ({
+      type: 'user', uuid: 'rp-shared-u1', timestamp: '2024-07-01T10:00:00.000Z', sessionId,
+      message: { role: 'user', content: 'same content in both sessions' },
+    })
+    await createProject(baseDir, project, {
+      'sess-rp-origin': [shared('sess-rp-origin')],
+      'sess-rp-replay': [shared('sess-rp-replay')],
+    })
+    await addSubagent(baseDir, project, 'sess-rp-replay', 'agent-rp')
+    const older = new Date('2024-07-01T11:00:00.000Z')
+    const newer = new Date('2024-07-02T11:00:00.000Z')
+    await utimes(path.join(baseDir, project, 'sess-rp-origin.jsonl'), older, older)
+    await utimes(path.join(baseDir, project, 'sess-rp-replay.jsonl'), newer, newer)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+    // 前提：replay 被補寫成 metadata-only parent，summary_version 是當前版
+    const row = db.rawAll<{ started_at: string | null; message_count: number; summary_version: number | null }>(
+      "SELECT started_at, message_count, summary_version FROM sessions WHERE id = 'sess-rp-replay'",
+    )
+    expect(row).toEqual([{ started_at: null, message_count: 0, summary_version: SUMMARY_VERSION }])
+
+    await createProject(baseDir, project, {
+      'sess-rp-replay': [shared('sess-rp-replay'), {
+        type: 'user', uuid: 'rp-own-u2', timestamp: '2024-07-10T10:00:00.000Z', sessionId: 'sess-rp-replay',
+        message: { role: 'user', content: 'its own content, inside the range' },
+      }],
+    })
+    const t = new Date('2024-07-11T10:00:00.000Z')
+    await utimes(path.join(baseDir, project, 'sess-rp-replay.jsonl'), t, t)
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-rp-replay')).toEqual([])
+  })
+
+  it('summary_version 是 NULL 的列不算已完整索引：DB 那份在範圍內也照樣擋', async () => {
+    // 這種列 phase 2 本來就會套規則，只是它比的是檔案第一個 timestamp。第一行被別的 session 去重掉時，
+    // 解析出的 startedAt 跟第一行不同：第一行在範圍外、phase 2 放行，解析出來卻在範圍內。
+    // 跟 phase 2 的 alreadyIndexed 同一個判準：它不算已完整索引，phase 3 照樣擋
+    const baseDir = path.join(tmpDir, 'projects')
+    const project = '-Users-p3-legacy'
+    // 06-05 10:00Z 在任何時區都落在 06-01～06-10，06-20 都在範圍外（這條不是在測時區）
+    const shared = (sessionId: string) => ({
+      type: 'user', uuid: 'legacy-shared-u1', timestamp: '2024-06-20T10:00:00.000Z', sessionId,
+      message: { role: 'user', content: 'owned by the other session' },
+    })
+    await createProject(baseDir, project, { 'sess-legacy-owner': [shared('sess-legacy-owner')] })
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    await createProject(baseDir, project, {
+      'sess-legacy': [shared('sess-legacy'), {
+        type: 'user', uuid: 'legacy-own-u2', timestamp: '2024-06-05T10:00:00.000Z', sessionId: 'sess-legacy',
+        message: { role: 'user', content: 'its own content, inside the range' },
+      }],
+    })
+    const filePath = path.join(baseDir, project, 'sess-legacy.jsonl')
+    const st = await stat(filePath)
+    db.indexSession({
+      sessionId: 'sess-legacy', projectId: project, projectDisplayName: 'legacy', title: null, messageCount: 0,
+      filePath, fileSize: st.size, fileMtime: st.mtime.toISOString(),
+      startedAt: '2024-06-05T10:00:00.000Z', endedAt: null, summaryVersion: null, messages: [],
+    })
+    db.rawExec("INSERT INTO exclusion_rules (project_id, date_from, date_to, mode) VALUES (NULL, '2024-06-01', '2024-06-10', 'delete')")
+
+    await runIndexer(db, undefined, baseDir, tasksDir)
+
+    expect(db.getMessages('sess-legacy')).toEqual([])
   })
 
   it('provisional parent 在索引途中被日期規則涵蓋，phase 3 照樣不寫入', async () => {

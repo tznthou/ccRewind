@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatLocalDate, localDateOf } from '../src/shared/localDate'
+import { formatLocalDate, isCalendarDate, localDateOf, localMidnightIso } from '../src/shared/localDate'
 import { useTimeZone } from './fixtures/timeZone'
 
 describe('formatLocalDate', () => {
@@ -39,5 +39,37 @@ describe('localDateOf', () => {
   it('returns null for a timestamp it cannot parse', () => {
     expect(localDateOf('not-a-date')).toBeNull()
     expect(localDateOf('')).toBeNull()
+  })
+})
+
+describe('localMidnightIso', () => {
+  it('gives the UTC instant of local midnight, east of UTC', () => {
+    useTimeZone('Pacific/Kiritimati')
+    // 基里巴斯（UTC+14）10-10 的午夜是 10-09T10:00Z
+    expect(localMidnightIso('2026-10-10')).toBe('2026-10-09T10:00:00.000Z')
+    expect(localMidnightIso('2026-10-12', 1)).toBe('2026-10-12T10:00:00.000Z')
+  })
+
+  it('takes each day at its own offset across DST, and rolls over month ends', () => {
+    useTimeZone('America/New_York')
+    // 03-08 02:00 切夏令時間：03-08 的午夜還是 EST（05:00Z），03-09 的午夜已是 EDT（04:00Z）
+    expect(localMidnightIso('2026-03-08')).toBe('2026-03-08T05:00:00.000Z')
+    expect(localMidnightIso('2026-03-08', 1)).toBe('2026-03-09T04:00:00.000Z')
+    // 11-01 有 25 小時：隔天午夜是 11-02T05:00Z
+    expect(localMidnightIso('2026-11-01', 1)).toBe('2026-11-02T05:00:00.000Z')
+    expect(localMidnightIso('2026-01-31', 1)).toBe('2026-02-01T05:00:00.000Z')
+  })
+})
+
+describe('isCalendarDate', () => {
+  it('accepts real dates only', () => {
+    expect(isCalendarDate('2026-02-28')).toBe(true)
+    expect(isCalendarDate('2024-02-29')).toBe(true)
+    // 格式對、但不存在的日期：換成本地午夜時會滾到別的月份（02-30 → 03-02）
+    expect(isCalendarDate('2026-02-30')).toBe(false)
+    expect(isCalendarDate('2026-13-01')).toBe(false)
+    expect(isCalendarDate('2026-00-10')).toBe(false)
+    expect(isCalendarDate('2026-2-3')).toBe(false)
+    expect(isCalendarDate('not-a-date')).toBe(false)
   })
 })
