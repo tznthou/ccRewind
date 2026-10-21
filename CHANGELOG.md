@@ -6,6 +6,27 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.27.3] - 2026-10-21
+
+### Fixed
+
+- **依日期範圍排除改用本地日期**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：儲存空間頁的「依日期範圍排除」以前比對對話開始時間的 UTC 日期，選「刪除資料，並停止之後的索引」時，會刪到範圍外、UTC 日期落在範圍內的對話，範圍內但 UTC 日期在範圍外的反而留下，v1.27.2 列在已知限制的就是這件事。現在起迄日期照電腦目前的時區算：起日從那一天的本地午夜開始，迄日算到那一天結束，預覽、刪除和之後索引時的判斷都照這個規則。v1.27.2 那條「修好之前建議選保留資料」不再需要
+  - **既有的規則也改照本地日期解讀**：規則存的日期不變，意思從 UTC 日期改成本地日期。升級後第一次索引時：
+    - 以前照 UTC 被刪掉、但本地日期其實在範圍外的對話，原始檔還在的話，內容會回到索引；原始檔已被清掉的救不回來。這批在 UTC 以東的時區，是範圍結束隔天午夜後、時差那幾個小時內開始的（在台灣是早上 8 點前）；在 UTC 以西，是範圍第一天前一天的午夜前、時差那幾個小時內開始的。resume 過的對話，內容可能回到 resume 那場的名下，而不是原本那場
+    - 範圍內、以前照 UTC 沒刪到的對話會留著、照常更新，升級不會自動刪掉。這批在 UTC 以東，是範圍第一天午夜後、時差那幾個小時內開始的；在 UTC 以西，是最後一天午夜前、時差那幾個小時內開始的。要刪的話，用同一個範圍再建一次「刪除資料」規則，預覽會顯示場數；新規則建好後，舊的那條留著或移除都可以
+    - 「保留資料」規則：建立當下就在的對話照舊保留；以前照 UTC 被擋下、本地日期其實在範圍外的新對話，下次索引會補進來
+  - **索引時，已經完整索引的對話照常更新**：indexer 寫入前會再檢查一次規則，以前連已經在索引裡、卻符合規則的對話也會擋下，結果是內容停在舊的狀態、每次索引都重新解析一次、它的 subagent 被誤標成已封存。現在只擋這一刻不在索引裡、或還沒索引完整的對話；索引途中被刪掉的照樣擋下。上面那批「範圍內、以前沒刪到」的對話就是這種狀態，換時區之後也會出現
+  - ⚠️ 「本地」是電腦目前的時區。換時區之後，同一條規則涵蓋的對話跟著變：已刪除、原始檔還在、現在落到範圍外的，內容會在下次索引時回來；已經在索引裡的不會因此被刪
+  - ⚠️ 預覽仍只顯示總數（場數、訊息數、大小），沒有逐場清單
+- **側欄搜尋的 7 天／30 天／90 天篩選改用本地日期**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：以前用 UTC 日期比對，本地日期跟 UTC 日期不同的對話會被當成前一天或隔天。現在從 N 天前的本地午夜起算，含今天共 N+1 個日曆天，天數的定義沒變（儀表板的 7D 是 7 個日曆天，兩邊不同）
+- **儲存空間頁的「時間範圍」卡改顯示本地日期**（[#148](https://github.com/tznthou/ccRewind/pull/148)）：以前顯示 UTC 日期，在 UTC 以東的時區，午夜後、時差那幾個小時內的時刻會顯示成前一天，在 UTC 以西則會顯示成隔天
+
+### Changed
+
+- **依賴更新**：Electron 41.10.7、React 與 React DOM 19.3.1、`@tanstack/react-virtual` 3.14.20，開發用的 ESLint 10.12.0、vite 6.4.4、globals 17.13.0（[#132](https://github.com/tznthou/ccRewind/pull/132)），vitest 與 `@vitest/coverage-v8` 4.1.12（[#144](https://github.com/tznthou/ccRewind/pull/144)）；typescript-eslint 的版本範圍調到 ^8.71.2，實際安裝的版本原本就是 8.71.2（[#143](https://github.com/tznthou/ccRewind/pull/143)）
+- **開發**：pnpm 不再解析發布未滿 3 天的版本（`minimumReleaseAge`，[#146](https://github.com/tznthou/ccRewind/pull/146)）；Renovate 的 lock file maintenance 改成自動合併，Electron、better-sqlite3、electron-builder、electron-vite 改成精確版本、只走手動核准的群組更新（[#147](https://github.com/tznthou/ccRewind/pull/147)）；typescript-eslint 的 patch 併入自動合併的群組（[#145](https://github.com/tznthou/ccRewind/pull/145)）。只影響開發
+- **開發**：本地日期的換算放在 `src/shared/localDate.ts`，main 與 renderer 共用；側欄搜尋的日期計算抽到 `searchOptions.ts`，在 node 環境測。原本照 UTC 寫期望值的七條排除規則測試改成固定在 UTC 跑，本來就在測 UTC 語意的那一條改寫成本地日期的版本（[#148](https://github.com/tznthou/ccRewind/pull/148)）
+
 ## [1.27.2] - 2026-10-18
 
 ### Fixed
