@@ -20,10 +20,10 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          # node 22 (not 20): better-sqlite3 ships a node-v127 win32 prebuild, so `pnpm install`
-          # fetches it instead of source-building. node 20 has no prebuild, falls back to node-gyp,
-          # and needs Visual Studio -- which broke when the runner moved to VS18. electron-rebuild
-          # (postinstall/dist) uses the electron-v145 prebuild. Net: zero native compilation.
+          # node 22: better-sqlite3 13 needs >= 22. Its prebuilds are N-API binaries shipped inside the
+          # package, one per platform, loaded by Node and Electron alike. node-gyp still runs (pnpm install
+          # for its binding.gyp, electron-rebuild in postinstall and dist), but builds nothing when a
+          # prebuild exists. Net: zero native compilation.
           node-version: '22.23.3'
 
       - name: Setup pnpm
@@ -80,6 +80,23 @@ jobs:
         run: pnpm dist
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Load better-sqlite3 in the packaged app (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: |
+          APP=$(find dist -maxdepth 2 -name 'ccRewind.app' -type d | head -n 1)
+          [ -n "$APP" ] || { echo "ERROR: no ccRewind.app under dist/"; exit 1; }
+          "$APP/Contents/MacOS/ccRewind" scripts/packaged-native-check.cjs
+
+      - name: Load better-sqlite3 in the packaged app (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: dist/win-unpacked/ccRewind.exe scripts/packaged-native-check.cjs
 
       - name: Verify artifacts (macOS)
         if: runner.os == 'macOS'
