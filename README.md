@@ -236,10 +236,10 @@ graph TB
 
 | 技術 | 用途 | 備註 |
 |------|------|------|
-| Electron 41 | 桌面應用框架 | macOS hiddenInset title bar |
+| Electron 44 | 桌面應用框架 | macOS hiddenInset title bar |
 | React 19 | UI 框架 | 函式元件 + hooks |
 | TypeScript 5.9 | 型別安全 | strict mode |
-| better-sqlite3 12 | SQLite binding | 含 FTS5 全文搜尋 |
+| better-sqlite3 13 | SQLite binding | 含 FTS5 全文搜尋 |
 | recharts 3 | 圖表庫 | 面積圖、圓餅圖、甜甜圈圖（Context Budget + Dashboard） |
 | electron-vite 5 | 建構工具 | main + preload + renderer 三路建構 |
 | Vitest 3 | 測試框架 | 545 個測試，透過 Electron 執行 |
@@ -253,7 +253,7 @@ graph TB
 - **macOS**（arm64）：DMG 拖曳到 Applications，或 ZIP 解壓後直接執行
 - **Windows**（x64）：NSIS installer 或 ZIP
 
-系統需求：macOS 11+ / Windows 10+
+系統需求：macOS 13+ / Windows 10+
 
 ### 首次啟動警告
 
