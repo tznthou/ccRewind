@@ -9,3 +9,6 @@ shamefullyHoist: true
 # exempt young versions by themselves. For one urgent release, list that version (e.g. eslint@10.13.0) under
 # minimumReleaseAgeExclude and remove it after three days; a bare package name would exempt every later version.
 minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  # Renovate security update: electron@42.11.16
+  - electron@42.11.16
