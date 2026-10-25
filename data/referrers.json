@@ -914,5 +914,17 @@
       "count": 1,
       "uniques": 1
     }
+  ],
+  "2026-10-25T08:25:23Z": [
+    {
+      "referrer": "github.com",
+      "count": 4,
+      "uniques": 1
+    },
+    {
+      "referrer": "Google",
+      "count": 1,
+      "uniques": 1
+    }
   ]
 }
