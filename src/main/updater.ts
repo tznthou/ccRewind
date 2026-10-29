@@ -5,6 +5,7 @@ const GITHUB_OWNER = 'tznthou'
 const GITHUB_REPO = 'ccRewind'
 const RELEASES_URL = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`
 const REPO_RELEASES_PAGE = `https://github.com/${GITHUB_OWNER}/${GITHUB_REPO}/releases`
+const RELEASE_URL_PREFIX = `${REPO_RELEASES_PAGE}/`
 
 // ── 版本比對 ──
 
@@ -29,6 +30,19 @@ export function compareVersions(a: string, b: string): number {
     if (numA < numB) return -1
   }
   return 0
+}
+
+// ── 發布頁網址 ──
+
+/**
+ * API 回應的 html_url 只在本 repo 的 releases 底下才採用，其他一律退回 releases 頁。
+ * 原字串與解析後的網址都要以前綴開頭：`..`、`%2e%2e`、反斜線解析後會跳出 releases，原字串卻仍以前綴開頭。
+ * 前綴固定了 scheme 與主機，之後的部分解析器只會跳脫、不會拒絕，所以 `new URL` 在這裡不會丟例外。
+ */
+export function safeReleaseUrl(url: string): string {
+  if (!url.startsWith(RELEASE_URL_PREFIX)) return REPO_RELEASES_PAGE
+  const href = new URL(url).href
+  return href.startsWith(RELEASE_URL_PREFIX) ? href : REPO_RELEASES_PAGE
 }
 
 // ── 更新檢查 ──
@@ -81,7 +95,7 @@ async function doCheck(): Promise<UpdateState> {
 
     const release = data as { tag_name: string; html_url?: string }
     const latestVersion = release.tag_name.replace(/^v/, '')
-    const releaseUrl = typeof release.html_url === 'string' ? release.html_url : `${REPO_RELEASES_PAGE}/latest`
+    const releaseUrl = typeof release.html_url === 'string' ? safeReleaseUrl(release.html_url) : `${REPO_RELEASES_PAGE}/latest`
 
     if (compareVersions(latestVersion, currentVersion) <= 0) {
       cachedState = { status: 'latest', currentVersion, latestVersion, releaseUrl }
