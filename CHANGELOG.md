@@ -6,6 +6,23 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.28.0] - 2026-10-29
+
+⚠️ **這一版起需要 macOS 13 以上**：Electron 44 不再支援 macOS 12。macOS 12 請留在 1.27.3；app 的更新提示不分作業系統，在 macOS 12 上也會出現。1.27.3 用的 Electron 41 已經停止支援，下面 Security 那條憑證的問題在 1.27.3 上不會修，要拿到修補只能把系統升到 macOS 13 以上。Windows 的需求不變
+
+### Security
+
+- **Electron 從 41.10.7 更新到 44.9.3**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：41 線出到 41.10.7（2026-08-25）就停止支援，之後不再有安全修補；44 線支援到 2027-03-02
+  - **修補 [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9)（high），ccRewind 符合它的受影響條件**：一批 eMudhra 的中繼憑證外洩，44.9.3 在 Chromium 的網路層和 Node.js 的 `tls`、`https`、`fetch` 都擋掉了這批憑證。之前的版本裡，持有經這批中繼憑證簽發的憑證、又能攔截網路的人，可以假冒 TLS 伺服器。ccRewind 開啟時會用 `fetch` 連 api.github.com 檢查有沒有新版；在這種網路上，對方可以假冒這次檢查的回應，讓 ccRewind 顯示假的新版本提示，按「下載」會打開對方指定的網址
+  - 41.10.7 另外受 7 條 Electron 公告影響，**受影響的條件 ccRewind 都沒有**：權限處理器（`setPermissionCheckHandler`／`setPermissionRequestHandler`）、iframe、offscreen 繪製、`beginFrameSubscription`、載入擴充功能、讓頁面內容開新視窗（新視窗一律由 `setWindowOpenHandler` 拒絕）
+
+### Changed
+
+- **better-sqlite3 從 12.11.1 更新到 13.0.3**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：npm 上的 12.x 都沒有 Electron 44 能用的預編譯檔。13 改用 N-API，預編譯檔直接放在套件裡；內建的 SQLite 從 3.53.2 更新到 3.53.4
+  - ⚠️ app 變大：8 個平台的預編譯檔都會打包進去，macOS 版安裝後從約 313 MB 變成約 352 MB
+- **開發**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：`engines.node` 的下限改成 22（better-sqlite3 13 的要求）；Electron 42 起安裝時不再下載本體，`pnpm dev` 改成先跑 `install-electron`；CI 的 Electron Smoke 多一步，在 macOS 與 Windows 用打包好的 app 載入 better-sqlite3，原生檔必須來自 `app.asar.unpacked` 裡的 `prebuilds/`；Renovate 對 Electron 的 minor 與 patch 更新不用在 Dependency Dashboard 核准就開 PR（不自動合併），有名額空出來時先開它（`prPriority: 5`），major 仍要核准。只影響開發
+- **建置**：macOS 打包後的 ad-hoc 簽章檢查改用 `codesign --verify --deep --strict`（[#154](https://github.com/tznthou/ccRewind/pull/154)），只用 `--verify` 驗不出 app 內嵌的 framework 裡的資源被改過。只影響建置
+
 ## [1.27.3] - 2026-10-21
 
 ### Fixed

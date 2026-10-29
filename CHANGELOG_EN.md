@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] - 2026-10-29
+
+⚠️ **This release requires macOS 13 or later**: Electron 44 no longer supports macOS 12. On macOS 12, stay on 1.27.3; the app's update notice does not check the operating system, so it appears on macOS 12 too. 1.27.3 runs Electron 41, which is no longer supported, so the certificate issue under Security below will not be fixed there; the only way to get the fix is to move to macOS 13 or later. Windows requirements are unchanged
+
+### Security
+
+- **Electron updated from 41.10.7 to 44.9.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): the 41 line ended with 41.10.7 (2026-08-25) and gets no more security fixes; the 44 line is supported until 2027-03-02
+  - **Fixes [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9) (high), whose conditions ccRewind meets**: a set of eMudhra intermediate certificates was compromised, and 44.9.3 blocks them in both Chromium networking and Node.js `tls`, `https` and `fetch`. On earlier versions, someone holding a certificate issued through these intermediates and able to intercept network traffic could impersonate a TLS server. ccRewind checks api.github.com for a new version with `fetch` when it opens; on such a network, they could fake the response to that check, so that ccRewind shows a fake update notice whose "Download" button opens an address of their choosing
+  - The other seven Electron advisories affecting 41.10.7 **depend on conditions ccRewind does not have**: a permission handler (`setPermissionCheckHandler` / `setPermissionRequestHandler`), iframes, offscreen rendering, `beginFrameSubscription`, loaded extensions, or new windows opened by page content (`setWindowOpenHandler` denies every new window)
+
+### Changed
+
+- **better-sqlite3 updated from 12.11.1 to 13.0.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): no 12.x release on npm has a prebuilt binary for Electron 44. 13 uses N-API and ships its prebuilt binaries inside the package; the bundled SQLite moves from 3.53.2 to 3.53.4
+  - ⚠️ The app is larger: the prebuilt binaries for all eight platforms are packaged, and the installed macOS app grows from about 313 MB to about 352 MB
+- **Development** ([#150](https://github.com/tznthou/ccRewind/pull/150)): `engines.node` now requires 22 or later (better-sqlite3 13 needs it); Electron 42 and later no longer download themselves on install, so `pnpm dev` runs `install-electron` first; CI's Electron Smoke gains a step that loads better-sqlite3 in the packaged app on macOS and Windows and requires the native file to come from `prebuilds/` inside `app.asar.unpacked`; Renovate opens PRs for Electron minor and patch updates without Dependency Dashboard approval (no automerge) and opens them first when a PR slot frees up (`prPriority: 5`), while majors still need approval. Development only
+- **Build**: after packaging for macOS, the ad-hoc signature is checked with `codesign --verify --deep --strict` ([#154](https://github.com/tznthou/ccRewind/pull/154)); a plain `--verify` does not notice modified resources inside a framework embedded in the app. Build only
+
 ## [1.27.3] - 2026-10-21
 
 ### Fixed
