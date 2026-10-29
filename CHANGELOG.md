@@ -20,8 +20,8 @@
 ### Changed
 
 - **better-sqlite3 從 12.11.1 更新到 13.0.3**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：npm 上的 12.x 都沒有 Electron 44 能用的預編譯檔。13 改用 N-API，預編譯檔直接放在套件裡；內建的 SQLite 從 3.53.2 更新到 3.53.4
-  - ⚠️ app 變大：8 個平台的預編譯檔都會打包進去，macOS 版安裝後從約 313 MB 變成約 352 MB
-- **開發**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：`engines.node` 的下限改成 22（better-sqlite3 13 的要求）；Electron 42 起安裝時不再下載本體，`pnpm dev` 改成先跑 `install-electron`；CI 的 Electron Smoke 多一步，在 macOS 與 Windows 用打包好的 app 載入 better-sqlite3，原生檔必須來自 `app.asar.unpacked` 裡的 `prebuilds/`；Renovate 對 Electron 的 minor 與 patch 更新不用在 Dependency Dashboard 核准就開 PR（不自動合併），有名額空出來時先開它（`prPriority: 5`），major 仍要核准。只影響開發
+  - ⚠️ app 變大：macOS（arm64）版安裝後從約 313 MB 變成約 352 MB（1.28.0 是用本機建置量的）。Electron 44 的 framework 比 41 大約 25 MB，better-sqlite3 13 又把 8 個平台的預編譯檔都打包進去（共約 16 MB）
+- **開發**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：`engines.node` 的下限改成 22（better-sqlite3 13 的要求）；Electron 42 起安裝時不再下載本體，`pnpm dev` 改成先跑 `install-electron`；CI 的 Electron Smoke 多一步，在 macOS 與 Windows 用打包好的 app 載入 better-sqlite3，原生檔必須來自 `app.asar.unpacked` 裡的 `prebuilds/`；Renovate 對 Electron 的 minor 與 patch 更新不用在 Dependency Dashboard 核准就開 PR（不自動合併），排程、3 天等待期與 PR 數量上限都允許時，排在其他更新前面開（`prPriority: 5`），major 仍要核准。只影響開發
 - **建置**：macOS 打包後的 ad-hoc 簽章檢查改用 `codesign --verify --deep --strict`（[#154](https://github.com/tznthou/ccRewind/pull/154)），只用 `--verify` 驗不出 app 內嵌的 framework 裡的資源被改過。只影響建置
 
 ## [1.27.3] - 2026-10-21
