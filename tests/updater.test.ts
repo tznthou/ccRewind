@@ -65,9 +65,9 @@ describe('compareVersions', () => {
 })
 
 describe('safeReleaseUrl', () => {
-  it('keeps the release page of the given tag', () => {
-    const url = 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0'
-    expect(safeReleaseUrl(url, 'v1.28.0')).toBe(url)
+  it.each(['v1.28.0', 'v10.20.30'])('keeps the release page of %s', (tag) => {
+    const url = `https://github.com/tznthou/ccRewind/releases/tag/${tag}`
+    expect(safeReleaseUrl(url, tag)).toBe(url)
   })
 
   it.each([
@@ -78,6 +78,7 @@ describe('safeReleaseUrl', () => {
     ['a dot segment in the tag page', 'https://github.com/tznthou/ccRewind/releases/tag/./v1.28.0', 'v1.28.0'],
     ['a tag with path characters', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0/../../../someone/repo', 'v1.28.0/../../../someone/repo'],
     ['a tag ending in ";"', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0;', 'v1.28.0;'],
+    ['a tag with a line break', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0\n/../../../../../someone/repo', 'v1.28.0\n/../../../../../someone/repo'],
     ['a tag that only ends like a version', 'https://github.com/tznthou/ccRewind/releases/tag/..;/..;/..;/..;/someone/repo/releases/tag/v9.9.9', '..;/..;/..;/..;/someone/repo/releases/tag/v9.9.9'],
     ['a path after the tag page', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0/..;/..;/..;/..;/someone/repo', 'v1.28.0'],
     ['a tag without the v', 'https://github.com/tznthou/ccRewind/releases/tag/1.28.0', '1.28.0'],

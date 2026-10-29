@@ -33,7 +33,7 @@ export function compareVersions(a: string, b: string): number {
 
 // ── 發布頁網址 ──
 
-/** 本 repo 發布用的 tag：v 加三段數字 */
+/** 只認 v 加三段數字的 tag；預發布格式（例如 v1.29.0-rc.1）刻意退回 releases 列表 */
 const RELEASE_TAG = /^v\d+\.\d+\.\d+$/
 
 /**
