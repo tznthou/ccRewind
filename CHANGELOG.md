@@ -13,8 +13,9 @@
 ### Security
 
 - **Electron 從 41.10.7 更新到 44.9.3**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：41 線出到 41.10.7（2026-08-25）就停止支援，之後不再有安全修補；44 線支援到 2027-03-02
-  - **修補 [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9)（high），ccRewind 符合它的受影響條件**：一批 eMudhra 的中繼憑證外洩，44.9.3 在 Chromium 的網路層和 Node.js 的 `tls`、`https`、`fetch` 都擋掉了這批憑證。之前的版本裡，持有經這批中繼憑證簽發的憑證、又能攔截網路的人，可以假冒 TLS 伺服器。ccRewind 開啟時會用 `fetch` 連 api.github.com 檢查有沒有新版；在這種網路上，對方可以假冒這次檢查的回應，讓 ccRewind 顯示假的新版本提示，按「下載」會打開對方指定的網址
+  - **修補 [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9)（high），ccRewind 符合它的受影響條件**：一批 eMudhra 的中繼憑證外洩，44.9.3 在 Chromium 的網路層和 Node.js 的 `tls`、`https`、`fetch` 都擋掉了這批憑證。之前的版本裡，持有經這批中繼憑證簽發的憑證、又能攔截網路的人，可以假冒 TLS 伺服器。ccRewind 開啟時會用 `fetch` 連 api.github.com 檢查有沒有新版；在這種網路上，對方可以假冒這次檢查的回應，讓 ccRewind 顯示假的新版本提示，按「下載」會打開對方指定的網址（1.28.0 起只會打開 ccRewind 的發布頁，見下一條）
   - 41.10.7 另外受 7 條 Electron 公告影響，**受影響的條件 ccRewind 都沒有**：權限處理器（`setPermissionCheckHandler`／`setPermissionRequestHandler`）、iframe、offscreen 繪製、`beginFrameSubscription`、載入擴充功能、讓頁面內容開新視窗（新視窗一律由 `setWindowOpenHandler` 拒絕）
+- **更新提示的「下載」只會打開 ccRewind 在 GitHub 上的發布頁**（[#150](https://github.com/tznthou/ccRewind/pull/150)）：以前按「下載」打開的是更新檢查回應裡的網址，沒有檢查網域，能假冒這次回應的人（例如透過上面那條憑證問題）可以把使用者導到任何網址。現在只接受 `https://github.com/tznthou/ccRewind/releases/` 底下的網址，其他一律改開 releases 頁；網址會先解析再檢查，用 `..` 這類寫法跳出這個範圍的，也改開 releases 頁
 
 ### Changed
 
