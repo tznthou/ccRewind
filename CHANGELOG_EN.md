@@ -7,13 +7,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.28.0] - 2026-10-29
+## [1.28.0] - 2026-10-30
 
 ⚠️ **This release requires macOS 13 or later**: Electron 44 no longer supports macOS 12. On macOS 12, stay on 1.27.3; the app's update notice does not check the operating system, so it appears on macOS 12 too. 1.27.3 has neither fix under Security below, and the Electron 41 it runs is no longer supported; the only way to get the fixes is to move to macOS 13 or later. Windows requirements are unchanged
 
 ### Security
 
-- **Electron updated from 41.10.7 to 44.9.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): the 41 line ended with 41.10.7 (2026-08-25) and gets no more security fixes; the 44 line is supported until 2027-03-02
+- **Electron updated from 41.10.7 to 44.9.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): the 41 line reached end of support on 2026-08-24, with 41.10.7 as its last release, and gets no more security fixes; the 44 line is supported until 2027-03-02
   - **Fixes [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9) (high), whose conditions ccRewind meets**: a set of eMudhra intermediate certificates was compromised, and 44.9.3 blocks them in both Chromium networking and Node.js `tls`, `https` and `fetch`. On earlier versions, someone holding a certificate issued through these intermediates and able to intercept network traffic could impersonate a TLS server. ccRewind checks api.github.com for a new version with `fetch` when it opens; on such a network, they could fake the response to that check, so that ccRewind shows a fake update notice whose "Download" button opens an address of their choosing (from 1.28.0 it only opens ccRewind's release pages; see the update notice item below)
   - The other seven Electron advisories affecting 41.10.7 **depend on conditions ccRewind does not have**: a permission handler (`setPermissionCheckHandler` / `setPermissionRequestHandler`), iframes, offscreen rendering, `beginFrameSubscription`, loaded extensions, or new windows opened by page content (`setWindowOpenHandler` denies every new window)
 - **The update notice's "Download" button only opens ccRewind's release pages on GitHub** ([#150](https://github.com/tznthou/ccRewind/pull/150)): it used to open whatever address the update check's response gave, with no check at all, so anyone able to fake that response (for example through the certificate issue above) could make ccRewind open any address: another website, someone else's files on GitHub, or an address such as `file:` that is handed to another program on the computer. Now the address from the response is opened only when it is exactly that version's release page (`https://github.com/tznthou/ccRewind/releases/tag/v<version>`); anything else opens the releases page, and a response with no address still opens the latest release, as before
