@@ -78,6 +78,8 @@ describe('safeReleaseUrl', () => {
     ['a dot segment in the tag page', 'https://github.com/tznthou/ccRewind/releases/tag/./v1.28.0', 'v1.28.0'],
     ['a tag with path characters', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0/../../../someone/repo', 'v1.28.0/../../../someone/repo'],
     ['a tag ending in ";"', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0;', 'v1.28.0;'],
+    ['a tag that only ends like a version', 'https://github.com/tznthou/ccRewind/releases/tag/..;/..;/..;/..;/someone/repo/releases/tag/v9.9.9', '..;/..;/..;/..;/someone/repo/releases/tag/v9.9.9'],
+    ['a path after the tag page', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0/..;/..;/..;/..;/someone/repo', 'v1.28.0'],
     ['a tag without the v', 'https://github.com/tznthou/ccRewind/releases/tag/1.28.0', '1.28.0'],
     ['a pre-release tag', 'https://github.com/tznthou/ccRewind/releases/tag/v2.0.0-beta.1', 'v2.0.0-beta.1'],
     ['another host', 'https://evil.example/tznthou/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
