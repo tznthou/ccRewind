@@ -8,7 +8,7 @@ exports.default = async function (context) {
   console.log(`Ad-hoc signing: ${appPath}`)
 
   execSync(`codesign --force --deep -s - "${appPath}"`, { stdio: 'inherit' })
-  execSync(`codesign --verify "${appPath}"`, { stdio: 'inherit' })
+  execSync(`codesign --verify --deep --strict "${appPath}"`, { stdio: 'inherit' })
 
   console.log('Ad-hoc signing complete')
 }
