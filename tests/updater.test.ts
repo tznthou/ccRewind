@@ -65,34 +65,34 @@ describe('compareVersions', () => {
 })
 
 describe('safeReleaseUrl', () => {
-  it.each([
-    'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0',
-    'https://github.com/tznthou/ccRewind/releases/latest',
-  ])('keeps %s', (url) => {
-    expect(safeReleaseUrl(url)).toBe(url)
-  })
-
-  it('returns the parsed URL, not the raw string', () => {
-    expect(safeReleaseUrl('https://github.com/tznthou/ccRewind/releases/tag/./v1.28.0'))
-      .toBe('https://github.com/tznthou/ccRewind/releases/tag/v1.28.0')
+  it('keeps the release page of the given tag', () => {
+    const url = 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0'
+    expect(safeReleaseUrl(url, 'v1.28.0')).toBe(url)
   })
 
   it.each([
-    ['another host', 'https://evil.example/tznthou/ccRewind/releases/tag/v1.28.0'],
-    ['a host that starts with github.com', 'https://github.com.evil.example/tznthou/ccRewind/releases/tag/v1.28.0'],
-    ['http', 'http://github.com/tznthou/ccRewind/releases/tag/v1.28.0'],
-    ['another repo', 'https://github.com/someone/ccRewind/releases/tag/v1.28.0'],
-    ['a path that only starts with "releases"', 'https://github.com/tznthou/ccRewind/releasesx/tag/v1.28.0'],
-    ['the prefix in upper case', 'HTTPS://GITHUB.COM/tznthou/ccRewind/releases/tag/v1.28.0'],
-    ['dot segments', 'https://github.com/tznthou/ccRewind/releases/../../evil/releases/tag/v1'],
-    ['encoded dot segments', 'https://github.com/tznthou/ccRewind/releases/%2e%2e/%2E%2e/evil/x'],
-    ['backslashes', 'https://github.com/tznthou/ccRewind/releases/..\\..\\evil\\x'],
-    ['a javascript: URL', 'javascript:alert(1)'],
-    ['a file: URL', 'file:///Applications/Calculator.app'],
-    ['text that is not a URL', 'not a url'],
-    ['an empty string', ''],
-  ])('falls back to the releases page for %s', (_label, url) => {
-    expect(safeReleaseUrl(url)).toBe(RELEASES_PAGE)
+    ['the page of another tag', 'https://github.com/tznthou/ccRewind/releases/tag/v1.27.3', 'v1.28.0'],
+    ['a release download', 'https://github.com/tznthou/ccRewind/releases/download/v1.28.0/ccrewind-1.28.0-mac-arm64.zip', 'v1.28.0'],
+    ['the latest release', 'https://github.com/tznthou/ccRewind/releases/latest', 'v1.28.0'],
+    ['"..;" segments, which github.com reads as ".."', 'https://github.com/tznthou/ccRewind/releases/..;/..;/..;/electron/electron/releases/tag/v44.9.3', 'v44.9.3'],
+    ['a dot segment in the tag page', 'https://github.com/tznthou/ccRewind/releases/tag/./v1.28.0', 'v1.28.0'],
+    ['a tag with path characters', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0/../../../someone/repo', 'v1.28.0/../../../someone/repo'],
+    ['a tag ending in ";"', 'https://github.com/tznthou/ccRewind/releases/tag/v1.28.0;', 'v1.28.0;'],
+    ['a tag without the v', 'https://github.com/tznthou/ccRewind/releases/tag/1.28.0', '1.28.0'],
+    ['a pre-release tag', 'https://github.com/tznthou/ccRewind/releases/tag/v2.0.0-beta.1', 'v2.0.0-beta.1'],
+    ['another host', 'https://evil.example/tznthou/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
+    ['a host that starts with github.com', 'https://github.com.evil.example/tznthou/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
+    ['http', 'http://github.com/tznthou/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
+    ['another repo', 'https://github.com/someone/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
+    ['the page in upper case', 'HTTPS://GITHUB.COM/tznthou/ccRewind/releases/tag/v1.28.0', 'v1.28.0'],
+    ['encoded dot segments', 'https://github.com/tznthou/ccRewind/releases/%2e%2e/%2E%2e/evil/x', 'v1.28.0'],
+    ['backslashes', 'https://github.com/tznthou/ccRewind/releases/..\\..\\evil\\x', 'v1.28.0'],
+    ['a javascript: URL', 'javascript:alert(1)', 'v1.28.0'],
+    ['a file: URL', 'file:///Applications/Calculator.app', 'v1.28.0'],
+    ['text that is not a URL', 'not a url', 'v1.28.0'],
+    ['an empty string', '', 'v1.28.0'],
+  ])('falls back to the releases page for %s', (_label, url, tag) => {
+    expect(safeReleaseUrl(url, tag)).toBe(RELEASES_PAGE)
   })
 })
 
@@ -106,7 +106,7 @@ describe('checkForUpdates and openReleasePage', () => {
     vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => release })))
   }
 
-  it('opens the html_url of a release in this repo', async () => {
+  it('opens the html_url when it is this release\'s page', async () => {
     const url = 'https://github.com/tznthou/ccRewind/releases/tag/v99.0.0'
     respondWith({ tag_name: 'v99.0.0', html_url: url })
     expect(await checkForUpdates()).toMatchObject({ status: 'available', releaseUrl: url })
@@ -114,7 +114,7 @@ describe('checkForUpdates and openReleasePage', () => {
     expect(shell.openExternal).toHaveBeenCalledWith(url)
   })
 
-  it('opens the releases page instead of an html_url outside this repo\'s releases', async () => {
+  it('opens the releases page instead of an html_url that is not this release\'s page', async () => {
     respondWith({ tag_name: 'v99.0.0', html_url: 'https://evil.example/download' })
     expect(await checkForUpdates()).toMatchObject({ status: 'available', releaseUrl: RELEASES_PAGE })
     openReleasePage()
@@ -124,5 +124,7 @@ describe('checkForUpdates and openReleasePage', () => {
   it('opens the latest release when the response has no html_url', async () => {
     respondWith({ tag_name: 'v99.0.0' })
     expect(await checkForUpdates()).toMatchObject({ status: 'available', releaseUrl: `${RELEASES_PAGE}/latest` })
+    openReleasePage()
+    expect(shell.openExternal).toHaveBeenCalledWith(`${RELEASES_PAGE}/latest`)
   })
 })
