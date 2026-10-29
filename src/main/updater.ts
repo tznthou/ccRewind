@@ -31,6 +31,19 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
+// ── 發布頁網址 ──
+
+/** 只認 v 加三段數字的 tag；預發布格式（例如 v1.29.0-rc.1）刻意退回 releases 列表 */
+const RELEASE_TAG = /^v\d+\.\d+\.\d+$/
+
+/**
+ * API 回應的 html_url 只在剛好等於這個 tag 的發布頁時才採用，其他一律退回 releases 頁。
+ * 不用前綴比對：github.com 會把路徑裡的 `..;` 當成上一層，以 releases 開頭的網址也能打開別的 repo。
+ */
+export function safeReleaseUrl(url: string, tag: string): string {
+  return RELEASE_TAG.test(tag) && url === `${REPO_RELEASES_PAGE}/tag/${tag}` ? url : REPO_RELEASES_PAGE
+}
+
 // ── 更新檢查 ──
 
 /** 當次 session 被略過的版本（記憶體，重啟即清除） */
@@ -81,7 +94,7 @@ async function doCheck(): Promise<UpdateState> {
 
     const release = data as { tag_name: string; html_url?: string }
     const latestVersion = release.tag_name.replace(/^v/, '')
-    const releaseUrl = typeof release.html_url === 'string' ? release.html_url : `${REPO_RELEASES_PAGE}/latest`
+    const releaseUrl = typeof release.html_url === 'string' ? safeReleaseUrl(release.html_url, release.tag_name) : `${REPO_RELEASES_PAGE}/latest`
 
     if (compareVersions(latestVersion, currentVersion) <= 0) {
       cachedState = { status: 'latest', currentVersion, latestVersion, releaseUrl }

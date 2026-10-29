@@ -99,5 +99,5 @@ cat <<'FOOTER'
 > ⚠️ **Windows**：首次執行時會顯示 SmartScreen「Windows 已保護您的電腦」警告。
 > 請點擊「其他資訊」→「仍要執行」即可。
 
-System requirements: macOS 11+ / Windows 10+
+System requirements: macOS 13+ / Windows 10+
 FOOTER

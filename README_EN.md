@@ -236,10 +236,10 @@ graph TB
 
 | Technology | Purpose | Notes |
 |------------|---------|-------|
-| Electron 41 | Desktop app framework | macOS hiddenInset title bar |
+| Electron 44 | Desktop app framework | macOS hiddenInset title bar |
 | React 19 | UI framework | Function components + hooks |
 | TypeScript 5.9 | Type safety | Strict mode |
-| better-sqlite3 12 | SQLite binding | With FTS5 full-text search |
+| better-sqlite3 13 | SQLite binding | With FTS5 full-text search |
 | electron-vite 5 | Build tool | Triple build: main + preload + renderer |
 | recharts 3 | Chart library | Area, pie, donut charts (Context Budget + Dashboard) |
 | Vitest 3 | Test framework | 545 tests, run through Electron |
@@ -253,7 +253,7 @@ Download the pre-built binary for your platform from [Releases](https://github.c
 - **macOS** (arm64): DMG (drag into Applications) or ZIP (extract and run)
 - **Windows** (x64): NSIS installer or ZIP
 
-System requirements: macOS 11+ / Windows 10+
+System requirements: macOS 13+ / Windows 10+
 
 ### First-launch warning
 

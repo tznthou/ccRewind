@@ -127,6 +127,20 @@
         "pnpm/action-setup"
       ],
       "allowedVersions": "<5.0.0"
+    },
+    {
+      "description": "Electron minor / patch 直接開 PR (不等 Dashboard 核准), 仍不自動合併 — Chromium 的安全修補多半走 patch, 只有發資安公告的才會有 vulnerability PR. better-sqlite3 13 起是 N-API, 換 Electron patch 不必跟它一起升. 必須排在 Electron/native stack 與 safe minor 兩條之後, 後定義者覆蓋 groupName 與核准設定; major 仍走 Electron/native stack 群組. prPriority 5 (其他都是預設 0): 碰到 prConcurrentLimit / prHourlyLimit 時名額一空就先開它; 3 支都還開著時照樣排在 Dashboard 的 Rate-Limited 區, 手動 PR 要當週處理",
+      "matchPackageNames": [
+        "electron"
+      ],
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ],
+      "groupName": "Electron minor and patch",
+      "dependencyDashboardApproval": false,
+      "automerge": false,
+      "prPriority": 5
     }
   ]
 }

@@ -7,6 +7,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.0] - 2026-10-30
+
+⚠️ **This release requires macOS 13 or later**: Electron 44 no longer supports macOS 12. On macOS 12, stay on 1.27.3; the app's update notice does not check the operating system, so it appears on macOS 12 too. 1.27.3 has neither fix under Security below, and the Electron 41 it runs is no longer supported; the only way to get the fixes is to move to macOS 13 or later. Windows requirements are unchanged
+
+### Security
+
+- **Electron updated from 41.10.7 to 44.9.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): the 41 line reached end of support on 2026-08-24, with 41.10.7 as its last release, and gets no more security fixes; the 44 line is supported until 2027-03-02
+  - **Fixes [GHSA-jr5w-w6x2-84p9](https://github.com/advisories/GHSA-jr5w-w6x2-84p9) (high), whose conditions ccRewind meets**: a set of eMudhra intermediate certificates was compromised, and 44.9.3 blocks them in both Chromium networking and Node.js `tls`, `https` and `fetch`. On earlier versions, someone holding a certificate issued through these intermediates and able to intercept network traffic could impersonate a TLS server. ccRewind checks api.github.com for a new version with `fetch` when it opens; on such a network, they could fake the response to that check, so that ccRewind shows a fake update notice whose "Download" button opens an address of their choosing (from 1.28.0 it only opens ccRewind's release pages; see the update notice item below)
+  - The other seven Electron advisories affecting 41.10.7 **depend on conditions ccRewind does not have**: a permission handler (`setPermissionCheckHandler` / `setPermissionRequestHandler`), iframes, offscreen rendering, `beginFrameSubscription`, loaded extensions, or new windows opened by page content (`setWindowOpenHandler` denies every new window)
+- **The update notice's "Download" button only opens ccRewind's release pages on GitHub** ([#150](https://github.com/tznthou/ccRewind/pull/150)): it used to open whatever address the update check's response gave, with no check at all, so anyone able to fake that response (for example through the certificate issue above) could make ccRewind open any address: another website, someone else's files on GitHub, or an address such as `file:` that is handed to another program on the computer. Now the address from the response is opened only when it is exactly that version's release page (`https://github.com/tznthou/ccRewind/releases/tag/v<version>`); anything else opens the releases page, and a response with no address still opens the latest release, as before
+
+### Changed
+
+- **better-sqlite3 updated from 12.11.1 to 13.0.3** ([#150](https://github.com/tznthou/ccRewind/pull/150)): no 12.x release on npm has a prebuilt binary for Electron 44. 13 uses N-API and ships its prebuilt binaries inside the package; the bundled SQLite moves from 3.53.2 to 3.53.4
+  - ⚠️ The app is larger: the installed macOS (arm64) app grows from about 313 MB to about 352 MB (1.28.0 measured on a local build). Electron 44's framework is about 25 MB larger than 41's, and better-sqlite3 13 packages the prebuilt binaries for all eight platforms (about 16 MB together)
+- **Development** ([#150](https://github.com/tznthou/ccRewind/pull/150)): the lower bound of `engines.node` is now 22 (better-sqlite3 13 needs it); Electron 42 and later no longer download themselves on install, so `pnpm dev` runs `install-electron` first; CI's Electron Smoke gains a step that loads better-sqlite3 in the packaged app on macOS and Windows and requires the native file to come from `prebuilds/` inside `app.asar.unpacked`; Renovate opens PRs for Electron minor and patch updates without Dependency Dashboard approval (no automerge), ahead of other updates once the schedule, the 3-day wait and the PR limits allow (`prPriority: 5`), while majors still need approval. Development only
+- **Build**: after packaging for macOS, the ad-hoc signature is checked with `codesign --verify --deep --strict` ([#154](https://github.com/tznthou/ccRewind/pull/154)); a plain `--verify` does not notice modified resources inside a framework embedded in the app. Build only
+
 ## [1.27.3] - 2026-10-21
 
 ### Fixed

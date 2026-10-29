@@ -10,7 +10,7 @@
 
 | 項目 | 需求 |
 |------|------|
-| 作業系統 | macOS 11+（arm64） / Windows 10+（x64） |
+| 作業系統 | macOS 13+（arm64） / Windows 10+（x64） |
 | 先決條件 | 曾經使用過 Claude Code，`~/.claude/projects/` 下已有 JSONL 紀錄 |
 | 時間 | 5 分鐘 |
 
