@@ -34,6 +34,14 @@
   "osvVulnerabilityAlerts": true,
   "packageRules": [
     {
+      "description": "Minor 先 group 不 automerge，dogfood 觀察一個月後再放寬。必須是第一條: 規則是後面的覆蓋前面, 這條排在 Electron/native stack 與 TypeScript 生態之後時, 那兩組的 minor 會被搶進這組 (#114 併進了 @types/react, 2026-10-30 Dashboard 上這組有 electron-builder)",
+      "matchUpdateTypes": [
+        "minor"
+      ],
+      "groupName": "safe minor dependencies",
+      "automerge": false
+    },
+    {
       "description": "Electron/native stack — Chromium + Node ABI 高風險，永遠手動 review。package.json 釘精確版本，lock file maintenance 重新解析時才動不到它們",
       "matchPackageNames": [
         "electron",
@@ -77,14 +85,6 @@
       ],
       "groupName": "safe patch dependencies",
       "automerge": true
-    },
-    {
-      "description": "Minor 先 group 不 automerge，dogfood 觀察一個月後再放寬",
-      "matchUpdateTypes": [
-        "minor"
-      ],
-      "groupName": "safe minor dependencies",
-      "automerge": false
     },
     {
       "description": "vitest 家族必須同版號升級 — @vitest/coverage-v8 的 peerDependencies 是嚴格鎖版 (vitest: '4.1.11') 不是 range, 版本不同步會讓 pnpm test:coverage 壞掉而 CI 抓不到 (CI 不跑 coverage). 必含 major, 否則 major bumps 會散成 N 個 PR. 這條必須排在 safe patch/minor 兩條之後, 後定義者覆蓋前者",
