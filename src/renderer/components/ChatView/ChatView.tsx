@@ -196,7 +196,8 @@ export default function ChatView({ sessionId }: ChatViewProps) {
 
   // 列表上方的 SubagentPanel / TasksPanel / TokenBudgetPanel 會非同步長出內容、也能展開收合，
   // 這些都不經過 ChatView 的 state，靠列舉 dep 追不到（實測展開 TokenBudget 會讓起點位移 609px）。
-  // 改用 ResizeObserver 直接看尺寸變化。
+  // 改用 ResizeObserver 直接看尺寸變化。看的是 .chatView 的外框，它要跟著內容長高（CSS 的 flex-shrink: 0）：
+  // 被 .main 壓扁時外框尺寸不變，這裡不會觸發，scrollMargin 停在舊值，捲動後可視範圍上方的訊息不會被畫出來。
   useLayoutEffect(() => {
     const scroller = getScrollElement()
     const container = containerRef.current
