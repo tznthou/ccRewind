@@ -29,7 +29,8 @@
       "security",
       "dependencies"
     ],
-    "vulnerabilityFixStrategy": "lowest"
+    "vulnerabilityFixStrategy": "lowest",
+    "automerge": false
   },
   "osvVulnerabilityAlerts": true,
   "packageRules": [
@@ -63,7 +64,7 @@
       "automerge": false
     },
     {
-      "description": "低風險 patch automerge 白名單",
+      "description": "低風險 patch automerge 白名單 (只管一般更新: 資安 PR 不等 3 天、還會自己在 pnpm-workspace.yaml 加豁免, 所以 vulnerabilityAlerts 設 automerge: false; Renovate 以 force 套用 vulnerabilityAlerts, 會蓋過這條)",
       "matchUpdateTypes": [
         "patch"
       ],
