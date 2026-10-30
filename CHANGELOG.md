@@ -6,6 +6,23 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.28.1] - 2026-10-30
+
+### Security
+
+- **開發用的 Vite 從 6.4.4 更新到 6.4.5**（[#155](https://github.com/tznthou/ccRewind/pull/155)）：修補 [GHSA-8g5g-mxqh-grgj](https://github.com/advisories/GHSA-8g5g-mxqh-grgj)（CVE-2026-118662，medium），Vite 開發伺服器的 `server.fs.deny` 可以用網址參數繞過，回傳原本該擋下的檔案內容。只有開發伺服器對網路開放（`--host` 或 `server.host`）時才打得到，ccRewind 的開發設定沒有開放；打包出來的 app 不含 Vite。只影響開發
+
+### Fixed
+
+- **展開對話區上方的區塊後往下捲，訊息不再變成一片空白**（[#159](https://github.com/tznthou/ccRewind/pull/159)）：對話區的訊息列表只畫看得到的那幾則，要知道列表從畫面上哪裡開始，才算得出該畫哪幾則。列表上方的區塊（Token Budget 面板與它的「詳細數據」、工具列的檔案清單等）高度改變時，這個起點沒有重新計算。比視窗長的對話裡，展開這些區塊後往下捲，列表仍以舊的起點計算，可視範圍上方應該出現的訊息沒有畫出來，留下一片空白。從 v1.20.0（訊息列表改成只畫看得到的部分）起就是這樣
+  - 位移夠大才看得出來：列表本來就會多畫可視範圍外的幾則，位移沒超過這幾則時，起點一樣沒更新，但畫面不會出現空白。例：維護者的一場對話，連同「詳細數據」展開 Token Budget 面板後，列表起點往下移了約 1,260px，捲動時畫面上方出現空白；只打開檔案清單（往下移 78px）時沒有
+  - 長對話捲到最底時，最後的內容下方會多出 24px 的留白：對話區本來就有這個下邊距，以前在比視窗長的對話裡沒有生效。捲到最底時，「跳到最上面／跳到最下面」按鈕也會跟著高 24px
+
+### Changed
+
+- **依賴更新**：`@tanstack/react-virtual` 3.14.23，開發用的 ESLint 10.13.0、typescript-eslint 8.72.1（[#157](https://github.com/tznthou/ccRewind/pull/157)）；開發用的 globals 版本範圍調到 ^17.13.0，實際安裝的版本原本就是 17.13.0（[#151](https://github.com/tznthou/ccRewind/pull/151)）
+- **開發**：CI 與發版流程用的 Node.js（[#152](https://github.com/tznthou/ccRewind/pull/152)）和 `.node-version`（[#153](https://github.com/tznthou/ccRewind/pull/153)）更新到 22.23.4；Renovate 的一般 minor 規則移到最前面，Electron 原生堆疊（better-sqlite3、electron-builder、electron-vite）與 TypeScript 生態的 minor 更新不再被併進一般的 minor 群組（[#156](https://github.com/tznthou/ccRewind/pull/156)）；資安更新的 PR 不再自動合併（[#158](https://github.com/tznthou/ccRewind/pull/158)）。只影響開發與建置
+
 ## [1.28.0] - 2026-10-30
 
 ⚠️ **這一版起需要 macOS 13 以上**：Electron 44 不再支援 macOS 12。macOS 12 請留在 1.27.3；app 的更新提示不分作業系統，在 macOS 12 上也會出現。1.27.3 沒有下面 Security 的兩項修補，它用的 Electron 41 也已經停止支援；要拿到修補只能把系統升到 macOS 13 以上。Windows 的需求不變
