@@ -3,6 +3,10 @@
   flex-direction: column;
   padding: var(--space-xl);
   min-height: 100%;
+  /* App 的 .main 是 column flex 容器，預設 flex-shrink: 1 會把這層壓回 .main 的高度、內容只溢出外框。
+     ChatView.tsx 的 ResizeObserver 看這層外框重算列表起點，壓扁時上方面板展開它看不到、起點停在舊值；
+     差距超過 overscan 多畫的那幾列時，捲動後可視範圍上方的訊息會變空白 */
+  flex-shrink: 0;
 }
 
 .toolbar {

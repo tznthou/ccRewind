@@ -7,6 +7,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.28.1] - 2026-10-30
+
+### Security
+
+- **Vite, used for development, updated from 6.4.4 to 6.4.5** ([#155](https://github.com/tznthou/ccRewind/pull/155)): fixes [GHSA-8g5g-mxqh-grgj](https://github.com/advisories/GHSA-8g5g-mxqh-grgj) (CVE-2026-118662, medium), where query parameters could bypass `server.fs.deny` on the Vite dev server and return the contents of files it should block. It can only be reached when the dev server is exposed to the network (`--host` or `server.host`), which ccRewind's development setup does not do; the packaged app does not contain Vite. Development only
+
+### Fixed
+
+- **Messages no longer go blank when you scroll after expanding something above the conversation** ([#159](https://github.com/tznthou/ccRewind/pull/159)): the conversation's message list draws only the messages in view, and to know which ones those are it needs to know where the list starts on the page. When a block above the list changed height (the Token Budget panel and its Details, the toolbar's file list, and so on), that start was not measured again. In a conversation longer than the window, after expanding one of these blocks and scrolling down, the list kept calculating from the old start, and messages that belonged at the top of the visible area were not drawn, leaving a blank area. This has been the case since v1.20.0, when the message list started drawing only the messages in view
+  - It only shows when the shift is large enough: the list always draws a few messages beyond the visible area, and while the shift stays within them the start is still stale but nothing goes blank. For example, in one of the maintainer's conversations, expanding the Token Budget panel together with its Details moved the start of the list down by about 1,260px and left a blank area at the top while scrolling; opening the file list alone (78px) did not
+  - At the end of a long conversation there is now 24px of space below the last content: the conversation area always had this bottom padding, but it did not take effect in conversations longer than the window. Scrolled to the very end, the "Jump to top" and "Jump to bottom" buttons sit 24px higher as well
+
+### Changed
+
+- **Dependency updates**: `@tanstack/react-virtual` 3.14.23, and for development ESLint 10.13.0 and typescript-eslint 8.72.1 ([#157](https://github.com/tznthou/ccRewind/pull/157)); globals' version range, for development, moved to ^17.13.0, the version already installed was 17.13.0 ([#151](https://github.com/tznthou/ccRewind/pull/151))
+- **Development**: Node.js for CI and the release workflow ([#152](https://github.com/tznthou/ccRewind/pull/152)) and `.node-version` ([#153](https://github.com/tznthou/ccRewind/pull/153)) updated to 22.23.4; Renovate's general minor rule now comes first, so minor updates of the Electron native stack (better-sqlite3, electron-builder, electron-vite) and the TypeScript ecosystem are no longer pulled into the general minor group ([#156](https://github.com/tznthou/ccRewind/pull/156)); security update PRs are no longer merged automatically ([#158](https://github.com/tznthou/ccRewind/pull/158)). Development and build only
+
 ## [1.28.0] - 2026-10-30
 
 ⚠️ **This release requires macOS 13 or later**: Electron 44 no longer supports macOS 12. On macOS 12, stay on 1.27.3; the app's update notice does not check the operating system, so it appears on macOS 12 too. 1.27.3 has neither fix under Security below, and the Electron 41 it runs is no longer supported; the only way to get the fixes is to move to macOS 13 or later. Windows requirements are unchanged
