@@ -411,8 +411,14 @@
   margin-top: 3px;
 }
 
+/* 停用時只淡化 radio 與選項名稱。底下那句說明在停用時講的是「為什麼不能選」（目前沒有符合的 session），
+   以前整個 label 一起 opacity 0.55，那句只剩 2.4:1，讀不清楚就失去作用 */
 .modeOptionDisabled {
   cursor: not-allowed;
+}
+
+.modeOptionDisabled input,
+.modeOptionDisabled .modeTitle {
   opacity: 0.55;
 }
 
