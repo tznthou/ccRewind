@@ -67,6 +67,8 @@
   --color-subagent-text: #713DD6;
   --color-health-up-text: #00790A;
   --color-health-down-text: #CC1926;
+  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1）；舊主題寫各自原本的 heat 綠 */
+  --color-copied-text: #00781F;
 
   /* 儀表板「未收尾的對話」的 outcome 徽章：白字配實心底；時間線的底色沿亮度調暗到白字 ≥ 4.5，色相跟同頁圖例一致 */
   --color-outcome-unknown-badge-bg: #515E78;
@@ -197,6 +199,7 @@ mark {
   --color-subagent-text: #8b5cf6;
   --color-health-up-text: #22c55e;
   --color-health-down-text: #ef4444;
+  --color-copied-text: #15803d;
   --color-outcome-unknown-badge-bg: #706658;
   --color-outcome-in-progress-badge-bg: #f59e0b;
   --color-outcome-quick-qa-badge-bg: #06b6d4;
@@ -257,6 +260,7 @@ mark {
   --color-subagent-text: #8b5cf6;
   --color-health-up-text: #22c55e;
   --color-health-down-text: #ef4444;
+  --color-copied-text: #86efac;
   --color-outcome-unknown-badge-bg: #9298AC;
   --color-outcome-in-progress-badge-bg: #f59e0b;
   --color-outcome-quick-qa-badge-bg: #06b6d4;

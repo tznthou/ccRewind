@@ -110,10 +110,11 @@
   outline-offset: 2px;
 }
 
+/* 「已複製」閃 1.5 秒：不借熱度圖的 --color-heat-positive（時間線 3.18:1，hover 底上 2.67），用自己的用途 token */
 .sessionIdChipCopied,
 .sessionIdChipCopied:hover {
-  color: var(--color-heat-positive);
-  border-color: var(--color-heat-positive);
+  color: var(--color-copied-text);
+  border-color: var(--color-copied-text);
 }
 
 .sessionIdChip:hover::after,

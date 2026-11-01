@@ -133,7 +133,11 @@ describe('主題的錯誤色對比', () => {
 
 // ── 佈景主題 A ──────────────────────────────────────────────
 
-/** 用途 token：原本寫死在元件 CSS 的字色（裁決 7），按用途命名 —— 同色系在不同地方有不同 hex，合併的話舊主題會變色 */
+/**
+ * 用途 token：原本寫死在元件 CSS 的字色（裁決 7），按用途命名 —— 同色系在不同地方有不同 hex，合併的話舊主題會變色。
+ * --color-copied-text 是 11-01 PR 查核補的：session id 的「已複製」原本借熱度圖的 --color-heat-positive 當字色，
+ * 時間線只有 3.18:1；app 量測時那 1.5 秒沒畫出來，寫死色的掃描也看不到它（是 token），所以兩邊都沒抓到。
+ */
 const USAGE_TOKENS = [
   '--color-outcome-committed-text', '--color-outcome-tested-text', '--color-outcome-in-progress-text', '--color-outcome-quick-qa-text',
   '--color-remote-text',
@@ -142,6 +146,7 @@ const USAGE_TOKENS = [
   '--color-task-in-progress-text', '--color-task-completed-text',
   '--color-subagent-text',
   '--color-health-up-text', '--color-health-down-text',
+  '--color-copied-text',
 ]
 /** 儀表板「未收尾的對話」outcome 徽章：白字配實心底（裁決 13）；清單只會出現 unknown／in-progress／quick-qa */
 const BADGE_BG_TOKENS = ['--color-outcome-unknown-badge-bg', '--color-outcome-in-progress-badge-bg', '--color-outcome-quick-qa-badge-bg']
@@ -149,7 +154,10 @@ const BADGE_TEXT = '--color-outcome-badge-text'
 const LOGO_TOKENS = ['--logo-ring', '--logo-mark']
 const A_TOKENS = [...LOGO_TOKENS, ...USAGE_TOKENS, ...BADGE_BG_TOKENS, BADGE_TEXT]
 
-/** 舊主題的值 = 改版前元件 CSS 寫死的那個色（裁決 5）；unknown 徽章原本是 var(--color-text-muted) → 各主題自己的灰字 */
+/**
+ * 舊主題的值 = 改版前元件 CSS 寫死的那個色（裁決 5）。兩個原本是 token、各主題不同的另外比：unknown 徽章原本是
+ * var(--color-text-muted) → 各主題自己的灰字；「已複製」原本是 var(--color-heat-positive) → 各主題自己的 heat 綠
+ */
 const OLD_THEME_VALUES: Record<string, string> = {
   '--color-outcome-committed-text': '#16a34a',
   '--color-outcome-tested-text': '#2563eb',
@@ -213,6 +221,8 @@ const USAGE_SURFACES: Record<string, Surface[]> = {
   // Dashboard.module.css .healthTrendUp／.healthTrendDown（沒有自己的底）
   '--color-health-up-text': plain(HEALTH_ITEM),
   '--color-health-down-text': plain(HEALTH_ITEM),
+  // ChatView.module.css .sessionIdChipCopied：chip 透明底、在 .chatView 的 --color-bg 上；剛點完滑鼠多半還在上面 → .sessionIdChip:hover 的 bg-hover
+  '--color-copied-text': plain(['--color-bg', '--color-bg-hover']),
 }
 
 /** 時間線次要字／灰字會出現的底（含 Token Budget 建議的 warning／info 6% 淡底，疊在 .insightsPanel 的 --color-bg 上） */
@@ -238,7 +248,11 @@ describe('佈景主題 A：新增的 token', () => {
 
   it.each(OLD_THEMES)('%s 的用途 token 與徽章 token 等於改版前的寫死色（裁決 5：舊主題不調色）', theme => {
     const t = THEMES[theme]
-    const expected = { ...OLD_THEME_VALUES, '--color-outcome-unknown-badge-bg': t['--color-text-muted'].toLowerCase() }
+    const expected = {
+      ...OLD_THEME_VALUES,
+      '--color-outcome-unknown-badge-bg': t['--color-text-muted'].toLowerCase(),
+      '--color-copied-text': t['--color-heat-positive'].toLowerCase(),
+    }
     const actual = Object.fromEntries(Object.keys(expected).map(name => [name, (t[name] ?? '(沒有)').toLowerCase()]))
     expect(actual).toEqual(expected)
   })
