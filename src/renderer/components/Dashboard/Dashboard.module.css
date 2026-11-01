@@ -46,10 +46,11 @@
   text-overflow: ellipsis;
 }
 
+/* 軌道透明：選中鍵的 accent 內框在 bg-hover 軌道上只有 2.99:1，透明後外側是卡片／頁面底（≥ 3:1） */
 .rangeGroup {
   display: flex;
   gap: 2px;
-  background: var(--color-bg-hover);
+  background: transparent;
   border-radius: var(--radius-sm);
   padding: 2px;
   flex-shrink: 0;
@@ -72,10 +73,11 @@
   color: var(--color-text);
 }
 
+/* 選中：淺底 + 主要文字色 + 2px accent 內框（底色跟沒選中的只差 1.1:1，內框才是看得出的記號；不佔版面、切換時不跳動） */
 .rangeActive {
-  background: var(--color-bg);
+  background: var(--color-accent-light);
   color: var(--color-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 /* ── Grid layout ── */
@@ -274,11 +276,23 @@
   white-space: nowrap;
 }
 
+/* 白字配實心底。底色由 data-outcome 選（未收尾清單只會出現 unknown／in-progress／quick-qa）；
+   沒有對應規則的值落在預設的 unknown 底，不會變成白字配透明底 */
 .outcomeBadge {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   padding: 1px 6px;
   border-radius: 3px;
   white-space: nowrap;
+  color: var(--color-outcome-badge-text);
+  background: var(--color-outcome-unknown-badge-bg);
+}
+
+.outcomeBadge[data-outcome="in-progress"] {
+  background: var(--color-outcome-in-progress-badge-bg);
+}
+
+.outcomeBadge[data-outcome="quick-qa"] {
+  background: var(--color-outcome-quick-qa-badge-bg);
 }
 
 /* ── Project Health ── */
@@ -347,11 +361,11 @@
 }
 
 .healthTrendUp {
-  color: #22c55e;
+  color: var(--color-health-up-text);
 }
 
 .healthTrendDown {
-  color: #ef4444;
+  color: var(--color-health-down-text);
 }
 
 .healthTrendFlat {

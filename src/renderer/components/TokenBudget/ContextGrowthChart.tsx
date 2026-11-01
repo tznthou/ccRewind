@@ -113,12 +113,12 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
             type="number"
             domain={['dataMin', 'dataMax']}
             allowDecimals={false}
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
             tickLine={false}
           />
           <YAxis
             tickFormatter={formatTokens}
-            tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+            tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
             tickLine={false}
             axisLine={false}
             width={48}
@@ -131,7 +131,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
               ifOverflow="extendDomain"
               stroke="var(--color-error)"
               strokeDasharray="6 4"
-              label={{ value: limitLine.label, position: 'right', fill: 'var(--color-error)', fontSize: 11 }}
+              label={{ value: limitLine.label, position: 'right', fill: 'var(--color-error)', fontSize: 12 }}
             />
           )}
           {markers.compactions.map(c => (

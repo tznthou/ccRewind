@@ -36,12 +36,12 @@ export default function EfficiencyTrendChart({ data }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               interval="preserveStartEnd"
             />
             <YAxis
               tickFormatter={formatTokens}
-              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               width={52}
             />
             <Tooltip

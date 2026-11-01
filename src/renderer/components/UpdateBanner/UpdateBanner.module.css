@@ -50,12 +50,14 @@
   flex-shrink: 0;
 }
 
+/* 頁面底 + accent 框 + 主要文字色（原本 accent 實心底配白字只有 3.7:1）。
+   不用 accent-light 底：橫幅本身就是 accent-light，同色的話比旁邊有框的「略過」還不顯眼。終端機主題另有規則（上面） */
 .downloadBtn {
   padding: 2px 8px;
   border-radius: 4px;
-  border: none;
-  background-color: var(--color-accent);
-  color: #fff;
+  border: 1px solid var(--color-accent);
+  background-color: var(--color-bg);
+  color: var(--color-text);
   font-size: var(--font-size-xs);
   cursor: pointer;
   transition: opacity 0.15s;

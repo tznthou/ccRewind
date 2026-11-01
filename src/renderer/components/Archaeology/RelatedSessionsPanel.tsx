@@ -63,8 +63,7 @@ export default function RelatedSessionsPanel({ sessionId }: Props) {
       </div>
       {related.length > 3 && !expanded && (
         <button
-          className={styles.relatedCard}
-          style={{ justifyContent: 'center', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--color-accent)', fontSize: 'var(--font-size-xs)' }}
+          className={styles.relatedShowMore}
           onClick={() => setExpanded(true)}
         >
           {t('related.showMore', { count: related.length - 3 })}

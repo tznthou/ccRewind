@@ -4,7 +4,7 @@ import {
   OUTCOME_COLORS,
   OUTCOME_I18N_KEY,
   OUTCOME_KEYS,
-  resolveOutcomeColor,
+  outcomeKeyOf,
   type OutcomeKey,
 } from '../../src/renderer/components/Dashboard/outcomeColors'
 
@@ -42,31 +42,35 @@ describe('outcomeColors module', () => {
   })
 })
 
-describe('resolveOutcomeColor', () => {
-  it('returns the matching color for each known outcome string', () => {
+// The unresolved-session badge used to take its inline background from resolveOutcomeColor(). Its colours now live in
+// CSS tokens chosen by a data-outcome attribute, so what the component needs is the normalised key, not a colour.
+describe('outcomeKeyOf', () => {
+  it('returns each known outcome string unchanged', () => {
     for (const key of EXPECTED_OUTCOMES) {
-      expect(resolveOutcomeColor(key)).toBe(OUTCOME_COLORS[key])
+      expect(outcomeKeyOf(key)).toBe(key)
     }
   })
 
-  it('falls back to the unknown color for null', () => {
-    expect(resolveOutcomeColor(null)).toBe(OUTCOME_COLORS.unknown)
+  it('falls back to unknown for null, undefined and an empty string', () => {
+    expect(outcomeKeyOf(null)).toBe('unknown')
+    expect(outcomeKeyOf(undefined)).toBe('unknown')
+    expect(outcomeKeyOf('')).toBe('unknown')
   })
 
-  it('falls back to the unknown color for undefined', () => {
-    expect(resolveOutcomeColor(undefined)).toBe(OUTCOME_COLORS.unknown)
-  })
-
-  it('falls back to the unknown color for an empty string', () => {
-    expect(resolveOutcomeColor('')).toBe(OUTCOME_COLORS.unknown)
-  })
-
-  it('falls back to the unknown color for an unrecognized status string', () => {
-    expect(resolveOutcomeColor('shipped')).toBe(OUTCOME_COLORS.unknown)
+  it('falls back to unknown for an unrecognized status string', () => {
+    expect(outcomeKeyOf('shipped')).toBe('unknown')
   })
 
   it('does not match camelCase distribution keys directly', () => {
-    expect(resolveOutcomeColor('inProgress')).toBe(OUTCOME_COLORS.unknown)
-    expect(resolveOutcomeColor('quickQa')).toBe(OUTCOME_COLORS.unknown)
+    expect(outcomeKeyOf('inProgress')).toBe('unknown')
+    expect(outcomeKeyOf('quickQa')).toBe('unknown')
+  })
+
+  // `status in OUTCOME_COLORS` (the old lookup) is also true for inherited keys, which would have handed a function to
+  // the badge as its colour
+  it('does not treat Object.prototype keys as outcomes', () => {
+    expect(outcomeKeyOf('toString')).toBe('unknown')
+    expect(outcomeKeyOf('constructor')).toBe('unknown')
+    expect(outcomeKeyOf('__proto__')).toBe('unknown')
   })
 })

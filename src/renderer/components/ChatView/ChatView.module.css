@@ -17,11 +17,12 @@
   gap: var(--space-sm);
 }
 
+/* 字用主要文字色、accent 只留在框（accent 當字色或實心底配白字在時間線只有 3.3–3.6:1） */
 .exportButton {
   padding: var(--space-xs) var(--space-md);
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  color: var(--color-accent);
+  color: var(--color-text);
   background: transparent;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
@@ -30,8 +31,8 @@
 }
 
 .exportButton:hover:not(:disabled) {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-light);
+  color: var(--color-text);
 }
 
 .exportButton:disabled {
@@ -95,11 +96,12 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 
+/* hover 不換字色（accent 字在時間線只有 3.6:1），改用底色加深一級 + accent 框 */
 .sessionIdChip:hover {
-  color: var(--color-accent);
+  background: var(--color-bg-hover);
   border-color: var(--color-accent);
 }
 
@@ -154,9 +156,10 @@
   transition: background 0.15s, border-color 0.15s;
 }
 
+/* hover 不換字色，改用底色加深一級（本來就是 bg-hover → bg-selected）+ accent 框 */
 .fileChip:hover {
+  background: var(--color-bg-selected);
   border-color: var(--color-accent);
-  color: var(--color-accent);
 }
 
 .fileChip[data-op="edit"] { border-left: 2px solid #f59e0b; }
@@ -186,26 +189,31 @@
   border-left: 3px solid var(--color-accent);
 }
 
+/* 連結樣式：主要文字色 + 底線（accent 當字色在時間線只有 3.6:1）。
+   hover 原本是「變成主要文字色」，現在字本來就是 → 改用底色；麵包屑本身是 bg-hover，所以 hover 用 bg-selected */
 .subagentBack {
-  padding: 0;
+  padding: 0 2px;
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  color: var(--color-accent);
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
-  transition: color 0.15s;
+  transition: background 0.15s;
 }
 
 .subagentBack:hover {
-  color: var(--color-text);
+  background: var(--color-bg-selected);
 }
 
 .subagentTypeBadge {
   padding: 1px 6px;
   font-size: var(--font-size-xs);
   font-family: var(--font-mono);
-  color: #8b5cf6;
+  color: var(--color-subagent-text);
   background: rgba(139, 92, 246, 0.1);
   border-radius: 3px;
 }
@@ -240,9 +248,10 @@
   transition: background 0.15s, border-color 0.15s;
 }
 
+/* hover 不換字色（紫字在時間線只有 3.4:1），改用底色加深一級（bg-hover → bg-selected）+ 紫框 */
 .subagentChip:hover {
+  background: var(--color-bg-selected);
   border-color: #8b5cf6;
-  color: #8b5cf6;
 }
 
 .tasksPanel {
@@ -297,13 +306,14 @@
   background: var(--color-bg-sidebar);
 }
 
+/* 字色走 token（時間線調到淡底疊在 tasks 面板上也 ≥ 4.5）；淡底改了要同步 themeContrast.test.ts 的底色表 */
 .taskStatusInProgress {
-  color: #f59e0b;
+  color: var(--color-task-in-progress-text);
   background: rgba(245, 158, 11, 0.12);
 }
 
 .taskStatusCompleted {
-  color: #10b981;
+  color: var(--color-task-completed-text);
   background: rgba(16, 185, 129, 0.12);
 }
 
@@ -371,7 +381,7 @@
 }
 
 .subagentCount {
-  font-size: 10px;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   background: var(--color-bg-sidebar);
   padding: 0 4px;
@@ -454,9 +464,10 @@
   transition: color 0.15s, background 0.15s;
 }
 
+/* hover：淺底 + 主要文字色（原本 accent 實心底配 bg 色的字只有 3.6:1） */
 .jumpButton:hover {
-  color: var(--color-bg);
-  background: var(--color-accent);
+  color: var(--color-text);
+  background: var(--color-accent-light);
 }
 
 .jumpButton:focus-visible {

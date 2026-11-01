@@ -4,11 +4,12 @@
   margin-bottom: var(--space-md);
 }
 
+/* 字用主要文字色、accent 只留在框（accent 當字色或實心底配 bg 色的字在時間線只有 3.6:1） */
 .toggleButton {
   padding: var(--space-xs) var(--space-md);
   font-size: var(--font-size-sm);
   font-family: var(--font-sans);
-  color: var(--color-accent);
+  color: var(--color-text);
   background: transparent;
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
@@ -17,8 +18,8 @@
 }
 
 .toggleButton:hover {
-  background: var(--color-accent);
-  color: var(--color-bg);
+  background: var(--color-accent-light);
+  color: var(--color-text);
 }
 
 .panelContent {
@@ -178,8 +179,10 @@
   transform: rotate(90deg);
 }
 
+/* <small> 沒寫字級會吃瀏覽器的 smaller（父層 ÷ 1.2）→ 約 11.7px，低於最小字級；寫明 xs */
 .detailsHint {
   font-weight: 400;
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 
@@ -212,10 +215,11 @@
   color: var(--color-text-secondary);
 }
 
+/* 軌道透明：選中鍵的 accent 內框在 bg-hover 軌道上只有 2.99:1 */
 .limitToggle {
   display: flex;
   gap: 2px;
-  background: var(--color-bg-hover);
+  background: transparent;
   border-radius: var(--radius-sm);
   padding: 2px;
 }
@@ -236,10 +240,11 @@
   color: var(--color-text);
 }
 
+/* 選中：淺底 + 主要文字色 + 2px accent 內框（跟其他切換鍵同一套） */
 .limitActive {
-  background: var(--color-bg);
+  background: var(--color-accent-light);
   color: var(--color-text);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }
 
 .chartTooltip {
@@ -455,17 +460,21 @@
   color: var(--color-text-secondary);
 }
 
+/* 連結樣式：主要文字色 + 底線（accent 當字色在時間線只有 3.6:1）；底線平常就有，hover 改用底色 */
 .insightsExpand {
   margin-top: var(--space-xs);
-  padding: 0;
+  padding: 0 2px;
   font-size: var(--font-size-xs);
   font-family: var(--font-sans);
-  color: var(--color-accent);
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   background: transparent;
   border: none;
+  border-radius: var(--radius-sm);
   cursor: pointer;
 }
 
 .insightsExpand:hover {
-  text-decoration: underline;
+  background: var(--color-bg-hover);
 }

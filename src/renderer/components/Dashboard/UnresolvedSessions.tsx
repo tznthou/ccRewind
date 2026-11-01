@@ -2,7 +2,7 @@ import type { WasteSession } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
 import { formatDuration } from '../../utils/formatTime'
-import { OUTCOME_I18N_KEY, resolveOutcomeColor, type OutcomeKey } from './outcomeColors'
+import { OUTCOME_I18N_KEY, outcomeKeyOf } from './outcomeColors'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -20,8 +20,9 @@ export default function UnresolvedSessions({ data, onSessionClick }: Props) {
   return (
     <div className={styles.unresolvedList}>
       {data.slice(0, 10).map(s => {
-        const status = (s.outcomeStatus ?? 'unknown') as OutcomeKey
-        const labelKey = OUTCOME_I18N_KEY[status] ?? OUTCOME_I18N_KEY.unknown
+        // 文字與徽章底色（data-outcome → CSS token）用同一個正規化過的值
+        const status = outcomeKeyOf(s.outcomeStatus)
+        const labelKey = OUTCOME_I18N_KEY[status]
         const handleActivate = () => onSessionClick?.(s.projectId, s.sessionId)
         return (
           <div
@@ -45,10 +46,7 @@ export default function UnresolvedSessions({ data, onSessionClick }: Props) {
             <div className={styles.unresolvedMeta}>
               {s.fileCount > 0 ? t('dashboard.unresolved.unitFiles', { count: s.fileCount }) : '-'}
             </div>
-            <span
-              className={styles.outcomeBadge}
-              style={{ background: resolveOutcomeColor(s.outcomeStatus), color: '#fff' }}
-            >
+            <span className={styles.outcomeBadge} data-outcome={status}>
               {t(labelKey)}
             </span>
           </div>
