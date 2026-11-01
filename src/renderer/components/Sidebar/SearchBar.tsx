@@ -184,7 +184,7 @@ export default function SearchBar() {
             {t(DATE_RANGE_KEYS[range])}
           </button>
         ))}
-        <span className={styles.separator}>|</span>
+        <span className={styles.separator} aria-hidden="true">|</span>
         <button
           className={sortBy === 'rank' ? styles.filterBtnActive : styles.filterBtn}
           onClick={() => setSortBy('rank')}

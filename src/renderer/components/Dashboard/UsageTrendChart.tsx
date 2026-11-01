@@ -37,19 +37,19 @@ export default function UsageTrendChart({ data }: Props) {
             <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               interval="preserveStartEnd"
             />
             <YAxis
               yAxisId="sessions"
-              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               width={36}
             />
             <YAxis
               yAxisId="tokens"
               orientation="right"
               tickFormatter={formatTokens}
-              tick={{ fontSize: 11, fill: 'var(--color-text-muted)' }}
+              tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               width={52}
             />
             <Tooltip

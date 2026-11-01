@@ -16,8 +16,9 @@
   --color-bg-selected: #D0DAE8;
   --color-border: #CBD5E1;
   --color-text: #1E293B;
-  --color-text-secondary: #64748B;
-  --color-text-muted: #6B7994;
+  /* 次要字／灰字：只沿亮度調到最差的底（bg-selected）上 ≥ 4.5（佈景主題 A；原本 #64748B／#6B7994 在 bg-hover 上只有 3.9／3.6） */
+  --color-text-secondary: #505F76;
+  --color-text-muted: #515E78;
   --color-accent: #0891B2;
   --color-accent-light: #E0F7FA;
   --color-error: #c82333;
@@ -44,6 +45,37 @@
   --color-mark-bg: #FDE68A;
   --color-system-label: #92400E;
 
+  /* Logo（跟主題變色）：圈與尾巴 / 三角 */
+  --logo-ring: #0891B2;
+  --logo-mark: #1E293B;
+
+  /* 用途字色：原本寫死在元件 CSS 裡，換主題不會變。時間線只沿亮度調到它所有出現處（淡底、hover、選中）的底上 ≥ 4.5；
+     檔案室與終端機寫改版前的值（那兩個主題不調色）。按用途命名：同色系在不同地方本來就是不同 hex，合併的話舊主題會變色。
+     ⚠️ 每個主題的區塊都要明寫，沒寫會沿用這裡的時間線值（themeContrast.test.ts 會擋）。 */
+  --color-outcome-committed-text: #006E13;
+  --color-outcome-tested-text: #104DD4;
+  --color-outcome-in-progress-text: #A04300;
+  --color-outcome-quick-qa-text: #6F25DC;
+  --color-remote-text: #005F58;
+  --color-op-edit-text: #A34500;
+  --color-op-write-text: #007116;
+  --color-op-read-text: #1451D8;
+  --color-op-discovery-text: #722BE0;
+  --color-jaccard-text: #105BCB;
+  --color-task-in-progress-text: #9D4C00;
+  --color-task-completed-text: #00703E;
+  --color-subagent-text: #713DD6;
+  --color-health-up-text: #00790A;
+  --color-health-down-text: #CC1926;
+  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1）；舊主題寫各自原本的 heat 綠 */
+  --color-copied-text: #00781F;
+
+  /* 儀表板「未收尾的對話」的 outcome 徽章：白字配實心底；時間線的底色沿亮度調暗到白字 ≥ 4.5，色相跟同頁圖例一致 */
+  --color-outcome-unknown-badge-bg: #515E78;
+  --color-outcome-in-progress-badge-bg: #B26000;
+  --color-outcome-quick-qa-badge-bg: #00809D;
+  --color-outcome-badge-text: #FFFFFF;
+
   /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;
@@ -59,12 +91,13 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
 
+  /* 「一般」字級的最小字 12px（佈景主題 A 從 11 起整組上調一級；三個主題共用） */
   --font-scale: 1;
-  --font-size-xs: calc(11px * var(--font-scale));
-  --font-size-sm: calc(13px * var(--font-scale));
-  --font-size-base: calc(14px * var(--font-scale));
-  --font-size-lg: calc(16px * var(--font-scale));
-  --font-size-xl: calc(18px * var(--font-scale));
+  --font-size-xs: calc(12px * var(--font-scale));
+  --font-size-sm: calc(14px * var(--font-scale));
+  --font-size-base: calc(16px * var(--font-scale));
+  --font-size-lg: calc(18px * var(--font-scale));
+  --font-size-xl: calc(20px * var(--font-scale));
 
   /* Layout */
   --sidebar-width: 280px;
@@ -148,6 +181,29 @@ mark {
   --color-code-inline-bg: rgba(44, 36, 23, 0.08);
   --color-mark-bg: #F5D060;
   --color-system-label: #664d03;
+  --logo-ring: #B8860B;
+  --logo-mark: #2C2417;
+  /* 用途字色與徽章：改版前的值（不調色） */
+  --color-outcome-committed-text: #16a34a;
+  --color-outcome-tested-text: #2563eb;
+  --color-outcome-in-progress-text: #d97706;
+  --color-outcome-quick-qa-text: #7c3aed;
+  --color-remote-text: #0f766e;
+  --color-op-edit-text: #d97706;
+  --color-op-write-text: #16a34a;
+  --color-op-read-text: #2563eb;
+  --color-op-discovery-text: #7c3aed;
+  --color-jaccard-text: #3b82f6;
+  --color-task-in-progress-text: #f59e0b;
+  --color-task-completed-text: #10b981;
+  --color-subagent-text: #8b5cf6;
+  --color-health-up-text: #22c55e;
+  --color-health-down-text: #ef4444;
+  --color-copied-text: #15803d;
+  --color-outcome-unknown-badge-bg: #706658;
+  --color-outcome-in-progress-badge-bg: #f59e0b;
+  --color-outcome-quick-qa-badge-bg: #06b6d4;
+  --color-outcome-badge-text: #FFFFFF;
   --font-display: 'JetBrains Mono', monospace;
   --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-code: 'JetBrains Mono', monospace;
@@ -186,6 +242,29 @@ mark {
   --color-code-inline-bg: rgba(255, 255, 255, 0.08);
   --color-mark-bg: rgba(251, 191, 36, 0.3);
   --color-system-label: #FBBF24;
+  --logo-ring: #22D3EE;
+  --logo-mark: #FBBF24;
+  /* 用途字色與徽章：改版前的值（不調色） */
+  --color-outcome-committed-text: #16a34a;
+  --color-outcome-tested-text: #2563eb;
+  --color-outcome-in-progress-text: #d97706;
+  --color-outcome-quick-qa-text: #7c3aed;
+  --color-remote-text: #0f766e;
+  --color-op-edit-text: #d97706;
+  --color-op-write-text: #16a34a;
+  --color-op-read-text: #2563eb;
+  --color-op-discovery-text: #7c3aed;
+  --color-jaccard-text: #3b82f6;
+  --color-task-in-progress-text: #f59e0b;
+  --color-task-completed-text: #10b981;
+  --color-subagent-text: #8b5cf6;
+  --color-health-up-text: #22c55e;
+  --color-health-down-text: #ef4444;
+  --color-copied-text: #86efac;
+  --color-outcome-unknown-badge-bg: #9298AC;
+  --color-outcome-in-progress-badge-bg: #f59e0b;
+  --color-outcome-quick-qa-badge-bg: #06b6d4;
+  --color-outcome-badge-text: #FFFFFF;
   --font-display: 'IBM Plex Mono', monospace;
   --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-code: 'Fira Code', monospace;

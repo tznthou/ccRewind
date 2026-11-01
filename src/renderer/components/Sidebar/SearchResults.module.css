@@ -173,7 +173,10 @@
   cursor: pointer;
   font-family: inherit;
   font-size: var(--font-size-sm);
-  color: var(--color-accent);
+  /* 連結樣式：主要文字色 + 底線（accent 當字色在時間線只有 3.3:1） */
+  color: var(--color-text);
+  text-decoration: underline;
+  text-underline-offset: 2px;
   text-align: center;
   transition: background-color 0.1s;
 }

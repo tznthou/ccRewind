@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useSessions } from '../../hooks/useSessions'
 import { useAppState, useAppDispatch } from '../../context/AppContext'
-import { useTheme, type ThemeId } from '../../context/ThemeContext'
 import { useI18n } from '../../i18n/useI18n'
 import { useListboxKeyNav } from '../../hooks/useListboxKeyNav'
 import type { SessionMeta } from '../../../shared/types'
@@ -14,25 +13,20 @@ import styles from './Sidebar.module.css'
 
 type SortKey = 'time' | 'tokens'
 
-// 三行內容（標題 / meta / tags）在 meta 折成兩行時需要 91px：
-// padding 8 + 標題 20 + gap 2 + meta 34 + gap 2 + tags 17 + padding 8。
-// 原本的 80px 不夠，而 .sessionItem 是固定高的 flex 容器，放不下時會把最後一行
-// （.sessionTags，帶 overflow: hidden）壓縮到剩 6px，於是標籤只露出半截。
-// meta 會不會折行取決於訊息數與 token 數的位數，session 越長越容易觸發。
-const SESSION_ITEM_HEIGHT: Record<ThemeId, number> = {
-  archive: 92,
-  timeline: 92,
-  terminal: 92,
-}
+// 列高不固定：每一列量自己的實際高度（measureElement）。三行內容（標題 / meta / tags）裡 meta 會折兩行或三行，
+// 取決於訊息數與 token 數的位數、字級與主題的字型（終端機的 Fira Code 最寬）：舊字級下同一字級各列就差到
+// 86–126px（2026-11-01 量 30 列）。以前寫死 92px，放不下時 .sessionItem 這個 flex 容器會把帶 overflow: hidden 的
+// 標籤列壓扁、標題被推出上緣；而且光改 estimateSize 不會重排（virtual-core 的 measurement memo 不依賴它）。
+// 字級或主題一變，畫出來的列由 ResizeObserver 重新量；沒畫出來的捲到時才量。
+// 估計值只用在還沒量過的列：新字級「一般」下 meta 折兩行約 96px。
+const ESTIMATED_ITEM_HEIGHT = 96
 
 export default function SessionList() {
   const { selectedProjectId, selectedSessionId } = useAppState()
   const dispatch = useAppDispatch()
-  const { theme } = useTheme()
   const { t } = useI18n()
   const { sessions, loading, error } = useSessions(selectedProjectId)
   const parentRef = useRef<HTMLDivElement>(null)
-  const itemHeight = SESSION_ITEM_HEIGHT[theme]
   const [sortKey, setSortKey] = useState<SortKey>('time')
   const [showStarredOnly, setShowStarredOnly] = useState(false)
   const [starredIds, setStarredIds] = useState<Set<string>>(new Set())
@@ -74,12 +68,21 @@ export default function SessionList() {
     return filteredSessions
   }, [filteredSessions, sortKey])
 
+  // 用 session id 當 key：切排序（時間 ↔ Tokens）或換專案時，量過的高度跟著 session 走；
+  // 沿用預設的 index，別的 session 會吃到同一位置上一場量到的高度。
+  // 必須是穩定 reference：virtual-core 把 getItemKey 列在 getMeasurementOptions 的 memo 依賴裡（同 ChatView）。
+  const getItemKey = useCallback(
+    (index: number) => sortedSessions[index]?.id ?? index,
+    [sortedSessions],
+  )
+
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual 的 useVirtualizer 跟 React Compiler memoization 不相容（third-party API design 限制）
   const virtualizer = useVirtualizer({
     count: sortedSessions.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: () => itemHeight,
+    estimateSize: () => ESTIMATED_ITEM_HEIGHT,
     overscan: 5,
+    getItemKey,
   })
 
   const { activeIndex, listboxProps, getOptionProps, isActive, setActiveIndex } = useListboxKeyNav<SessionMeta>({
@@ -168,13 +171,14 @@ export default function SessionList() {
           return (
             <div
               key={session.id}
+              data-index={virtualItem.index}
+              ref={virtualizer.measureElement}
               className={`${styles.sessionItem} ${isSelected ? styles.selected : ''} ${active ? styles.optionActive : ''}`}
               style={{
                 position: 'absolute',
                 top: 0,
                 left: 0,
                 width: '100%',
-                height: virtualItem.size,
                 transform: `translateY(${virtualItem.start}px)`,
               }}
               aria-selected={isSelected}

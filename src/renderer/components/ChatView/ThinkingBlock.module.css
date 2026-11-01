@@ -47,7 +47,6 @@
   font-size: var(--font-size-xs);
   font-style: italic;
   color: var(--color-text-secondary);
-  opacity: 0.75;
 }
 
 .content {

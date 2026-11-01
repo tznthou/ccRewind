@@ -90,17 +90,21 @@
 
 /* ── Project list ── */
 
+/* 欄寬由清單統一決定、每一列用 subgrid 共用：用量文字那欄照最長的一列給寬（max-content），
+   長條與按鈕照樣上下對齊。以前用量欄寫死 110px，「特大」字級時等寬字的「320.7 MB · 163s」約 135px，
+   超出欄位跑到「排除此專案」底下被蓋住；專案名稱那欄（minmax(0, 1fr)）讓出空間、照舊省略號截斷 */
 .projectList {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px max-content auto;
+  column-gap: var(--space-md);
+  row-gap: var(--space-xs);
 }
 
 .projectRow {
+  grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: 1fr 120px 110px auto;
+  grid-template-columns: subgrid;
   align-items: center;
-  gap: var(--space-md);
   padding: var(--space-sm);
   border-radius: var(--radius-sm);
   transition: background 0.15s;
@@ -407,8 +411,14 @@
   margin-top: 3px;
 }
 
+/* 停用時只淡化 radio 與選項名稱。底下那句說明在停用時講的是「為什麼不能選」（目前沒有符合的 session），
+   以前整個 label 一起 opacity 0.55，那句只剩 2.4:1，讀不清楚就失去作用 */
 .modeOptionDisabled {
   cursor: not-allowed;
+}
+
+.modeOptionDisabled input,
+.modeOptionDisabled .modeTitle {
   opacity: 0.55;
 }
 

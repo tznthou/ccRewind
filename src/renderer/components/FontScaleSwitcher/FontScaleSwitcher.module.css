@@ -27,16 +27,17 @@
   line-height: 1;
 }
 
+/* 三顆鈕的字照舊不跟字級縮放（它們本身就是在示範大小），每級差 3px；最小的不低於 12px */
 .size_normal {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 .size_large {
-  font-size: 13px;
+  font-size: 15px;
 }
 
 .size_xlarge {
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .button:hover {
@@ -49,7 +50,9 @@
   outline-offset: 1px;
 }
 
+/* 選中：淺底 + 主要文字色 + 2px accent 內框（跟其他切換鍵同一套） */
 .button.active {
-  color: var(--color-accent);
+  color: var(--color-text);
   background-color: var(--color-accent-light);
+  box-shadow: inset 0 0 0 2px var(--color-accent);
 }

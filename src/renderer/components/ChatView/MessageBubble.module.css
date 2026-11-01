@@ -148,10 +148,14 @@
   border-color: var(--color-error);
 }
 
-/* 棄用分支：整個氣泡淡化 + 虛線左框，暗示這支對話沒有後續 */
+/* 棄用分支：內文改次要字 + 虛線左框，暗示這支對話沒有後續。
+   不再把整個氣泡淡化成 opacity 0.7：徽章與內文會跟著跟頁面底色疊在一起，對比只剩約 3:1 */
 .bubble[data-abandoned="true"] {
-  opacity: 0.7;
   border-left: 3px dashed var(--color-error);
+}
+
+.bubble[data-abandoned="true"] .content {
+  color: var(--color-text-secondary);
 }
 
 /* System message */
@@ -195,7 +199,8 @@
   font-variant: small-caps;
   border: 1px solid var(--color-accent);
   padding: 1px 6px;
-  font-size: 10px;
+  /* 跟字級表走（原本寫死 10px，選「特大」也不變） */
+  font-size: var(--font-size-xs);
   letter-spacing: 0.5px;
 }
 

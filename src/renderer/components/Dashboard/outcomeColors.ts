@@ -46,9 +46,10 @@ export const DISTRIBUTION_KEYS: readonly DistributionKey[] = [
   'unknown',
 ] as const
 
-export function resolveOutcomeColor(status: string | null | undefined): string {
-  if (status && status in OUTCOME_COLORS) {
-    return OUTCOME_COLORS[status as OutcomeKey]
-  }
-  return OUTCOME_COLORS.unknown
+/**
+ * DB 裡的 outcome 字串 → 認得的 OutcomeKey，其餘（null、空字串、沒見過的值）一律 unknown。
+ * 用清單比對而不是 `status in OUTCOME_COLORS`：後者對 toString 這類繼承來的鍵也成立。
+ */
+export function outcomeKeyOf(status: string | null | undefined): OutcomeKey {
+  return (OUTCOME_KEYS as readonly string[]).includes(status ?? '') ? (status as OutcomeKey) : 'unknown'
 }
