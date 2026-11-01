@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url'
  * 逐個比對 `color:`，前面不能接字母、數字、底線或連字號（background-color、border-color、backgroundColor、--color-x 都不算）。
  * 不整行排除：10-31 手寫 grep 兩次漏掃，都出在整行過濾（同一行有 border 就把 color 一起刪了）。
  * CSS 的值整段看（註解先剝掉）；.ts／.tsx 只看引號裡的字串 —— 沒有引號的是 JS 運算式（例如 OUTCOME_COLORS[x]），這裡看不到值。
- * 字面色 = #hex、rgb()／rgba()／hsl()／hsla()、具名色（white，以及 CanvasText 這類系統色）；var()、color-mix()、
+ * 字面色 = #hex、rgb()／rgba()／hsl()／hsla()、hwb()、lab()、lch()、oklab()、oklch()、color()、具名色（white，以及 CanvasText 這類系統色）；var()、color-mix()、
  * inherit／currentColor 等關鍵字不算。var(--x, #fff) 的後備值不算：cssCustomProperties.test.ts 保證 --x 有定義，後備值用不到。
  * 另一條守「拿 token 當字色」：清單外的 token 被當字色用就紅（11-01：「已複製」借 --color-heat-positive，見 tokenTextColors）。
  */
@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
 
 const DECL = /(?<![-\w])color\s*:\s*(['"`]?)([^;,}'"`\n]+)/g
-const LITERAL = /^(#[0-9a-f]{3,8}\b|(rgba?|hsla?)\()/i
+const LITERAL = /^(#[0-9a-f]{3,8}\b|(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\()/i
 const BARE_WORD = /^[a-z]+$/i
 const NOT_A_COLOR_LITERAL = new Set(['inherit', 'initial', 'unset', 'revert', 'currentcolor', 'transparent'])
 const ACCENT = /^var\(\s*--color-accent\s*\)/
@@ -194,6 +194,8 @@ describe('字色走主題 token', () => {
       { file: 'd.module.css', text: ':global([data-theme="x"]) .h,\n.i {\n  color: var(--color-accent);\n}' },
       { file: 'E.tsx', text: "<a style={{ border: 'none', color: 'var(--color-accent)' }} />\n<b style={{ backgroundColor: '#fff', color: '#fff' }} />" },
       { file: 'F.tsx', text: 'const s = { color: OUTCOME_COLORS[key], stopColor: "#fff" }' },
+      // CSS Color 4 的寫法（11-01 PR 查核：原本只認 hex／rgb／hsl／具名色）；color-mix() 是混 token，不算
+      { file: 'g.module.css', text: '.j { color: oklch(50% 0 0) }\n.k { color: lab(50% 0 0) }\n.l { color: color(srgb 0.5 0.5 0.5) }\n.m { color: hwb(0 0% 50%) }\n.n { color: color-mix(in srgb, var(--color-text) 50%, transparent) }' },
     ])
     expect(findings.map(f => `${f.kind} ${f.file}:${f.line} ${f.value} | ${f.selector}`)).toEqual([
       'literal a.module.css:5 #d97706 | .a {',
@@ -202,6 +204,10 @@ describe('字色走主題 token', () => {
       'accent d.module.css:3 var(--color-accent) | :global([data-theme="x"]) .h, .i {',
       'accent E.tsx:1 var(--color-accent) | (inline)',
       'literal E.tsx:2 #fff | (inline)',
+      'literal g.module.css:1 oklch(50% 0 0) | .j { color: oklch(50% 0 0) }',
+      'literal g.module.css:2 lab(50% 0 0) | .k { color: lab(50% 0 0) }',
+      'literal g.module.css:3 color(srgb 0.5 0.5 0.5) | .l { color: color(srgb 0.5 0.5 0.5) }',
+      'literal g.module.css:4 hwb(0 0% 50%) | .m { color: hwb(0 0% 50%) }',
     ])
   })
 
