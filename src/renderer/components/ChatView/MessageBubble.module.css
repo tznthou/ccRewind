@@ -199,7 +199,8 @@
   font-variant: small-caps;
   border: 1px solid var(--color-accent);
   padding: 1px 6px;
-  font-size: 10px;
+  /* 跟字級表走（原本寫死 10px，選「特大」也不變） */
+  font-size: var(--font-size-xs);
   letter-spacing: 0.5px;
 }
 
