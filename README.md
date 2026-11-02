@@ -395,6 +395,8 @@ ccRewind 刻意不做這些事：
 
 本專案採用 [GPL-3.0-or-later](LICENSE) 授權。
 
+app 打包的字型與本專案分開授權，採 SIL Open Font License 1.1；各字型的授權全文與來源在 [`src/renderer/assets/fonts/licenses/`](src/renderer/assets/fonts/licenses/)，安裝好的 app 裡也有一份（macOS：`ccRewind.app/Contents/Resources/licenses/fonts/`；Windows：安裝資料夾裡的 `resources\licenses\fonts\`）。
+
 ---
 
 ## 作者

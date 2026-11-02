@@ -395,6 +395,8 @@ See [docs/ROADMAP.md](docs/ROADMAP.md) for details.
 
 This project is licensed under [GPL-3.0-or-later](LICENSE).
 
+The fonts bundled with the app are licensed separately, under the SIL Open Font License 1.1. Their license texts and sources are in [`src/renderer/assets/fonts/licenses/`](src/renderer/assets/fonts/licenses/), and the installed app carries a copy (macOS: `ccRewind.app/Contents/Resources/licenses/fonts/`; Windows: `resources\licenses\fonts\` in the install folder).
+
 ---
 
 ## Author
