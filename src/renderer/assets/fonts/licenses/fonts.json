@@ -10,7 +10,7 @@
       "copyright": "Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)",
       "reservedFontName": null,
       "modified": true,
-      "modifications": "Differs from google/fonts@5020a98352f1 ofl/firacode/FiraCode[wght].ttf: tables removed: DSIG, prep; GSUB features removed: aalt, case, onum, ordn, salt, sinf, ss01, ss02, ss03, ss04, ss05, ss06, ss07, ss08, subs, sups, zero; GPOS features removed: cpsp; glyphs 1857 -> 1797, encoded characters 1551 -> 1551.",
+      "modifications": "Differs from google/fonts@5020a98352f1 ofl/firacode/FiraCode[wght].ttf: tables removed: DSIG, prep; GSUB features removed: aalt, case, onum, ordn, salt, sinf, ss01, ss02, ss03, ss04, ss05, ss06, ss07, ss08, subs, sups, zero; GPOS features removed: cpsp; glyphs 1857 -> 1797, encoded characters 1551 -> 1551; name records removed: IDs 7, 8, 9, 11, 12, 13, 16, 17, 25, 263.",
       "source": "Google Fonts web build, added to this repository on 2026-03-30 (download URL not recorded); its version string and character set match the Google Fonts build of this family.",
       "licenseSource": "https://github.com/google/fonts/blob/5020a98352f1909554697e1da4132da253727138/ofl/firacode/OFL.txt",
       "sha256": "239341e99c601a29ac5d285de6c001a529c0a285d0ccd81931de5b51e096e462"
@@ -66,7 +66,7 @@
       "copyright": "Copyright 2022 The Instrument Serif Project Authors (https://github.com/Instrument/instrument-serif)",
       "reservedFontName": null,
       "modified": true,
-      "modifications": "Differs from google/fonts@0b58fb370093 ofl/instrumentserif/InstrumentSerif-Regular.ttf: tables removed: cvt, fpgm, prep; glyph hinting instructions removed (243 glyphs had them); GSUB features removed: aalt, case, dlig, ordn, ss01; glyphs 377 -> 342, encoded characters 333 -> 333.",
+      "modifications": "Differs from google/fonts@0b58fb370093 ofl/instrumentserif/InstrumentSerif-Regular.ttf: tables removed: cvt, fpgm, prep; glyph hinting instructions removed (243 glyphs had them); GSUB features removed: aalt, case, dlig, ordn, ss01; glyphs 377 -> 342, encoded characters 333 -> 333; name records removed: IDs 8, 9, 11, 12, 13, 256.",
       "source": "Google Fonts web build, added to this repository on 2026-03-30 (download URL not recorded); its version string and character set match the Google Fonts build of this family.",
       "licenseSource": "https://github.com/google/fonts/blob/0b58fb370093f9a9f4ff785d94405710b79de67c/ofl/instrumentserif/OFL.txt",
       "sha256": "f3ae4af3e2e9ad592de4f2aedb75cfe49e008f6c9f2428ef8b98ec0a326742d9"
@@ -80,7 +80,7 @@
       "copyright": "Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)",
       "reservedFontName": null,
       "modified": true,
-      "modifications": "Differs from google/fonts@6e4b84c976ca ofl/jetbrainsmono/JetBrainsMono[wght].ttf: tables removed: DSIG, HVAR, prep; GSUB features removed: aalt, case, ordn, sinf, subs, sups, zero; glyphs 1179 -> 1167, encoded characters 976 -> 976; variation axes wght 100-800 -> wght 400-800.",
+      "modifications": "Differs from google/fonts@6e4b84c976ca ofl/jetbrainsmono/JetBrainsMono[wght].ttf: tables removed: DSIG, HVAR, prep; GSUB features removed: aalt, case, ordn, sinf, subs, sups, zero; glyphs 1179 -> 1167, encoded characters 976 -> 976; variation axes wght 100-800 -> wght 400-800; named instances 7 -> 4; name records removed: IDs 7, 8, 9, 11, 12, 13, 25, 257, 258, 259, 264, 265, 266.",
       "source": "Google Fonts web build, added to this repository on 2026-03-30 (download URL not recorded); its version string and character set match the Google Fonts build of this family.",
       "licenseSource": "https://github.com/google/fonts/blob/6e4b84c976cadb3c49a40fd9a1c203e4f7fcf2da/ofl/jetbrainsmono/OFL.txt",
       "sha256": "66e5c4a8f319a444fa535e757572360a9679f270e8792b153458791cc2678f5c"
@@ -94,7 +94,7 @@
       "copyright": "Copyright 2020 The Plus Jakarta Sans Project Authors (https://github.com/tokotype/PlusJakartaSans)",
       "reservedFontName": null,
       "modified": true,
-      "modifications": "Differs from google/fonts@8b0a1d0f5983 ofl/plusjakartasans/PlusJakartaSans[wght].ttf: tables removed: prep; GSUB features removed: aalt, case, ordn, sinf, ss01, ss02, ss03, subs, sups; GPOS features removed: cpsp; glyphs 1188 -> 781, encoded characters 721 -> 721.",
+      "modifications": "Differs from google/fonts@8b0a1d0f5983 ofl/plusjakartasans/PlusJakartaSans[wght].ttf: tables removed: prep; GSUB features removed: aalt, case, ordn, sinf, ss01, ss02, ss03, subs, sups; GPOS features removed: cpsp; glyphs 1188 -> 781, encoded characters 721 -> 721; name records removed: IDs 8, 9, 10, 11, 12, 13, 25, 256, 257, 258.",
       "source": "Google Fonts web build, added to this repository on 2026-03-30 (download URL not recorded); its version string and character set match the Google Fonts build of this family.",
       "licenseSource": "https://github.com/google/fonts/blob/8b0a1d0f5983c89bc2b93f1b5fb55f9e252744b5/ofl/plusjakartasans/OFL.txt",
       "sha256": "12d6a2dc8345163d5c8d797c7f88f1f2a4a36b2ce8400272d3fa78ecbce72d76"

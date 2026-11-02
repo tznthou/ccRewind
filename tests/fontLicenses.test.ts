@@ -7,12 +7,15 @@ import { fileURLToPath } from 'node:url'
 /**
  * 打包進 app 的字型都是 SIL Open Font License 1.1:
  * - 條款 2: 每份拷貝都附版權聲明與授權全文 → `licenses/` 每個字體一份 OFL 原檔, 由 electron-builder 的
- *   extraResources 放進 app(打包產物由 scripts/check-packaged-font-licenses.sh 在 electron-smoke 驗)。
+ *   extraResources 放進 app。
  * - 條款 3: 修改版不能用保留字型名稱(RFN) → 有 RFN 的字體只放著作權人發布的原檔。
  *
- * `licenses/fonts.json` 是唯一的清單, 這裡把字型檔、fonts.css、授權檔、檔案雜湊都跟它對。
+ * `licenses/fonts.json` 是唯一的清單, 這裡把 src/ 的字型檔、fonts.css、授權檔、檔案雜湊都跟它對。
  * 換字型檔一定得改清單裡的雜湊, 清單記的來源與修改紀錄才不會跟檔案脫節。
- * 但來源與「沒修改」是人寫進清單的, 測試驗不了真假, 要在審 PR 時看。
+ * 但來源與「沒修改」是人寫進清單的, 測試驗不了真假, 要在審 PR 時看; 授權檔的版權行也只跟清單比,
+ * 沒跟字型檔自己的版權欄比。
+ * 這裡只看得到 src/; 從別的路(npm 套件的 CSS、其他樣式表)進到建置結果的字型, 由 electron-smoke 在
+ * `pnpm build` 之後跑 scripts/check-built-fonts.mjs 抓, 打包後的授權檔由 scripts/check-packaged-font-licenses.sh 比。
  */
 
 const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url))
@@ -44,29 +47,41 @@ function readLicense(name: string): string | null {
   return existsSync(p) ? readFileSync(p, 'utf8').replace(/\r\n/g, '\n') : null
 }
 
+const OFL_HEADING = 'SIL OPEN FONT LICENSE Version 1.1'
+
 /** OFL 標題以前的部分 = 版權聲明(可能不只一行, 保留字型名稱就寫在這裡) */
 function noticeOf(text: string): string {
-  const i = text.indexOf('SIL OPEN FONT LICENSE Version 1.1')
+  const i = text.indexOf(OFL_HEADING)
   return i < 0 ? text : text.slice(0, i)
 }
 
 const squash = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
-// OFL 1.1 全文的固定段落。各家 OFL.txt 只在版權行、換行位置與行尾空白上不同 → 壓縮空白後逐字比。
-const OFL_PASSAGES = [
-  'SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007',
-  'PREAMBLE The goals of the Open Font License (OFL) are to stimulate worldwide development of collaborative font projects',
-  '"Reserved Font Name" refers to any names specified as such after the copyright statement(s).',
-  '"Modified Version" refers to any derivative made by adding to, deleting, or substituting -- in part or in whole -- any of the components of the Original Version, by changing formats or by porting the Font Software to a new environment.',
-  'PERMISSION & CONDITIONS Permission is hereby granted, free of charge, to any person obtaining a copy of the Font Software',
-  '1) Neither the Font Software nor any of its individual components, in Original or Modified Versions, may be sold by itself.',
-  '2) Original or Modified Versions of the Font Software may be bundled, redistributed and/or sold with any software, provided that each copy contains the above copyright notice and this license.',
-  '3) No Modified Version of the Font Software may use the Reserved Font Name(s) unless explicit written permission is granted by the corresponding Copyright Holder.',
-  '4) The name(s) of the Copyright Holder(s) or the Author(s) of the Font Software shall not be used to promote, endorse or advertise any Modified Version',
-  '5) The Font Software, modified or unmodified, in part or in whole, must be distributed entirely under this license, and must not be distributed under any other license.',
-  'TERMINATION This license becomes null and void if any of the above conditions are not met.',
-  'DISCLAIMER THE FONT SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND',
-]
+/**
+ * 版權聲明裡宣告的保留字型名稱: 每個「Reserved Font Name(s)」之後到句點為止的那段。
+ * 不分大小寫、可以跨行、引號不拘(SIL 範本不加引號、IBM 用 "Plex"、Adobe 的 Source 系列寫成
+ * `Reserved Font\nName 'Source'`), 一段聲明可以有好幾個。
+ */
+function reservedNameClauses(notice: string): string[] {
+  return notice
+    .split(/\n\s*\n/)
+    .flatMap(para => [...squash(para).matchAll(/reserved font names?\s+(.*?)(?:\.\s|\.?$)/gi)].map(m => m[1]))
+}
+
+/**
+ * OFL 1.1 本文(標題到結尾, 拿掉分隔線、壓縮空白)的 SHA-256。SIL 官方的 OFL.txt
+ * (https://openfontlicense.org/documents/OFL.txt, 2026-11-03 抓)與五份打包的授權檔都是這個值。
+ * 只檢查幾段文字的話, 砍掉一半的授權檔也會過(2026-11-03 審查實測)。
+ */
+const OFL_BODY_SHA256 = '70006bea3c19ca31505acc2ab97296f48cccbf972825a66d81321f1474e30ebf'
+
+function oflBodySha256(text: string): string | null {
+  const i = text.indexOf(OFL_HEADING)
+  if (i < 0) return null
+  return createHash('sha256')
+    .update(squash(text.slice(i).replace(/[-=_*]{5,}/g, ' ')))
+    .digest('hex')
+}
 
 const entries = readManifest()
 
@@ -93,7 +108,10 @@ describe('打包字型的授權', () => {
   it('授權檔跟清單引用的一一對應, 每份都是 OFL 1.1 全文、第一行是登記的版權行', () => {
     expect(entries.length).toBeGreaterThan(0)
     const problems: string[] = []
-    const onDisk = readdirSync(LICENSE_DIR).filter(f => !NOT_LICENSES.has(f)).sort()
+    // 點開頭的是系統檔(Finder 的 .DS_Store), 不進 git
+    const onDisk = readdirSync(LICENSE_DIR)
+      .filter(f => !f.startsWith('.') && !NOT_LICENSES.has(f))
+      .sort()
     const referenced = [...new Set(entries.map(e => e.license))].sort()
     if (onDisk.join('\n') !== referenced.join('\n'))
       problems.push(`licenses/ 裡的授權檔 [${onDisk.join(', ')}] ≠ 清單引用的 [${referenced.join(', ')}]`)
@@ -104,8 +122,8 @@ describe('打包字型的授權', () => {
         continue
       }
       if (text.split('\n', 1)[0] !== e.copyright) problems.push(`${e.file}: ${e.license} 第一行不是登記的版權行`)
-      const body = squash(text)
-      for (const p of OFL_PASSAGES) if (!body.includes(p)) problems.push(`${e.file}: ${e.license} 缺「${p.slice(0, 40)}…」`)
+      const sha = oflBodySha256(text)
+      if (sha !== OFL_BODY_SHA256) problems.push(`${e.file}: ${e.license} 的 OFL 1.1 本文跟標準不同(${sha ?? '找不到標題'})`)
     }
     expect(problems).toEqual([])
   })
@@ -126,11 +144,11 @@ describe('打包字型的授權', () => {
     expect(entries.length).toBeGreaterThan(0)
     const problems: string[] = []
     for (const e of entries) {
-      const notice = noticeOf(readLicense(e.license) ?? '')
-      if (/Reserved Font Names?/.test(notice) && e.reservedFontName === null)
-        problems.push(`${e.file}: ${e.license} 有保留字型名稱, 清單沒登記`)
-      if (e.reservedFontName !== null && !notice.includes(`"${e.reservedFontName}"`))
-        problems.push(`${e.file}: ${e.license} 的版權聲明裡沒有 "${e.reservedFontName}"`)
+      const clauses = reservedNameClauses(noticeOf(readLicense(e.license) ?? ''))
+      if (clauses.length > 0 && e.reservedFontName === null)
+        problems.push(`${e.file}: ${e.license} 有保留字型名稱(${clauses.join(' / ')}), 清單沒登記`)
+      if (e.reservedFontName !== null && !clauses.some(c => c.includes(e.reservedFontName as string)))
+        problems.push(`${e.file}: ${e.license} 宣告的保留字型名稱裡沒有 ${e.reservedFontName}`)
       if (e.reservedFontName !== null && e.modified !== false)
         problems.push(`${e.file}: 有保留字型名稱卻登記成修改版(要放著作權人發布的原檔, 或改名)`)
     }

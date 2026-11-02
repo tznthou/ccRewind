@@ -98,9 +98,11 @@ jobs:
           ELECTRON_RUN_AS_NODE: '1'
         run: dist/win-unpacked/ccRewind.exe scripts/packaged-native-check.cjs
 
-      - name: Check the bundled font licenses in the packaged app
+      - name: Check the bundled fonts and their licenses
         shell: bash
-        run: bash scripts/check-packaged-font-licenses.sh dist
+        run: |
+          node scripts/check-built-fonts.mjs out/renderer
+          bash scripts/check-packaged-font-licenses.sh dist
 
       - name: Verify artifacts (macOS)
         if: runner.os == 'macOS'
