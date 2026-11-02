@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Every font file in the renderer build output must be one of the files listed in
 // src/renderer/assets/fonts/licenses/fonts.json (matched by SHA-256), and no built CSS, JS or HTML may inline a font as
-// a data: URI.
+// a data: URL: no @font-face with a data: source, and no base64 data: URL whose bytes start with a font signature,
+// whatever MIME type it claims (a font MIME check alone let data:application/x-woff and octet-stream through).
 //
 // tests/fontLicenses.test.ts only sees font files under src/ and url('./…') in fonts.css. A font that reaches the bundle
 // another way (an npm package's stylesheet, an absolute or ../ URL, another CSS file) would ship without a license file
@@ -27,7 +28,19 @@ const manifest = JSON.parse(readFileSync(path.join(root, 'src/renderer/assets/fo
 const listed = new Map(manifest.fonts.map(e => [e.sha256, e.file]))
 const FONT_FILE = /\.(woff2?|ttf|otf|ttc|otc|eot)$/i
 const TEXT_FILE = /\.(css|js|mjs|html)$/i
-const DATA_FONT = /data:(font\/|application\/(x-)?font)/i
+const FONT_FACE_DATA = /@font-face\s*\{[^}]*?data:/i
+const BASE64_DATA_URL = /data:[^,'"()\s]*;base64,([A-Za-z0-9+/]{8})/g
+// WOFF2, WOFF, OpenType (CFF), font collection, TrueType. Not Apple's old 'true': base64 JSON `true` starts the same.
+const FONT_SIGNATURES = ['wOF2', 'wOFF', 'OTTO', 'ttcf', '\0\x01\0\0']
+
+function inlinedFont(text) {
+  if (FONT_FACE_DATA.test(text)) return '@font-face with a data: source'
+  for (const m of text.matchAll(BASE64_DATA_URL)) {
+    const head = Buffer.from(m[1], 'base64').toString('latin1').slice(0, 4)
+    if (FONT_SIGNATURES.includes(head)) return `a data: URL holding a font (${JSON.stringify(head)})`
+  }
+  return null
+}
 
 const problems = []
 const fonts = []
@@ -37,8 +50,9 @@ for (const rel of readdirSync(out, { recursive: true }).map(String)) {
     const sha = createHash('sha256').update(readFileSync(file)).digest('hex')
     if (listed.has(sha)) fonts.push(`${rel} = ${listed.get(sha)}`)
     else problems.push(`${rel}: not in fonts.json (sha256 ${sha})`)
-  } else if (TEXT_FILE.test(rel) && DATA_FONT.test(readFileSync(file, 'utf8'))) {
-    problems.push(`${rel}: inlines a font as a data: URI`)
+  } else if (TEXT_FILE.test(rel)) {
+    const why = inlinedFont(readFileSync(file, 'utf8'))
+    if (why) problems.push(`${rel}: inlines a font (${why})`)
   }
 }
 // The app bundles fonts, so finding none means the walk looked in the wrong place.

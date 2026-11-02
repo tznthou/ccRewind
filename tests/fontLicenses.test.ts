@@ -58,14 +58,18 @@ function noticeOf(text: string): string {
 const squash = (s: string): string => s.replace(/\s+/g, ' ').trim()
 
 /**
- * 版權聲明裡宣告的保留字型名稱: 每個「Reserved Font Name(s)」之後到句點為止的那段。
- * 不分大小寫、可以跨行、引號不拘(SIL 範本不加引號、IBM 用 "Plex"、Adobe 的 Source 系列寫成
- * `Reserved Font\nName 'Source'`), 一段聲明可以有好幾個。
+ * 版權聲明裡宣告的保留字型名稱: 每個「Reserved Font Name」之後到句點為止的那段(可能是空字串)。
+ * 不分大小寫、可以跨行、Name / Names / Name(s) 後面可以接冒號、引號不拘(SIL 範本不加引號、IBM 用 "Plex"、
+ * Adobe 的 Source 系列寫成 `Reserved Font\nName 'Source'`), 一段聲明可以有好幾個。
+ * 只要出現就回傳一段, 抽不出名稱也一樣: 有宣告就得登記(2026-11-03 盲審: 要求 Name 後面接空白的版本
+ * 把 `Reserved Font Name: "X"` 整個漏掉)。
  */
 function reservedNameClauses(notice: string): string[] {
   return notice
     .split(/\n\s*\n/)
-    .flatMap(para => [...squash(para).matchAll(/reserved font names?\s+(.*?)(?:\.\s|\.?$)/gi)].map(m => m[1]))
+    .flatMap(para =>
+      [...squash(para).matchAll(/reserved font name(?:s|\(s\))?\s*:?\s*(.*?)(?:\.\s|\.?$)/gi)].map(m => m[1]),
+    )
 }
 
 /**
