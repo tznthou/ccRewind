@@ -2,7 +2,7 @@ import type { DistributionItem } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import DistributionPieChart from './DistributionPieChart'
 
-/** 圓餅的同一組 8 色換個順序：綠、藍、橘、紅、紫、粉紅、青、灰 */
+/** 圓餅的同一組 8 色，換個順序（3, 1, 4, 5, 6, 7, 2, 8） */
 const TAG_COLORS = [
   'var(--chart-cat-3)',
   'var(--chart-cat-1)',

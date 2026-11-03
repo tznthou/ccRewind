@@ -76,9 +76,10 @@
   --color-outcome-quick-qa-badge-bg: #00809D;
   --color-outcome-badge-text: #FFFFFF;
 
-  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值（檔案室與終端機不寫，沿用這裡 → 畫面不變）。
+  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值；檔案室與終端機不寫，沿用這裡。
+     熱度格、成本熱度格與建議清單的淡底改用 color-mix()，透明度不再被量化成 1/255，畫出來最多差 1 個色階；其他圖表色不變。
      recharts 把 fill／stroke 寫成 SVG 屬性，Chromium 吃屬性裡的 var()。TS 裡每個都寫完整字串（'var(--chart-cat-1)'），不用樣板字串拼名稱：
-     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值與「元件裡沒有寫死的顏色」。 */
+     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值、它們只定義在這裡，以及「元件裡沒有寫死的顏色」。 */
   --chart-cat-1: #3b82f6;
   --chart-cat-2: #0891b2;
   --chart-cat-3: #22c55e;

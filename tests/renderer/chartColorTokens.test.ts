@@ -8,15 +8,20 @@ import { heatmapCellBackground } from '../../src/renderer/components/Dashboard/h
 import { costHeatCellBackground } from '../../src/renderer/components/TokenBudget/costHeatCell'
 
 /**
- * 儀表板與 Token Budget 的圖表色走 CSS 變數（--chart-*，定義在 global.css 的 :root）。寫死在元件裡的顏色換主題不會跟著變：
- * 黑板（深色板面）要給圖表另一組顏色，就得改得到每一處。這一步只把顏色搬進 token、畫面不變 —— :root 的值就是改前寫死的值，
- * 檔案室與終端機不寫圖表 token，照舊沿用 :root。
+ * 儀表板與 Token Budget 的圖表色走 CSS 變數（--chart-*，只定義在 global.css 的 :root）。寫死在元件裡的顏色換主題不會跟著變：
+ * 主題要給圖表另一組顏色，就得改得到元件裡的每一處。:root 的值是改前寫死的值，檔案室與終端機不寫圖表 token、沿用 :root。
+ * 熱度格、成本熱度格與建議清單的淡底改用 color-mix()：改前的 rgba() 透明度在 Chromium 裡量化成 1/255 一階，color-mix() 保留精確值，
+ * 這三處畫出來最多差 1 個色階（2026-11-04 截圖實測；其他地方逐像素相同）。
  *
  * 掃法：.ts／.tsx 看程式裡的每個字串（引號、樣板字串的每一段、JSX 屬性值；註解與 JSX 文字不是字串，ProjectHealth 的 &#9650; 在 JSX 文字裡），
  * .css 看每個宣告的值（註解先剝掉）。值裡的每個字面色都抓，不只第一個：border: 1.5px solid rgba(…) 的顏色在第三個。
  * 字面色 = #hex 與顏色函式（同 textColorTokens.test.ts 的 LITERAL），加上 CSS 具名色清單。具名色不用 textColorTokens 的「單字都算」：
  * 那條只看值的第一個字，套到每個字會把 var、flex、none、solid 都當成顏色。
  * var()、color-mix(… var(--x) …)、transparent、currentColor 不算；var(--x, #fff) 的後備值算（這裡不用後備值，要換色就寫成 token）。
+ *
+ * 看不到的：recharts 自己的預設色（元件沒傳時，圓餅每片的白框、軸線與刻度線、hover 游標線、active dot 外圈都是它的字面色）；
+ * 系統色（Canvas、Field、Mark 這類常見單字，不列）；url() 或字串裡的分號（會把宣告切斷）與字串裡的註解開頭；JSX 屬性裡 &#35; 這種字元參照。
+ * CSS nesting（樣式規則裡再包規則）直接報錯：這裡只讀最內層的區塊，外層規則自己的宣告會被靜默跳過。
  */
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
@@ -41,8 +46,9 @@ const NAMED_COLORS = new Set(`
 `.trim().split(/\s+/))
 
 /**
- * 可能是顏色的片段：#hex（前面接 & 的是 HTML 字元參照）、顏色函式（color-mix 不是）、單字（前後接連字號、字母數字、點、# 或括號的不算：
- * --chart-cat-1、var(、i18n 鍵的 a.b.red）。單字再拿具名色清單過濾。
+ * 可能是顏色的片段：#hex（前面接 & 的是 HTML 字元參照）、顏色函式（color-mix 不是）、單字。單字前面不能接連字號、字母數字、點或 #
+ * （--chart-cat-1、i18n 鍵的 a.b.red），後面不能接連字號、字母數字或左括號（var(）；前面接左括號、後面接點的照算
+ * （light-dark(red, …) 抓得到，'red.png' 會被報）。單字再拿具名色清單過濾。
  */
 const COLOR_CANDIDATE = /(?<![&\w])#[0-9a-f]{3,8}\b|(?<![-\w])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\([^)]*\)?|(?<![-\w.#])[a-z]+(?![-\w(])/gi
 
@@ -78,9 +84,31 @@ function stringsIn(file: string, text: string): Value[] {
   return values
 }
 
-/** .css 每個宣告的值（註解換成等長的空白，行號不變） */
-function declarationValuesIn(text: string): Value[] {
-  const css = text.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+/** 註解換成等長的空白（保留換行，位置與行號不變） */
+function stripCssComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+}
+
+/**
+ * .css 每個宣告的值。只讀最內層的區塊，所以 CSS nesting（樣式規則裡再包規則）會讓外層規則自己的宣告被跳過 → 遇到就報錯，
+ * 不靜默放過。@media、@supports、@keyframes 這類 at-rule 裡包規則是正常的。
+ */
+function declarationValuesIn(file: string, text: string): Value[] {
+  const css = stripCssComments(text)
+  const styleRule: boolean[] = []
+  let boundary = 0
+  for (let i = 0; i < css.length; i++) {
+    if (css[i] === '{') {
+      if (styleRule[styleRule.length - 1]) throw new Error(`${file}:${css.slice(0, i).split('\n').length} 是 CSS nesting，外層規則的宣告這裡讀不到`)
+      styleRule.push(!css.slice(boundary, i).trim().startsWith('@'))
+      boundary = i + 1
+    } else if (css[i] === '}') {
+      styleRule.pop()
+      boundary = i + 1
+    } else if (css[i] === ';') {
+      boundary = i + 1
+    }
+  }
   const values: Value[] = []
   for (const block of css.matchAll(/\{([^{}]*)\}/g)) {
     let at = block.index + 1
@@ -98,7 +126,7 @@ function declarationValuesIn(text: string): Value[] {
 function hardCodedColors(sources: Source[]): Finding[] {
   const findings: Finding[] = []
   for (const { file, text } of sources) {
-    const values = file.endsWith('.css') ? declarationValuesIn(text) : stringsIn(file, text)
+    const values = file.endsWith('.css') ? declarationValuesIn(file, text) : stringsIn(file, text)
     for (const { line, text: value } of values) {
       for (const [hit] of value.matchAll(COLOR_CANDIDATE)) {
         if (hit.startsWith('#') || hit.includes('(') || NAMED_COLORS.has(hit.toLowerCase())) {
@@ -120,6 +148,37 @@ async function collect(): Promise<Source[]> {
     }
   }
   return sources
+}
+
+/** renderer 底下所有的 .css */
+async function collectCss(): Promise<Source[]> {
+  const sources: Source[] = []
+  for (const entry of await readdir(RENDERER_DIR, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile() || !entry.name.endsWith('.css')) continue
+    const full = path.join(entry.parentPath, entry.name)
+    sources.push({ file: path.relative(RENDERER_DIR, full), text: await readFile(full, 'utf-8') })
+  }
+  return sources
+}
+
+const GLOBAL_CSS_FILE = path.join('styles', 'global.css')
+
+/**
+ * --chart-* 定義在 global.css 第一個 :root 區塊以外的位置。:root 的值鎖住了，但主題區塊、第二個 :root、@media 或元件 CSS 裡
+ * 另外定義的話，那裡的圖表色就跟 :root 不同，而鎖值的那條照樣綠（前三種審查時都重現過）。
+ */
+function chartTokensDefinedOutsideRoot(sources: Source[]): string[] {
+  const outside: string[] = []
+  for (const { file, text } of sources) {
+    const css = stripCssComments(text)
+    const rootStart = file === GLOBAL_CSS_FILE ? css.indexOf(':root {') : -1
+    const rootEnd = rootStart === -1 ? -1 : css.indexOf('\n}', rootStart)
+    for (const m of css.matchAll(/(?<![\w-])(--chart-[\w-]+)\s*:/g)) {
+      if (m.index > rootStart && m.index < rootEnd) continue
+      outside.push(`${file}:${css.slice(0, m.index).split('\n').length} ${m[1]}`)
+    }
+  }
+  return outside
 }
 
 /** global.css 第一個 `:root {` 區塊裡的 token（註解先剝掉） */
@@ -188,11 +247,42 @@ describe('圖表色走 CSS 變數', () => {
     expect(findings.map(show), `寫死的顏色要改成 global.css 的 --chart-* token：\n${findings.map(show).join('\n')}`).toEqual([])
   })
 
-  it(':root 的圖表 token 是改前寫死的值（畫面不變）', () => {
+  it(':root 的圖表 token 是改前寫死的值', () => {
     const root = rootTokens()
     expect(Object.keys(root).length, '讀不到 :root 的 token').toBeGreaterThan(20)
     const chart = Object.entries(root).filter(([name]) => name.startsWith('--chart-'))
     expect(Object.fromEntries(chart.map(([name, value]) => [name, value.toLowerCase()]))).toEqual(BEFORE)
+  })
+
+  it('--chart-* 只定義在 global.css 的 :root，各主題沿用同一組值', async () => {
+    const css = await collectCss()
+    expect(css.map(s => s.file)).toContain(GLOBAL_CSS_FILE)
+    expect(chartTokensDefinedOutsideRoot(css)).toEqual([])
+  })
+
+  it('抓得到主題區塊、第二個 :root、@media 與元件裡的 --chart-* 定義；第一個 :root 裡的、註解與引用不算', () => {
+    expect(chartTokensDefinedOutsideRoot([
+      {
+        file: GLOBAL_CSS_FILE,
+        text: [
+          ':root {',
+          '  --chart-cat-1: #3b82f6;',
+          '  /* --chart-x: red; */',
+          '}',
+          '[data-theme="terminal"] {',
+          '  --chart-cat-1: #ff0000;',
+          '}',
+          ':root { --chart-heat: #ff0000; }',
+          '@media (prefers-contrast: more) { :root { --chart-token-output: #000000; } }',
+        ].join('\n'),
+      },
+      { file: 'a.module.css', text: '.a { --chart-efficiency: red; fill: var(--chart-efficiency); }' },
+    ])).toEqual([
+      `${GLOBAL_CSS_FILE}:6 --chart-cat-1`,
+      `${GLOBAL_CSS_FILE}:8 --chart-heat`,
+      `${GLOBAL_CSS_FILE}:9 --chart-token-output`,
+      'a.module.css:1 --chart-efficiency',
+    ])
   })
 
   it('值裡每個字面色都抓；var()、color-mix(var())、關鍵字、HTML 字元參照、註解、JSX 文字與 i18n 鍵不算', () => {
@@ -235,21 +325,34 @@ describe('圖表色走 CSS 變數', () => {
       'c.ts:1 #f59e0b',
     ])
   })
+
+  it('at-rule 裡包規則照常掃；CSS nesting 直接報錯，不靜默跳過外層的宣告', () => {
+    const atRules = [
+      '@media (max-width: 800px) {',
+      '  .a { background: white }',
+      '}',
+      '@keyframes k { from { opacity: 0 } to { opacity: 1 } }',
+    ].join('\n')
+    expect(hardCodedColors([{ file: 'm.module.css', text: atRules }]).map(f => `${f.line} ${f.color}`)).toEqual(['2 white'])
+    const nested = '.a {\n  color: red;\n  &:hover { opacity: 1 }\n}'
+    expect(() => hardCodedColors([{ file: 'n.module.css', text: nested }])).toThrow('n.module.css:3 是 CSS nesting')
+  })
 })
 
 /**
- * 熱度底色：color-mix(in srgb, X p%, transparent) = X 透明度 p（themeContrast.test.ts 用的同一個等式），所以 p 要等於改前的透明度 × 100、不四捨五入。
- * 截圖抓不到這種差：spike 用了 Math.round，截圖照樣 0 差異。0.25 讓兩支都落在 32.5（四捨五入成 33 會紅）；成本熱度條的 1/3 剛好是整數 40。
+ * 熱度底色：color-mix(in srgb, X p%, transparent) = X 透明度 p（themeContrast.test.ts 用的同一個等式），p 是改前的透明度 × 100、不取整。
+ * 截圖不一定看得出取整的差（最多 1 個色階），所以鎖在這裡：0.25 讓兩支都落在 32.5（四捨五入成 33 會紅）；1/3 讓熱度圖落在 38.33…、
+ * 1/7 讓成本熱度條落在 22.857…（只留一兩位小數或取到 0.5 都會紅）；成本熱度條的 1/3 剛好是整數 40。
  */
 describe('熱度底色', () => {
   it('工作時段熱度圖：熱度色透明度 15% + 強度 × 70%', () => {
-    for (const [intensity, percent] of [[0, 15], [1, 85], [1 / 3, 15 + 70 / 3], [0.25, 32.5]]) {
+    for (const [intensity, percent] of [[0, 15], [1, 85], [1 / 3, 15 + 70 / 3], [0.25, 32.5], [1 / 7, 25]]) {
       expect(mixPercent(heatmapCellBackground(intensity), '--chart-heat'), `強度 ${intensity}`).toBeCloseTo(percent, 9)
     }
   })
 
   it('成本熱度條：成本熱度色透明度 10% + 強度 × 90%', () => {
-    for (const [intensity, percent] of [[0, 10], [1, 100], [1 / 3, 40], [0.25, 32.5]]) {
+    for (const [intensity, percent] of [[0, 10], [1, 100], [1 / 3, 40], [0.25, 32.5], [1 / 7, 10 + 90 / 7]]) {
       expect(mixPercent(costHeatCellBackground(intensity), '--chart-cost-heat'), `強度 ${intensity}`).toBeCloseTo(percent, 9)
     }
   })
