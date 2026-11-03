@@ -1,6 +1,7 @@
 import { useId, useMemo } from 'react'
 import type { WorkPatterns } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
+import { heatmapCellBackground } from './heatmapCell'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -37,9 +38,7 @@ export default function WorkPatternHeatmap({ data }: Props) {
               key={h.hour}
               className={styles.heatmapCell}
               style={{
-                background: h.count > 0
-                  ? `rgba(59, 130, 246, ${0.15 + intensity * 0.7})`
-                  : 'var(--color-bg-hover)',
+                background: h.count > 0 ? heatmapCellBackground(intensity) : 'var(--color-bg-hover)',
               }}
               title={t('dashboard.workPatterns.cellTitle', { hour: h.hour, count: h.count })}
             />

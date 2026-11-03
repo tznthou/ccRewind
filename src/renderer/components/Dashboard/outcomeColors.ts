@@ -11,11 +11,11 @@ export const OUTCOME_KEYS: readonly OutcomeKey[] = [
 ] as const
 
 export const OUTCOME_COLORS: Record<OutcomeKey, string> = {
-  committed: '#22c55e',
-  tested: '#3b82f6',
-  'in-progress': '#f59e0b',
-  'quick-qa': '#06b6d4',
-  unknown: 'var(--color-text-muted)',
+  committed: 'var(--chart-outcome-committed)',
+  tested: 'var(--chart-outcome-tested)',
+  'in-progress': 'var(--chart-outcome-in-progress)',
+  'quick-qa': 'var(--chart-outcome-quick-qa)',
+  unknown: 'var(--chart-outcome-unknown)',
 }
 
 export const OUTCOME_I18N_KEY: Record<OutcomeKey, MessageKey> = {

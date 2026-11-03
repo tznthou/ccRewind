@@ -14,7 +14,16 @@ interface Props {
   colors?: string[]
 }
 
-const DEFAULT_COLORS = ['#3b82f6', '#0891b2', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#64748b']
+const DEFAULT_COLORS = [
+  'var(--chart-cat-1)',
+  'var(--chart-cat-2)',
+  'var(--chart-cat-3)',
+  'var(--chart-cat-4)',
+  'var(--chart-cat-5)',
+  'var(--chart-cat-6)',
+  'var(--chart-cat-7)',
+  'var(--chart-cat-8)',
+]
 
 export default function DistributionPieChart({ data, emptyText, unitLabel, ariaLabel, colors = DEFAULT_COLORS }: Props) {
   const { t } = useI18n()

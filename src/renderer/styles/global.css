@@ -76,6 +76,36 @@
   --color-outcome-quick-qa-badge-bg: #00809D;
   --color-outcome-badge-text: #FFFFFF;
 
+  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值（檔案室與終端機不寫，沿用這裡 → 畫面不變）。
+     recharts 把 fill／stroke 寫成 SVG 屬性，Chromium 吃屬性裡的 var()。TS 裡每個都寫完整字串（'var(--chart-cat-1)'），不用樣板字串拼名稱：
+     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值與「元件裡沒有寫死的顏色」。 */
+  --chart-cat-1: #3b82f6;
+  --chart-cat-2: #0891b2;
+  --chart-cat-3: #22c55e;
+  --chart-cat-4: #f59e0b;
+  --chart-cat-5: #ef4444;
+  --chart-cat-6: #8b5cf6;
+  --chart-cat-7: #ec4899;
+  --chart-cat-8: #64748b;
+  /* 專案健康度的長條與圖例；unknown 取各主題的灰字（data-theme 寫在 <html>，跟 :root 是同一個元素） */
+  --chart-outcome-committed: #22c55e;
+  --chart-outcome-tested: #3b82f6;
+  --chart-outcome-in-progress: #f59e0b;
+  --chart-outcome-quick-qa: #06b6d4;
+  --chart-outcome-unknown: var(--color-text-muted);
+  --chart-usage-sessions: #3b82f6;
+  --chart-usage-tokens: #f59e0b;
+  --chart-efficiency: #10b981;
+  --chart-heat: #3b82f6;
+  --chart-token-cache-read: #67e8f9;
+  --chart-token-cache-creation: #0891b2;
+  --chart-token-new-input: #0c4a6e;
+  --chart-token-output: #f59e0b;
+  /* 時間軸上快取中斷的點，也是建議清單 warning／info 的左框與淡底 */
+  --chart-marker-warning: #f59e0b;
+  --chart-marker-info: #3b82f6;
+  --chart-cost-heat: #f59e0b;
+
   /* Spacing */
   --space-xs: 4px;
   --space-sm: 8px;

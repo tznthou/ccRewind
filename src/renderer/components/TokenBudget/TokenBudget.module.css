@@ -411,13 +411,13 @@
 }
 
 .insightWarning {
-  border-left-color: #f59e0b;
-  background: rgba(245, 158, 11, 0.06);
+  border-left-color: var(--chart-marker-warning);
+  background: color-mix(in srgb, var(--chart-marker-warning) 6%, transparent);
 }
 
 .insightInfo {
-  border-left-color: #3b82f6;
-  background: rgba(59, 130, 246, 0.06);
+  border-left-color: var(--chart-marker-info);
+  background: color-mix(in srgb, var(--chart-marker-info) 6%, transparent);
 }
 
 /* 跟標題第一行同高（標題 line-height 1.4），圖示對齊第一行的中線 */
