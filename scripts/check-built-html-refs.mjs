@@ -3,15 +3,21 @@
 //
 // index.html loads theme-init.js and font-scale-init.js as classic scripts: they have to run before React mounts, and
 // the CSP allows no inline script. Vite neither bundles nor copies a script without type="module" unless it sits in the
-// public directory, so from v0.5.0 the packaged app shipped an index.html pointing at two files that were not there, and
-// the saved theme and font size were only applied once React ran. The dev server serves src/renderer as it is, so dev
-// never showed it. Run after `pnpm build`; electron-smoke runs it on macOS and Windows.
+// public directory, so the packaged app shipped an index.html pointing at files it did not contain (theme-init.js from
+// v0.5.0, font-scale-init.js from v1.10.0), and the saved theme and font size were only applied once React ran. The dev
+// server serves src/renderer as it is, so dev never showed it.
+//
+// electron-smoke runs it twice on macOS and Windows: on out/renderer after `pnpm build`, and on the packaged app's
+// app.asar after `pnpm dist`, run by the packaged binary with ELECTRON_RUN_AS_NODE=1 so that the asar is read the way
+// the app reads it. Only the second sees what electron-builder actually packed, and a name whose case differs from the
+// file's: the runners' file systems ignore case, lookups inside an asar do not.
 //
 // A reference starting with "/" fails too: the packaged app loads index.html from a file:// URL, where it would point
 // at the root of the disk. So does one with a scheme (http:, data:, //host): the CSP only allows 'self'. So does one
 // that resolves outside the output folder (../): the checkout may have that file, the package does not.
 //
 // Usage: node scripts/check-built-html-refs.mjs [out-dir]   (default: out/renderer, relative to the repo root)
+//        ELECTRON_RUN_AS_NODE=1 <packaged ccRewind binary> scripts/check-built-html-refs.mjs <…/app.asar/out/renderer>
 // Exit:  0 every reference resolves; 1 a missing file, a root-relative or external reference, or no reference at all;
 //        2 no index.html in the output.
 import { existsSync, readFileSync, statSync } from 'node:fs'
@@ -28,12 +34,24 @@ if (!existsSync(indexFile)) {
 
 // Comments first: a commented-out tag is not loaded and must not count either way
 const html = readFileSync(indexFile, 'utf8').replace(/<!--[\s\S]*?-->/g, '')
-const REF = /<(script|link)\b[^>]*?\s(src|href)\s*=\s*(["'])(.*?)\3/gi
+// A whole tag, skipping quoted values (an attribute value may contain ">"), then its attributes one by one, so that
+// src / href are read whether the value is double-quoted, single-quoted or unquoted, and never from inside another
+// attribute's value. The init scripts' tags are hand-written: a tag this cannot read must fail, not be skipped.
+const TAG = /<(script|link)\b((?:[^>"']|"[^"]*"|'[^']*')*)>/gi
+const ATTR = /([^\s"'=<>`/]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?/g
 const SCHEME = /^([a-z][a-z0-9+.-]*:|\/\/)/i
 
 const problems = []
 const found = []
-for (const [, tag, attr, , value] of html.matchAll(REF)) {
+for (const [whole, tag, attrs] of html.matchAll(TAG)) {
+  const m = [...attrs.matchAll(ATTR)].find(a => /^(src|href)$/i.test(a[1]))
+  if (!m) continue // an inline <script> or a <link> without href refers to no file
+  const attr = m[1].toLowerCase()
+  const value = m[2] ?? m[3] ?? m[4]
+  if (!value) {
+    problems.push(`${whole}: ${attr} without a value this check can read`)
+    continue
+  }
   const ref = `<${tag} ${attr}="${value}">`
   if (SCHEME.test(value)) {
     problems.push(`${ref}: external or data: reference (the CSP only allows files of the app itself)`)

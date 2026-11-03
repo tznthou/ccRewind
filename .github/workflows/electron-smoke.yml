@@ -77,7 +77,8 @@ jobs:
         run: pnpm build
 
       # index.html loads theme-init.js and font-scale-init.js as classic scripts, which Vite only copies from the
-      # public directory; from v0.5.0 the packaged app pointed at two files it did not contain
+      # public directory; the packaged app pointed at files it did not contain (theme-init.js from v0.5.0,
+      # font-scale-init.js from v1.10.0). Checked again on the packaged app.asar below.
       - name: Check the built page's script and stylesheet references
         shell: bash
         run: node scripts/check-built-html-refs.mjs out/renderer
@@ -103,6 +104,25 @@ jobs:
         env:
           ELECTRON_RUN_AS_NODE: '1'
         run: dist/win-unpacked/ccRewind.exe scripts/packaged-native-check.cjs
+
+      # The same check on what electron-builder packed, read through the app's own asar support: lookups inside an
+      # asar are case-sensitive while the runners' file systems are not, and only this sees the packaging rules
+      - name: Check the packaged page's script and stylesheet references (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: |
+          APP=$(find dist -maxdepth 2 -name 'ccRewind.app' -type d | head -n 1)
+          [ -n "$APP" ] || { echo "ERROR: no ccRewind.app under dist/"; exit 1; }
+          "$APP/Contents/MacOS/ccRewind" scripts/check-built-html-refs.mjs "$APP/Contents/Resources/app.asar/out/renderer"
+
+      - name: Check the packaged page's script and stylesheet references (Windows)
+        if: runner.os == 'Windows'
+        shell: bash
+        env:
+          ELECTRON_RUN_AS_NODE: '1'
+        run: dist/win-unpacked/ccRewind.exe scripts/check-built-html-refs.mjs dist/win-unpacked/resources/app.asar/out/renderer
 
       - name: Check the bundled fonts and their licenses
         shell: bash
