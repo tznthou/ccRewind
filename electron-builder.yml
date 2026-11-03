@@ -5,6 +5,12 @@ directories:
   output: dist
 files:
   - out/**/*
+extraResources:
+  # License texts of the bundled fonts (SIL OFL 1.1), outside the asar so they can be read.
+  # electron-builder only warns when this folder is missing, so electron-smoke runs
+  # scripts/check-packaged-font-licenses.sh on the packaged app.
+  - from: src/renderer/assets/fonts/licenses
+    to: licenses/fonts
 afterPack: ./scripts/afterPack.js
 mac:
   target:
