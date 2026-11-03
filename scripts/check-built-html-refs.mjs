@@ -8,12 +8,13 @@
 // never showed it. Run after `pnpm build`; electron-smoke runs it on macOS and Windows.
 //
 // A reference starting with "/" fails too: the packaged app loads index.html from a file:// URL, where it would point
-// at the root of the disk. So does one with a scheme (http:, data:, //host): the CSP only allows 'self'.
+// at the root of the disk. So does one with a scheme (http:, data:, //host): the CSP only allows 'self'. So does one
+// that resolves outside the output folder (../): the checkout may have that file, the package does not.
 //
 // Usage: node scripts/check-built-html-refs.mjs [out-dir]   (default: out/renderer, relative to the repo root)
 // Exit:  0 every reference resolves; 1 a missing file, a root-relative or external reference, or no reference at all;
 //        2 no index.html in the output.
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -43,8 +44,15 @@ for (const [, tag, attr, , value] of html.matchAll(REF)) {
     continue
   }
   const file = path.resolve(out, value.split(/[?#]/)[0])
-  if (existsSync(file)) found.push(`${ref} -> ${path.relative(out, file)}`)
-  else problems.push(`${ref}: ${path.relative(out, file)} is not in the build output`)
+  const rel = path.relative(out, file)
+  // ../ can reach a file the checkout has but the package does not (electron-builder only takes out/**)
+  if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+    problems.push(`${ref}: points outside the build output (${rel})`)
+  } else if (existsSync(file) && statSync(file).isFile()) {
+    found.push(`${ref} -> ${rel}`)
+  } else {
+    problems.push(`${ref}: ${rel || '.'} is not a file in the build output`)
+  }
 }
 // The built page always loads its bundle and stylesheet, so finding no reference means the parsing broke.
 if (found.length === 0 && problems.length === 0) problems.push(`no <script src> or <link href> in ${indexFile}`)
