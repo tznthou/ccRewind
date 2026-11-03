@@ -70,8 +70,8 @@ export default function UsageTrendChart({ data }: Props) {
               yAxisId="sessions"
               type="monotone"
               dataKey="sessionCount"
-              stroke="#3b82f6"
-              fill="#3b82f6"
+              stroke="var(--chart-usage-sessions)"
+              fill="var(--chart-usage-sessions)"
               fillOpacity={0.15}
               name="sessionCount"
             />
@@ -79,8 +79,8 @@ export default function UsageTrendChart({ data }: Props) {
               yAxisId="tokens"
               type="monotone"
               dataKey="totalTokens"
-              stroke="#f59e0b"
-              fill="#f59e0b"
+              stroke="var(--chart-usage-tokens)"
+              fill="var(--chart-usage-tokens)"
               fillOpacity={0.1}
               name="totalTokens"
             />

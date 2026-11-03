@@ -10,3 +10,4 @@ coverage/
 .claude/RESUME.md
 .draft/
 mockups/
+.playwright-mcp/

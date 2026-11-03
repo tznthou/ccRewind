@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { SessionTokenStats } from '../../../shared/types'
 import { formatTokens } from '../../utils/formatTokens'
 import { useI18n } from '../../i18n/useI18n'
+import { costHeatCellBackground } from './costHeatCell'
 import styles from './TokenBudget.module.css'
 
 interface Props {
@@ -61,9 +62,7 @@ export default function CostHeatBar({ turns }: Props) {
             <div
               key={cell.turn}
               className={styles.heatCell}
-              style={{
-                backgroundColor: `rgba(245, 158, 11, ${0.1 + cell.intensity * 0.9})`,
-              }}
+              style={{ backgroundColor: costHeatCellBackground(cell.intensity) }}
               title={`${base}${toolSuffix}${modelSuffix}`}
             />
           )

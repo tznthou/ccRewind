@@ -58,8 +58,8 @@ export default function EfficiencyTrendChart({ data }: Props) {
             <Area
               type="monotone"
               dataKey="avgTokensPerTurn"
-              stroke="#10b981"
-              fill="#10b981"
+              stroke="var(--chart-efficiency)"
+              fill="var(--chart-efficiency)"
               fillOpacity={0.15}
               name="avgTokensPerTurn"
             />

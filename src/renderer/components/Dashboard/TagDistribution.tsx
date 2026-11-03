@@ -2,7 +2,17 @@ import type { DistributionItem } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import DistributionPieChart from './DistributionPieChart'
 
-const TAG_COLORS = ['#22c55e', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#0891b2', '#64748b']
+/** 圓餅的同一組 8 色，換個順序（3, 1, 4, 5, 6, 7, 2, 8） */
+const TAG_COLORS = [
+  'var(--chart-cat-3)',
+  'var(--chart-cat-1)',
+  'var(--chart-cat-4)',
+  'var(--chart-cat-5)',
+  'var(--chart-cat-6)',
+  'var(--chart-cat-7)',
+  'var(--chart-cat-2)',
+  'var(--chart-cat-8)',
+]
 
 interface Props {
   data: DistributionItem[]

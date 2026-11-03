@@ -225,18 +225,24 @@ const USAGE_SURFACES: Record<string, Surface[]> = {
   '--color-copied-text': plain(['--color-bg', '--color-bg-hover']),
 }
 
-/** 時間線次要字／灰字會出現的底（含 Token Budget 建議的 warning／info 6% 淡底，疊在 .insightsPanel 的 --color-bg 上） */
+/**
+ * 時間線次要字／灰字會出現的底（含 Token Budget 建議的 warning／info 6% 淡底，疊在 .insightsPanel 的 --color-bg 上）。
+ * 淡底的基色跟 TokenBudget.module.css 一樣取 --chart-marker-*，不另寫一份 hex。
+ */
 const GRAY_SURFACES: Surface[] = [
   ...plain(['--color-bg', '--color-bg-sidebar', '--color-bg-hover', '--color-bg-selected', '--color-accent-light',
     '--color-bubble-user', '--color-bubble-assistant', '--color-bubble-system']),
-  ...tinted('#f59e0b', 0.06, ['--color-bg']),
-  ...tinted('#3b82f6', 0.06, ['--color-bg']),
+  ...tinted('--chart-marker-warning', 0.06, ['--color-bg']),
+  ...tinted('--chart-marker-info', 0.06, ['--color-bg']),
 ]
 
 function resolveSurface(t: Record<string, string>, s: Surface): { label: string; color: Rgba } {
   const container = surface(t, s.container)
   if (!s.tint) return { label: s.container, color: container }
-  const [r, g, b] = parseColor(s.tint.base)
+  // 基色可以是 hex，也可以是 token 名稱（取這個主題的值）
+  const base = s.tint.base.startsWith('--') ? t[s.tint.base] : s.tint.base
+  if (!base) throw new Error(`沒有 ${s.tint.base}`)
+  const [r, g, b] = parseColor(base)
   return { label: `${s.tint.base} ${Math.round(s.tint.alpha * 100)}% over ${s.container}`, color: over([r, g, b, s.tint.alpha], container) }
 }
 
