@@ -5,10 +5,14 @@
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ccRewind</title>
+    <!-- Classic scripts from public/scripts/: they set the saved theme and font size before React mounts. In <head>,
+         so nothing of the body can be painted before they run. Vite copies them as they are and makes "/" relative for
+         the packaged app. Not type="module": that defers them until the page is parsed.
+         scripts/check-built-html-refs.mjs checks the built page's references. -->
+    <script src="/scripts/theme-init.js"></script>
+    <script src="/scripts/font-scale-init.js"></script>
   </head>
   <body>
-    <script src="./scripts/theme-init.js"></script>
-    <script src="./scripts/font-scale-init.js"></script>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>
