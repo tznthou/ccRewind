@@ -36,7 +36,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ['src/renderer/scripts/**/*.js'],
+    files: ['src/renderer/public/scripts/**/*.js'],
     languageOptions: {
       globals: { ...globals.browser },
     },

@@ -7,8 +7,11 @@
     <title>ccRewind</title>
   </head>
   <body>
-    <script src="./scripts/theme-init.js"></script>
-    <script src="./scripts/font-scale-init.js"></script>
+    <!-- Classic scripts from public/scripts/: they set the saved theme and font size before React mounts. Vite copies
+         them as they are and makes "/" relative for the packaged app. Not type="module": that defers them until the
+         page is parsed. scripts/check-built-html-refs.mjs checks the built page's references. -->
+    <script src="/scripts/theme-init.js"></script>
+    <script src="/scripts/font-scale-init.js"></script>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>

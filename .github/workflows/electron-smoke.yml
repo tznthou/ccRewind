@@ -76,6 +76,12 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # index.html loads theme-init.js and font-scale-init.js as classic scripts, which Vite only copies from the
+      # public directory; from v0.5.0 the packaged app pointed at two files it did not contain
+      - name: Check the built page's script and stylesheet references
+        shell: bash
+        run: node scripts/check-built-html-refs.mjs out/renderer
+
       - name: Package (electron-builder)
         run: pnpm dist
         env:
