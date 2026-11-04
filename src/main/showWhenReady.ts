@@ -47,5 +47,8 @@ export function showWhenReady(win: ShowableWindow, fallbackMs: number = SHOW_FAL
  */
 export function isFocusFromShowing(win: ShowableWindow, graceMs: number = SHOW_FOCUS_GRACE_MS): boolean {
   const at = shownAt.get(win)
-  return at !== undefined && Date.now() - at < graceMs
+  if (at === undefined) return false
+  // 時鐘被調回去時經過時間是負的：當成不是顯示帶來的（多索引一次），不能讓它一直算成「剛顯示」
+  const elapsed = Date.now() - at
+  return elapsed >= 0 && elapsed < graceMs
 }

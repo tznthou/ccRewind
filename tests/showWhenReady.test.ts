@@ -173,6 +173,16 @@ describe('isFocusFromShowing', () => {
     expect(isFocusFromShowing(win)).toBe(false)
   })
 
+  // 時鐘被調回去（手動改時間、校時）：負的經過時間不能算成「剛顯示」，不然切回視窗要等時鐘追上才會索引
+  it('is false after the clock is set back past the time the window was shown', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    win.emit('ready-to-show')
+    vi.advanceTimersByTime(60_000)
+    vi.setSystemTime(Date.now() - 3_600_000)
+    expect(isFocusFromShowing(win)).toBe(false)
+  })
+
   it('is false for a window showWhenReady never handled', () => {
     expect(isFocusFromShowing(new FakeWindow())).toBe(false)
   })
