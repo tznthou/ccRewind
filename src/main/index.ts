@@ -4,6 +4,7 @@ import os from 'os'
 import { Database } from './database'
 import { registerIpcHandlers, sendIndexerStatus } from './ipc-handlers'
 import { triggerIndexer } from './indexer'
+import { showWhenReady } from './showWhenReady'
 
 const DB_PATH = path.join(os.homedir(), '.ccrewind', 'index.db')
 
@@ -15,6 +16,8 @@ function createWindow(): BrowserWindow {
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    // 畫好再顯示（showWhenReady）：一建立就顯示的話，網頁第一次畫出來之前整個視窗是預設的白底
+    show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -24,6 +27,7 @@ function createWindow(): BrowserWindow {
     titleBarStyle: 'hiddenInset',
     title: 'ccRewind'
   })
+  showWhenReady(mainWindow)
 
   // #4: Only load dev server URL in development
   if (process.env.ELECTRON_RENDERER_URL && !app.isPackaged) {
