@@ -10,7 +10,8 @@ import ts from 'typescript'
  *
  * 錯誤色（--color-error）的字在每個主題、每種會出現的底色上都要讀得清楚：timeline 原本的 #dc3545 只有 4.07–4.37。
  * 底色取錯誤色的字實際出現的地方：對話區的錯誤（--color-bg）、側欄（--color-bg-sidebar）、錯誤畫面的說明框（--color-bubble-system），
- * 以及泡泡上的「已捨棄分支」徽章（--color-bubble-user／-assistant；徽章沒有自己的底）。
+ * 以及泡泡上的「已捨棄分支」徽章（--color-bubble-user／-assistant；徽章沒有自己的底），還有強調色淡底 --color-accent-light
+ * （.highlightTarget 等閃一下的起點；黑板計畫 PR2 加：spike 的黑板錯誤色對它只有 4.45）。
  * 主題只寫跟 :root 不同的 token，其餘沿用 :root；半透明的底色疊在該主題的 --color-bg 上算，半透明的字色再疊在那個底色上算。
  *
  * 主題清單取自 ThemeContext.tsx 的 ThemeId：app 選得到的主題都會檢查。timeline 是 :root；其他主題缺 CSS 區塊時直接報錯，
@@ -19,15 +20,17 @@ import ts from 'typescript'
  * 佈景主題 A（時間線字級與對比調整）：
  * - 已捨棄分支的泡泡不再整個淡化成 opacity 0.7（以前徽章與內文跟泡泡底一起疊在頁面底色上，實際約 3:1），
  *   內文改用次要字，所以徽章就是畫在不透明泡泡上的錯誤色、內文就是下面的「時間線灰字」。
- * - 寫死的字色收進 token：時間線給新值，檔案室與終端機寫現況值（裁決 5：舊主題不調色），每個主題的區塊都要明寫，
- *   缺了不會報錯、只會沿用 :root 的時間線值 —— 也就是舊主題悄悄變色。
- * - 用途 token 與徽章的對比只檢查時間線：舊主題照現況，本來就不到 4.5（例如 outcome 標籤 2.3–3.7）。
+ * - 寫死的字色收進 token，每個主題的區塊都要明寫：缺了不會報錯、只會沿用 :root 的時間線值。
+ * - 用途 token 與徽章的對比：時間線在下面；黑板另成一段（底色照黑板 CSS 的實際底）。
+ *
+ * 黑板計畫 PR2（改動 10）：檔案室與終端機移除（裁決 19），主題清單剛好是時間線與黑板；A 的「舊主題不調色」那條隨之拿掉
+ * （留著的話，黑板會被當成舊主題、要求等於改版前的寫死色）。
  */
 
 const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.meta.url)), 'utf-8')
 const GLOBAL_CSS = read('../../src/renderer/styles/global.css')
 const THEME_CONTEXT = read('../../src/renderer/context/ThemeContext.tsx')
-const SURFACES = ['--color-bg', '--color-bg-sidebar', '--color-bubble-system', '--color-bubble-user', '--color-bubble-assistant']
+const SURFACES = ['--color-bg', '--color-bg-sidebar', '--color-bubble-system', '--color-bubble-user', '--color-bubble-assistant', '--color-accent-light']
 const AA_NORMAL_TEXT = 4.5
 
 type Rgba = [number, number, number, number]
@@ -91,7 +94,6 @@ const OWN: Record<string, Record<string, string>> = Object.fromEntries(
 const THEMES: Record<string, Record<string, string>> = Object.fromEntries(
   THEME_IDS.map(id => [id, { ...ROOT, ...OWN[id] }]),
 )
-const OLD_THEMES = THEME_IDS.filter(id => id !== 'timeline')
 
 /** 某主題的一個底色 token，半透明的話疊在該主題的 --color-bg 上 */
 function surface(t: Record<string, string>, token: string): Rgba {
@@ -122,7 +124,8 @@ describe('主題的錯誤色對比', () => {
     expect(() => parseColor('rgb(10% 20% 30%)')).toThrow()
     expect(() => parseColor('var(--color-bg)')).toThrow()
     expect(themeIds("export type ThemeId = 'a' | 'b'")).toEqual(['a', 'b'])
-    expect(Object.keys(THEMES)).toEqual(expect.arrayContaining(['timeline', 'archive', 'terminal']))
+    // 剛好這兩個：舊主題沒刪乾淨（ThemeId 還列著）也要紅，不只「有黑板」
+    expect([...THEME_IDS].sort()).toEqual(['board', 'timeline'])
   })
 
   it.each(Object.keys(THEMES))('%s：錯誤色在每種底色上都至少 4.5:1', theme => {
@@ -156,35 +159,10 @@ const BADGE_TEXT = '--color-outcome-badge-text'
 const LOGO_TOKENS = ['--logo-ring', '--logo-mark']
 const A_TOKENS = [...LOGO_TOKENS, ...USAGE_TOKENS, ...BADGE_BG_TOKENS, BADGE_TEXT]
 
-/**
- * 舊主題的值 = 改版前元件 CSS 寫死的那個色（裁決 5）。兩個原本是 token、各主題不同的另外比：unknown 徽章原本是
- * var(--color-text-muted) → 各主題自己的灰字；「已複製」原本是 var(--color-heat-positive) → 各主題自己的 heat 綠
- */
-const OLD_THEME_VALUES: Record<string, string> = {
-  '--color-outcome-committed-text': '#16a34a',
-  '--color-outcome-tested-text': '#2563eb',
-  '--color-outcome-in-progress-text': '#d97706',
-  '--color-outcome-quick-qa-text': '#7c3aed',
-  '--color-remote-text': '#0f766e',
-  '--color-op-edit-text': '#d97706',
-  '--color-op-write-text': '#16a34a',
-  '--color-op-read-text': '#2563eb',
-  '--color-op-discovery-text': '#7c3aed',
-  '--color-jaccard-text': '#3b82f6',
-  '--color-task-in-progress-text': '#f59e0b',
-  '--color-task-completed-text': '#10b981',
-  '--color-subagent-text': '#8b5cf6',
-  '--color-health-up-text': '#22c55e',
-  '--color-health-down-text': '#ef4444',
-  '--color-outcome-in-progress-badge-bg': '#f59e0b',
-  '--color-outcome-quick-qa-badge-bg': '#06b6d4',
-  '--color-outcome-badge-text': '#ffffff',
-}
-/** logo 跟主題變色（裁決 6）：圈與尾巴 / 三角，值取自比較頁 */
+/** logo 跟主題變色（裁決 6）：圈與尾巴 / 三角，值取自比較頁；黑板是粉筆白圈 + 粉筆黃（黑板計畫 PR2 改動 8） */
 const LOGO_VALUES: Record<string, [string, string]> = {
   timeline: ['#0891b2', '#1e293b'],
-  archive: ['#b8860b', '#2c2417'],
-  terminal: ['#22d3ee', '#fbbf24'],
+  board: ['#f2f0e7', '#f8e06a'],
 }
 
 /**
@@ -252,17 +230,6 @@ describe('佈景主題 A：新增的 token', () => {
   it.each(THEME_IDS)('%s 的區塊明寫 A 新增的每個 token（沒寫會沿用 :root 的時間線值）', theme => {
     const missing = A_TOKENS.filter(name => !(name in OWN[theme]))
     expect(missing, `${theme} 缺：\n${missing.join('\n')}`).toEqual([])
-  })
-
-  it.each(OLD_THEMES)('%s 的用途 token 與徽章 token 等於改版前的寫死色（裁決 5：舊主題不調色）', theme => {
-    const t = THEMES[theme]
-    const expected = {
-      ...OLD_THEME_VALUES,
-      '--color-outcome-unknown-badge-bg': t['--color-text-muted'].toLowerCase(),
-      '--color-copied-text': t['--color-heat-positive'].toLowerCase(),
-    }
-    const actual = Object.fromEntries(Object.keys(expected).map(name => [name, (t[name] ?? '(沒有)').toLowerCase()]))
-    expect(actual).toEqual(expected)
   })
 
   it.each(THEME_IDS)('%s 的 logo 顏色照比較頁', theme => {

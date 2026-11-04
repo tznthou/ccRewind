@@ -6,7 +6,8 @@ import { fileURLToPath } from 'node:url'
 /**
  * renderer 裡當字色用的顏色都要走主題 token（佈景主題 A 裁決 7）。寫死的字色換主題不會跟著變、改 token 也改不到它：
  * A 之前有 20 處（outcome 標籤、op 徽章、task 狀態等，在時間線只有 1.6–4.2:1）。
- * accent（--color-accent）當字色在時間線只有 3.3–3.6:1，A 把它們都換掉，只留終端機限定的更新橫幅那一條。
+ * accent（--color-accent）當字色在時間線只有 3.3–3.6:1，A 把它們都換掉；黑板計畫 PR2 拿掉終端機後，原本准用的終端機更新橫幅
+ * 那一條也不在了 → accent 當字色 0 處、沒有例外（黑板的黃色字用 --chalk-yellow，它的對比由 themeContrast 守）。
  *
  * 逐個比對 `color:`，前面不能接字母、數字、底線或連字號（background-color、border-color、backgroundColor、--color-x 都不算）。
  * 不整行排除：10-31 手寫 grep 兩次漏掃，都出在整行過濾（同一行有 border 就把 color 一起刪了）。
@@ -14,6 +15,8 @@ import { fileURLToPath } from 'node:url'
  * 字面色 = #hex、rgb()／rgba()／hsl()／hsla()、hwb()、lab()、lch()、oklab()、oklch()、color()、具名色（white，以及 CanvasText 這類系統色）；var()、color-mix()、
  * inherit／currentColor 等關鍵字不算。var(--x, #fff) 的後備值不算：cssCustomProperties.test.ts 保證 --x 有定義，後備值用不到。
  * 另一條守「拿 token 當字色」：清單外的 token 被當字色用就紅（11-01：「已複製」借 --color-heat-positive，見 tokenTextColors）。
+ * 第三條守 color-mix() 當字色（黑板計畫 PR2 改動 10 ⑧）：color-mix 不是字面色，裡面的 token 又被逗號切斷，上面兩條都看不到，
+ * 半透明的字色會同時繞過兩個守衛 → color-mix 只准用在線條與底色，字色一律直接用 token。
  */
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
@@ -23,9 +26,6 @@ const LITERAL = /^(#[0-9a-f]{3,8}\b|(rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\
 const BARE_WORD = /^[a-z]+$/i
 const NOT_A_COLOR_LITERAL = new Set(['inherit', 'initial', 'unset', 'revert', 'currentcolor', 'transparent'])
 const ACCENT = /^var\(\s*--color-accent\s*\)/
-/** 准用 accent 當字色的地方：終端機限定的更新橫幅下載鈕（UpdateBanner.module.css），其他主題那顆鈕是主要文字色 */
-const ACCENT_ALLOWED = (file: string, selector: string) =>
-  file === path.join('components', 'UpdateBanner', 'UpdateBanner.module.css') && /data-theme="terminal"/.test(selector)
 
 interface Source {
   file: string
@@ -102,6 +102,23 @@ export function tokenTextColors(sources: Source[]): Map<string, string[]> {
   return used
 }
 
+/** color: 後面接 color-mix(…) 的地方（掃法同上：CSS 整段、.ts／.tsx 只看引號裡的） */
+export function colorMixTextColors(sources: Source[]): string[] {
+  const found: string[] = []
+  for (const { file, text } of sources) {
+    const css = file.endsWith('.css')
+    const lines = (css ? stripCssComments(text) : text).split('\n')
+    lines.forEach((line, i) => {
+      for (const m of line.matchAll(DECL)) {
+        const [, quote, raw] = m
+        if (!css && !quote) continue
+        if (/^color-mix\(/i.test(raw.trim())) found.push(`${file}:${i + 1}  ${raw.trim()}`)
+      }
+    })
+  }
+  return found
+}
+
 /**
  * 現在當字色用的 token，與它的對比由誰守。新增一個當字色的 token → 下面那條會紅 → 先在 themeContrast.test.ts 補對比，
  * 再加進來；沒人用了也會紅（清單跟程式碼雙向一致，不會留著過期的說明）。
@@ -133,9 +150,11 @@ const TEXT_COLOR_TOKENS = new Map<string, string>([
   ['--color-code-comment', 'themeContrast：程式碼註解（蓋掉 highlight.js 樣式的 .hljs-comment／.hljs-quote）'],
   ['--color-bg', '危險按鈕 hover：錯誤色底配頁面底色的字，同一對顏色由錯誤色那條守'],
   ['--color-border', '搜尋篩選中間的分隔線「|」：裝飾，aria-hidden'],
-  ['--color-accent', '只准終端機限定的更新橫幅（上面那條）'],
-  ['--color-accent-user', '終端機限定的角色標籤（A 不調終端機配色）'],
-  ['--color-accent-assistant', '終端機限定的角色標籤（A 不調終端機配色）'],
+  // 黑板計畫 PR2（改動 10 ④⑤）：木框上的字、粉筆黃／粉紅字（樣稿的 --yellow／--pink）、健康度長條段內的名稱
+  ['--color-on-wood', 'themeContrast：黑板木框上的字'],
+  ['--chalk-yellow', 'themeContrast：黑板的粉筆黃字'],
+  ['--chalk-pink', 'themeContrast：黑板的粉筆粉紅字'],
+  ['--color-segment-label-text', 'themeContrast：黑板健康度長條段內的名稱'],
 ])
 
 async function collect(dir: string): Promise<Source[]> {
@@ -151,18 +170,22 @@ async function collect(dir: string): Promise<Source[]> {
 const show = (f: Finding) => `${f.file}:${f.line}  ${f.value}  ${f.selector}`
 
 describe('字色走主題 token', () => {
-  it('renderer 沒有寫死的字色；accent 當字色只剩終端機限定的更新橫幅', async () => {
+  it('renderer 沒有寫死的字色；accent 當字色 0 處、沒有例外', async () => {
     const sources = await collect(RENDERER_DIR)
-    // 路徑錯或沒掃到檔案時，「沒有發現」會空著通過：先確認掃到了，而且准用的那一條找得到
+    // 路徑錯或沒掃到檔案時，「沒有發現」會空著通過：先確認掃到了（掃描本身對不對由下面的 fixture 那幾條守）
     expect(sources.map(s => s.file)).toContain(path.join('components', 'Sidebar', 'Sidebar.module.css'))
     const findings = scanTextColors(sources)
-    const allowed = findings.filter(f => f.kind === 'accent' && ACCENT_ALLOWED(f.file, f.selector))
-    expect(allowed.map(show), '准用的終端機規則應該剛好找到一條（找不到 = 掃描壞了或規則被改掉）').toHaveLength(1)
-
     const literals = findings.filter(f => f.kind === 'literal')
     expect(literals.map(show), `寫死的字色要改用主題 token：\n${literals.map(show).join('\n')}`).toEqual([])
-    const accents = findings.filter(f => f.kind === 'accent' && !ACCENT_ALLOWED(f.file, f.selector))
-    expect(accents.map(show), `accent 當字色在時間線不到 4.5:1：\n${accents.map(show).join('\n')}`).toEqual([])
+    const accents = findings.filter(f => f.kind === 'accent')
+    expect(accents.map(show), `accent 當字色在時間線不到 4.5:1（黑板的黃色字用 --chalk-yellow）：\n${accents.map(show).join('\n')}`).toEqual([])
+  })
+
+  it('沒有拿 color-mix() 當字色（color-mix 只准用在線條與底色）', async () => {
+    const sources = await collect(RENDERER_DIR)
+    expect(sources.map(s => s.file)).toContain(path.join('components', 'Sidebar', 'Sidebar.module.css'))
+    const found = colorMixTextColors(sources)
+    expect(found, `字色要直接用 token、不要混色（混出來的色兩條掃描都看不到）：\n${found.join('\n')}`).toEqual([])
   })
 
   it('拿 token 當字色的都在清單裡、清單裡的都還有人用（新的要先補對比測試）', async () => {
@@ -212,10 +235,14 @@ describe('字色走主題 token', () => {
     ])
   })
 
-  it('准用規則只認終端機限定的更新橫幅', () => {
-    const banner = path.join('components', 'UpdateBanner', 'UpdateBanner.module.css')
-    expect(ACCENT_ALLOWED(banner, ':global([data-theme="terminal"]) .downloadBtn {')).toBe(true)
-    expect(ACCENT_ALLOWED(banner, '.downloadBtn {')).toBe(false)
-    expect(ACCENT_ALLOWED(path.join('components', 'ChatView', 'ChatView.module.css'), ':global([data-theme="terminal"]) .x {')).toBe(false)
+  it('color-mix 當字色：CSS 與 TS 引號裡的都抓；背景、邊框、其他屬性、自訂屬性定義與註解不算', () => {
+    expect(colorMixTextColors([
+      { file: 'a.module.css', text: '.a {\n  background: color-mix(in srgb, var(--color-text) 6%, transparent);\n  color: color-mix(in srgb, var(--color-text) 60%, transparent);\n}' },
+      { file: 'b.module.css', text: '.b { border-color: color-mix(in srgb, var(--color-text) 30%, transparent); --x: color-mix(in srgb, red 50%, blue); }\n/* color: color-mix(in srgb, red 50%, blue) */' },
+      { file: 'C.tsx', text: "<i style={{ color: 'color-mix(in srgb, var(--color-text) 50%, transparent)', stroke: 'color-mix(in srgb, red 50%, blue)' }} />\nconst c = { color: mix(a, b) }" },
+    ])).toEqual([
+      'a.module.css:3  color-mix(in srgb',
+      'C.tsx:1  color-mix(in srgb',
+    ])
   })
 })

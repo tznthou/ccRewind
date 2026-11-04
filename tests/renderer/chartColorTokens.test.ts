@@ -8,8 +8,9 @@ import { heatmapCellBackground } from '../../src/renderer/components/Dashboard/h
 import { costHeatCellBackground } from '../../src/renderer/components/TokenBudget/costHeatCell'
 
 /**
- * 儀表板與 Token Budget 的圖表色走 CSS 變數（--chart-*，只定義在 global.css 的 :root）。寫死在元件裡的顏色換主題不會跟著變：
- * 主題要給圖表另一組顏色，就得改得到元件裡的每一處。:root 的值是改前寫死的值，檔案室與終端機不寫圖表 token、沿用 :root。
+ * 儀表板與 Token Budget 的圖表色走 CSS 變數（--chart-*，只定義在 global.css 的 :root 與黑板區塊）。寫死在元件裡的顏色換主題不會跟著變：
+ * 主題要給圖表另一組顏色，就得改得到元件裡的每一處。:root 的值是改前寫死的值（= 時間線）；黑板逐一明寫每個圖表 token
+ * （黑板計畫 PR2 改動 10 ⑨：各主題要刻意定義，別處不准 —— 沒寫的會悄悄沿用時間線的圖表色）。
  * 熱度格、成本熱度格與建議清單的淡底改用 color-mix()：改前的 rgba() 透明度在 Chromium 裡量化成 1/255 一階，color-mix() 保留精確值，
  * 這三處畫出來最多差 1 個色階（2026-11-04 截圖實測；其他地方逐像素相同）。
  *
@@ -163,31 +164,38 @@ async function collectCss(): Promise<Source[]> {
 
 const GLOBAL_CSS_FILE = path.join('styles', 'global.css')
 
+/** global.css 裡准定義 --chart-* 的區塊：第一個 `:root {` 與第一個 `[data-theme="board"] {`（開頭與結尾的位置） */
+const ALLOWED_BLOCKS = [':root {', '[data-theme="board"] {']
+
 /**
- * --chart-* 定義在 global.css 第一個 :root 區塊以外的位置。:root 的值鎖住了，但主題區塊、第二個 :root、@media 或元件 CSS 裡
- * 另外定義的話，那裡的圖表色就跟 :root 不同，而鎖值的那條照樣綠（前三種審查時都重現過）。
+ * --chart-* 定義在准用區塊以外的位置。:root 的值鎖住了，但其他主題區塊、第二個 :root 或黑板區塊、@media 或元件 CSS 裡
+ * 另外定義的話，那裡的圖表色就跟兩個准用區塊不同，而鎖值的那條照樣綠（前三種審查時都重現過）。
  */
-function chartTokensDefinedOutsideRoot(sources: Source[]): string[] {
+function chartTokensDefinedOutsideAllowed(sources: Source[]): string[] {
   const outside: string[] = []
   for (const { file, text } of sources) {
     const css = stripCssComments(text)
-    const rootStart = file === GLOBAL_CSS_FILE ? css.indexOf(':root {') : -1
-    const rootEnd = rootStart === -1 ? -1 : css.indexOf('\n}', rootStart)
+    const ranges: [number, number][] = file !== GLOBAL_CSS_FILE ? [] : ALLOWED_BLOCKS.flatMap(head => {
+      const start = css.indexOf(head)
+      return start === -1 ? [] : [[start, css.indexOf('\n}', start)] as [number, number]]
+    })
     for (const m of css.matchAll(/(?<![\w-])(--chart-[\w-]+)\s*:/g)) {
-      if (m.index > rootStart && m.index < rootEnd) continue
+      if (ranges.some(([start, end]) => m.index > start && m.index < end)) continue
       outside.push(`${file}:${css.slice(0, m.index).split('\n').length} ${m[1]}`)
     }
   }
   return outside
 }
 
-/** global.css 第一個 `:root {` 區塊裡的 token（註解先剝掉） */
-function rootTokens(): Record<string, string> {
-  const start = GLOBAL_CSS.indexOf(':root {')
-  if (start === -1) throw new Error('global.css 沒有 :root')
+/** global.css 第一個 `<head>` 區塊裡的 token（註解先剝掉）；沒有這個區塊回空物件 */
+function blockTokens(head: string): Record<string, string> {
+  const start = GLOBAL_CSS.indexOf(head)
+  if (start === -1) return {}
   const body = GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('\n}', start)).replace(/\/\*[\s\S]*?\*\//g, '')
   return Object.fromEntries([...body.matchAll(/(--[\w-]+)\s*:\s*([^;]+);/g)].map(m => [m[1], m[2].trim()]))
 }
+const rootTokens = () => blockTokens(':root {')
+const chartNames = (tokens: Record<string, string>) => Object.keys(tokens).filter(name => name.startsWith('--chart-')).sort()
 
 /**
  * 改前寫死在元件裡的值。熱度圖的 rgba(59, 130, 246, …) = #3b82f6、成本熱度條的 rgba(245, 158, 11, …) = #f59e0b
@@ -254,14 +262,20 @@ describe('圖表色走 CSS 變數', () => {
     expect(Object.fromEntries(chart.map(([name, value]) => [name, value.toLowerCase()]))).toEqual(BEFORE)
   })
 
-  it('--chart-* 只定義在 global.css 的 :root，各主題沿用同一組值', async () => {
+  it('--chart-* 只定義在 global.css 的 :root 與黑板區塊', async () => {
     const css = await collectCss()
     expect(css.map(s => s.file)).toContain(GLOBAL_CSS_FILE)
-    expect(chartTokensDefinedOutsideRoot(css)).toEqual([])
+    expect(chartTokensDefinedOutsideAllowed(css)).toEqual([])
   })
 
-  it('抓得到主題區塊、第二個 :root、@media 與元件裡的 --chart-* 定義；第一個 :root 裡的、註解與引用不算', () => {
-    expect(chartTokensDefinedOutsideRoot([
+  it('黑板區塊逐一明寫 :root 的每個 --chart-* token（缺的會沿用時間線的圖表色，多的沒人用）', () => {
+    const root = chartNames(rootTokens())
+    expect(root.length, '讀不到 :root 的圖表 token').toBeGreaterThan(20)
+    expect(chartNames(blockTokens('[data-theme="board"] {')), '黑板區塊的圖表 token 要跟 :root 同一組').toEqual(root)
+  })
+
+  it('抓得到其他主題區塊、第二個 :root 或黑板區塊、@media 與元件裡的 --chart-* 定義；兩個准用區塊裡的、註解與引用不算', () => {
+    expect(chartTokensDefinedOutsideAllowed([
       {
         file: GLOBAL_CSS_FILE,
         text: [
@@ -269,18 +283,23 @@ describe('圖表色走 CSS 變數', () => {
           '  --chart-cat-1: #3b82f6;',
           '  /* --chart-x: red; */',
           '}',
+          '[data-theme="board"] {',
+          '  --chart-cat-1: #f2f0e7;',
+          '}',
           '[data-theme="terminal"] {',
           '  --chart-cat-1: #ff0000;',
           '}',
           ':root { --chart-heat: #ff0000; }',
+          '[data-theme="board"] { --chart-heat: #00ff00; }',
           '@media (prefers-contrast: more) { :root { --chart-token-output: #000000; } }',
         ].join('\n'),
       },
       { file: 'a.module.css', text: '.a { --chart-efficiency: red; fill: var(--chart-efficiency); }' },
     ])).toEqual([
-      `${GLOBAL_CSS_FILE}:6 --chart-cat-1`,
-      `${GLOBAL_CSS_FILE}:8 --chart-heat`,
-      `${GLOBAL_CSS_FILE}:9 --chart-token-output`,
+      `${GLOBAL_CSS_FILE}:9 --chart-cat-1`,
+      `${GLOBAL_CSS_FILE}:11 --chart-heat`,
+      `${GLOBAL_CSS_FILE}:12 --chart-heat`,
+      `${GLOBAL_CSS_FILE}:13 --chart-token-output`,
       'a.module.css:1 --chart-efficiency',
     ])
   })
