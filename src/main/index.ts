@@ -4,7 +4,7 @@ import os from 'os'
 import { Database } from './database'
 import { registerIpcHandlers, sendIndexerStatus } from './ipc-handlers'
 import { triggerIndexer } from './indexer'
-import { showWhenReady } from './showWhenReady'
+import { isFocusFromShowing, showWhenReady } from './showWhenReady'
 
 const DB_PATH = path.join(os.homedir(), '.ccrewind', 'index.db')
 
@@ -90,6 +90,8 @@ app.whenReady().then(() => {
     // 訂閱前被靜默丟棄，連帶讓後續 did-finish-load triggerIndexer 因
     // inFlight 已重置而重跑一次。
     mainWindow.on('focus', () => {
+      // 視窗畫好才顯示（showWhenReady），顯示帶來的 focus 會落在這之後：它不是使用者切回來，上面才剛索引過
+      if (isFocusFromShowing(mainWindow)) return
       triggerIndexer(db!, sendIndexerStatus).catch((err) => {
         console.error('Focus reindex failed:', err)
       })

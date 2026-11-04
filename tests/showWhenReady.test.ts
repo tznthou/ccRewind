@@ -1,6 +1,6 @@
 import { EventEmitter } from 'node:events'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { showWhenReady } from '../src/main/showWhenReady'
+import { isFocusFromShowing, showWhenReady, SHOW_FOCUS_GRACE_MS } from '../src/main/showWhenReady'
 
 // BrowserWindow 的替身：只模擬 showWhenReady 用到的部分
 class FakeWindow extends EventEmitter {
@@ -121,5 +121,59 @@ describe('showWhenReady', () => {
     win.revealElsewhere()
     vi.advanceTimersByTime(FALLBACK_MS)
     expect(win.showCalls).toBe(0)
+  })
+})
+
+// 視窗顯示出來時帶來的 focus 不是使用者切回來：did-finish-load 才剛索引過，不必再跑一輪
+describe('isFocusFromShowing', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('is false before showWhenReady has shown the window', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    expect(isFocusFromShowing(win)).toBe(false)
+  })
+
+  it('is true for the focus that arrives right after showWhenReady showed the window', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    win.emit('ready-to-show')
+    vi.advanceTimersByTime(30)
+    expect(isFocusFromShowing(win)).toBe(true)
+  })
+
+  it('stops counting a focus as the one from showing once the grace period has passed', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    win.emit('ready-to-show')
+    vi.advanceTimersByTime(SHOW_FOCUS_GRACE_MS - 1)
+    expect(isFocusFromShowing(win)).toBe(true)
+    vi.advanceTimersByTime(1)
+    expect(isFocusFromShowing(win)).toBe(false)
+  })
+
+  it('also counts the focus right after the fallback timer showed the window', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    vi.advanceTimersByTime(FALLBACK_MS)
+    expect(isFocusFromShowing(win)).toBe(true)
+  })
+
+  it('is false when showWhenReady did not show the window itself', () => {
+    const win = new FakeWindow()
+    showWhenReady(win, FALLBACK_MS)
+    win.revealElsewhere()
+    win.emit('ready-to-show')
+    expect(isFocusFromShowing(win)).toBe(false)
+  })
+
+  it('is false for a window showWhenReady never handled', () => {
+    expect(isFocusFromShowing(new FakeWindow())).toBe(false)
   })
 })
