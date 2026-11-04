@@ -5,8 +5,7 @@ import { isFocusFromShowing, showWhenReady } from './showWhenReady'
 /** 索引從哪裡觸發: 頁面載入完(load)或使用者切回視窗(focus) */
 export type ReindexTrigger = 'load' | 'focus'
 
-// 主視窗的建立(從 index.ts 搬出來): index.ts 是 Electron 入口, 測試載入不了;
-// 這裡由 tests/mainWindow.test.ts 用 vi.mock('electron') 換成假的 BrowserWindow 驗。
+// 主視窗的建立(從 index.ts 搬出來), 由 tests/mainWindow.test.ts 用 vi.mock('electron') 換成假的 BrowserWindow 驗。
 // 索引的兩個觸發掛在每個建出來的視窗上: macOS 關掉最後一個視窗後 app 還在, 從 Dock 點開時 activate 會再建一個
 export function createMainWindow(reindex: (trigger: ReindexTrigger) => void): BrowserWindow {
   const mainWindow = new BrowserWindow({
