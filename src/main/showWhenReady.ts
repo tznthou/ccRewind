@@ -2,7 +2,7 @@
 // 一建立就顯示的話，網頁畫出來之前整個視窗是 Electron 預設的白底，深色主題每次啟動都會白閃一下。
 // 主程序不知道使用者存的主題（存在 renderer 的 localStorage），所以不靠 backgroundColor。
 
-/** ready-to-show 一直沒來（頁面載入失敗、renderer 卡住）時最晚多久還是顯示視窗，不然看起來像 app 沒開 */
+/** ready-to-show 一直沒來（例如 renderer 卡住）時最晚多久還是顯示視窗，不然看起來像 app 沒開 */
 export const SHOW_FALLBACK_MS = 3000
 
 /**

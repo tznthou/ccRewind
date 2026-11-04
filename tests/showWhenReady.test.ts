@@ -107,6 +107,17 @@ describe('showWhenReady', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  // index.ts 用預設的保底：短到正常的第一次繪製之前就到，白閃就回來了（2026-11-04 在 macOS 打包版量到建立後 75–128 ms 才顯示）；
+  // 長到幾秒都沒出現，看起來又像 app 沒開
+  it('by default waits well past a normal first paint, and still shows the window within 5 s', () => {
+    const win = new FakeWindow()
+    showWhenReady(win)
+    vi.advanceTimersByTime(1000)
+    expect(win.showCalls).toBe(0)
+    vi.advanceTimersByTime(4000)
+    expect(win.showCalls).toBe(1)
+  })
+
   it('leaves a window closed before the fallback fires alone', () => {
     const win = new FakeWindow()
     showWhenReady(win, FALLBACK_MS)
@@ -140,11 +151,12 @@ describe('isFocusFromShowing', () => {
     expect(isFocusFromShowing(win)).toBe(false)
   })
 
+  // 用預設寬限：要蓋過顯示到 focus 的延遲（2026-11-04 在 macOS 打包版量到最長 62 ms），不然顯示帶來的 focus 又會多掃一輪
   it('is true for the focus that arrives right after showWhenReady showed the window', () => {
     const win = new FakeWindow()
     showWhenReady(win, FALLBACK_MS)
     win.emit('ready-to-show')
-    vi.advanceTimersByTime(30)
+    vi.advanceTimersByTime(100)
     expect(isFocusFromShowing(win)).toBe(true)
   })
 
