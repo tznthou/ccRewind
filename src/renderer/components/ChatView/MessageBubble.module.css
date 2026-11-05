@@ -87,6 +87,13 @@
   padding: 0;
 }
 
+/* highlight.js atom-one-dark 的註解色 #5c6370 在程式碼底上不到 4.5:1（在它自己的 #282c34 上也只有 2.32）：
+   換成 --color-code-comment（每個主題共用一個值，斜體照舊）。ThinkingBlock 的程式碼區塊有同一組規則（行內程式碼除外） */
+.content :global(.hljs-comment),
+.content :global(.hljs-quote) {
+  color: var(--color-code-comment);
+}
+
 .content :global(:not(pre) > code) {
   background-color: var(--color-code-inline-bg);
   padding: 1px 4px;

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
@@ -292,5 +294,259 @@ describe('佈景主題 A：時間線的對比', () => {
     expect(t[BADGE_TEXT], `時間線沒有 ${BADGE_TEXT}`).toBeDefined()
     const low = lowContrast(t[BADGE_TEXT], [{ label: name, color: surface(t, name) }])
     expect(low, `時間線徽章（${t[BADGE_TEXT]} 配 ${t[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+})
+
+/**
+ * 程式碼區塊（2026-11-05）：MarkdownRenderer 對每個主題都載同一份 highlight.js 樣式（下面讀 import 那行，目前是 atom-one-dark），
+ * 那份樣式是配它自己的底（atom-one-dark 的 #282c34）。用 MarkdownRenderer 的元件在包住它的那層把 <pre> 的底換成 --color-code-bg、
+ * 字換成 --color-code-text，.hljs 的底改透明、字色沿用 → 程式碼區塊實際的底是主題的 --color-code-bg。
+ * atom-one-dark 的註解色 #5c6370 在 --color-code-bg 上只有 2.42（時間線）、2.53（檔案室）、3.02（終端機），在 #282c34 上也只有 2.32
+ * → 註解與引用改用 --color-code-comment（每個主題共用一個值，見 global.css）。樣式其餘的字色直接讀檔逐色檢查：
+ * highlight.js 的 patch 會自動合併，樣式換上的顏色不到 4.5:1（或是認不得的寫法）時這裡會紅。
+ * 同日盲審：思考區塊（ThinkingBlock）也用 MarkdownRenderer，原本沒有這組規則：有標語言的程式碼照 atom-one-dark 原樣畫
+ * （註解 2.32），沒標語言的只是頁面上的等寬字、沒有框 → 每個畫 MarkdownRenderer 的地方都要有這組規則；
+ * 引用了 MarkdownRenderer 卻認不出畫在哪裡的檔案直接紅（fail closed），主題限定或更具體的規則也不能換掉這些值。
+ */
+const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
+const MARKDOWN_RENDERER = path.join('components', 'ChatView', 'MarkdownRenderer.tsx')
+const COMMENT_TOKEN = /^var\(\s*--color-code-comment\s*(,[^)]*)?\)$/
+
+interface CssRule { selectors: string[]; decls: [string, string][]; inAtRule: boolean }
+
+/** 依 sep 切開，括號裡的不切（:is(a, b) 的逗號、url(data:…;…) 的分號） */
+function splitTopLevel(text: string, sep: string): string[] {
+  const parts: string[] = []
+  let depth = 0
+  let current = ''
+  for (const ch of text) {
+    if (ch === '(') depth++
+    if (ch === ')') depth--
+    if (ch === sep && depth === 0) {
+      parts.push(current)
+      current = ''
+    } else {
+      current += ch
+    }
+  }
+  parts.push(current)
+  return parts.map(p => p.trim()).filter(Boolean)
+}
+
+/**
+ * CSS 的每條規則（註解先剝掉）：選擇器清單（空白正規化）、依序的宣告、在不在 @media 這類區塊裡。字串裡的大括號不處理。
+ * 選擇器取上一個分號之後那段：@import／@charset／@layer a, b; 這類沒有大括號的 @ 規則不會黏到下一條規則上
+ */
+function cssRules(source: string): CssRule[] {
+  const rules: CssRule[] = []
+  const open: string[] = []
+  let buffer = ''
+  for (const ch of source.replace(/\/\*[\s\S]*?\*\//g, '')) {
+    if (ch === '{') {
+      open.push(buffer.slice(buffer.lastIndexOf(';') + 1).trim())
+      buffer = ''
+    } else if (ch === '}') {
+      const prelude = open.pop() ?? ''
+      if (prelude !== '' && !prelude.startsWith('@')) {
+        rules.push({
+          selectors: splitTopLevel(prelude, ',').map(s => s.replace(/\s+/g, ' ')),
+          decls: splitTopLevel(buffer, ';').flatMap(d => {
+            const colon = d.indexOf(':')
+            return colon > 0 ? [[d.slice(0, colon).trim().toLowerCase(), d.slice(colon + 1).trim()] as [string, string]] : []
+          }),
+          inAtRule: open.some(p => p.startsWith('@')),
+        })
+      }
+      buffer = ''
+    } else {
+      buffer += ch
+    }
+  }
+  return rules
+}
+
+/** 選擇器清單裡有 selector、不在 @media 這類區塊裡的規則中，props 最後一次的值（後寫的蓋前面；@media 裡的不一定生效，不算） */
+function lastValue(rules: CssRule[], selector: string, props: string[]): string | undefined {
+  let value: string | undefined
+  for (const rule of rules) {
+    if (rule.inAtRule || !rule.selectors.includes(selector)) continue
+    for (const [prop, v] of rule.decls) if (props.includes(prop)) value = v
+  }
+  return value
+}
+
+/** :global(x) 換成 x（CSS module 的寫法），比的是選擇器實際選到什麼 */
+function unwrapGlobal(selector: string): string {
+  let out = selector
+  for (let i = 0; i < 5 && out.includes(':global('); i++) out = out.replace(/:global\(((?:[^()]|\([^()]*\))*)\)/g, '$1')
+  return out.replace(/\s+/g, ' ').trim()
+}
+
+/** 選擇器最右邊那段（最後一個後代、>、+、~ 之後；括號與中括號裡的不算）：規則實際套用的元素，與它左邊那段 */
+function splitSubject(selector: string): { context: string; subject: string } {
+  const s = unwrapGlobal(selector)
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]
+    if (ch === '(' || ch === '[') depth++
+    else if (ch === ')' || ch === ']') depth--
+    else if (depth === 0 && (ch === ' ' || ch === '>' || ch === '+' || ch === '~')) start = i + 1
+  }
+  return { context: s.slice(0, start), subject: s.slice(start).trim() }
+}
+
+/** 包住 node 的最近一層 className={styles.x} 的 x */
+function wrapperClass(node: ts.Node, sf: ts.SourceFile): string | null {
+  for (let p = node.parent; p; p = p.parent) {
+    if (!ts.isJsxElement(p) || p.openingElement === node) continue
+    for (const attr of p.openingElement.attributes.properties) {
+      if (!ts.isJsxAttribute(attr) || attr.name.getText(sf) !== 'className') continue
+      const expr = attr.initializer && ts.isJsxExpression(attr.initializer) ? attr.initializer.expression : undefined
+      if (expr && ts.isPropertyAccessExpression(expr) && expr.expression.getText(sf) === 'styles') return expr.name.text
+    }
+  }
+  return null
+}
+
+interface Mount { file: string; wrapper: string | null; css: string | null }
+
+/** 指到 MarkdownRenderer 模組的字串（import、export … from、import()） */
+const RENDERER_SPECIFIER = /['"`][^'"`\n]*\/MarkdownRenderer(\.tsx?)?['"`]/
+
+/**
+ * renderer 裡每個畫 MarkdownRenderer 的地方：所在檔案、包住它的 class、styles 來自哪個 CSS module。
+ * 只認得 `import X from` 與 `import { default as X } from` 再寫成 <X />；refs 是所有引用到那個模組的檔案，認不出掛載點的由測試報紅
+ */
+function markdownMounts(): { mounts: Mount[]; refs: string[] } {
+  const mounts: Mount[] = []
+  const refs: string[] = []
+  for (const file of readdirSync(RENDERER_DIR, { recursive: true, encoding: 'utf8' })) {
+    if (!/\.tsx?$/.test(file) || file === MARKDOWN_RENDERER) continue
+    const text = readFileSync(path.join(RENDERER_DIR, file), 'utf-8')
+    if (!RENDERER_SPECIFIER.test(text)) continue
+    refs.push(file)
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const names = new Set<string>()
+    let css: string | null = null
+    for (const stmt of sf.statements) {
+      if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
+      const clause = stmt.importClause
+      if (/(^|\/)MarkdownRenderer$/.test(stmt.moduleSpecifier.text) && clause) {
+        if (clause.name) names.add(clause.name.text)
+        const named = clause.namedBindings
+        if (named && ts.isNamedImports(named)) {
+          for (const el of named.elements) if ((el.propertyName ?? el.name).getText(sf) === 'default') names.add(el.name.text)
+        }
+      }
+      if (clause?.name?.text === 'styles' && stmt.moduleSpecifier.text.endsWith('.module.css')) css = path.join(path.dirname(file), stmt.moduleSpecifier.text)
+    }
+    const visit = (node: ts.Node) => {
+      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && names.has(node.tagName.getText(sf))) {
+        mounts.push({ file, wrapper: wrapperClass(node, sf), css })
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+  return { mounts, refs }
+}
+
+/**
+ * 每個掛載點在包住 MarkdownRenderer 的那層（.x）都要有的值；var() 可以帶後備值。
+ * match 比選擇器最右邊那段：主題限定、更具體或寫在 @media 裡、選到同一個元素的規則也要是這個值
+ */
+const CODE_BLOCK_RULES: { target: string; match: RegExp; props: string[]; want: RegExp; label: string }[] = [
+  { target: ':global(pre)', match: /^pre(?![\w-])/, props: ['background-color', 'background'], want: /^var\(\s*--color-code-bg\s*(,[^)]*)?\)$/, label: 'var(--color-code-bg)' },
+  { target: ':global(pre)', match: /^pre(?![\w-])/, props: ['color'], want: /^var\(\s*--color-code-text\s*(,[^)]*)?\)$/, label: 'var(--color-code-text)' },
+  { target: ':global(.hljs)', match: /\.hljs(?![\w-])/, props: ['background-color', 'background'], want: /^transparent$/, label: 'transparent' },
+  { target: ':global(.hljs)', match: /\.hljs(?![\w-])/, props: ['color'], want: /^inherit$/, label: 'inherit' },
+  { target: ':global(.hljs-comment)', match: /\.hljs-comment(?![\w-])/, props: ['color'], want: COMMENT_TOKEN, label: 'var(--color-code-comment)' },
+  { target: ':global(.hljs-quote)', match: /\.hljs-quote(?![\w-])/, props: ['color'], want: COMMENT_TOKEN, label: 'var(--color-code-comment)' },
+]
+/** 上面蓋掉字色的 highlight.js 選擇器：樣式裡只有它們的字色不算，其餘逐色檢查 */
+const OVERRIDDEN = new Set(['.hljs', '.hljs-comment', '.hljs-quote'])
+
+/** MarkdownRenderer 載的 highlight.js 樣式（import 那行寫的那一份） */
+function highlightStyle(): { spec: string; rules: CssRule[] } {
+  const source = readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER), 'utf-8')
+  const specs = [...source.matchAll(/^import\s+['"](highlight\.js\/styles\/[^'"]+\.css)['"]/gm)].map(m => m[1])
+  if (specs.length !== 1) throw new Error(`MarkdownRenderer 應該只載一份 highlight.js 樣式，找到 ${specs.length} 份`)
+  const file = createRequire(path.join(RENDERER_DIR, MARKDOWN_RENDERER)).resolve(specs[0])
+  return { spec: specs[0], rules: cssRules(readFileSync(file, 'utf-8')) }
+}
+const HIGHLIGHT = highlightStyle()
+
+describe('程式碼區塊的對比', () => {
+  it.each(THEME_IDS)('%s：--color-code-comment 在程式碼底（--color-code-bg）上至少 4.5:1', theme => {
+    const t = THEMES[theme]
+    expect(t['--color-code-comment'], `${theme} 沒有 --color-code-comment`).toBeDefined()
+    const low = lowContrast(t['--color-code-comment'], [{ label: '--color-code-bg', color: surface(t, '--color-code-bg') }])
+    expect(low, `${theme} 的程式碼註解（${t['--color-code-comment']} 配 ${t['--color-code-bg']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(THEME_IDS)('%s：程式碼本文與 highlight.js 樣式其餘的字色在程式碼底上都至少 4.5:1', theme => {
+    const t = THEMES[theme]
+    const bg = { label: `--color-code-bg ${t['--color-code-bg']}`, color: surface(t, '--color-code-bg') }
+    const colours = [{ who: '--color-code-text', colour: t['--color-code-text'] }]
+    for (const rule of HIGHLIGHT.rules) {
+      const kept = rule.selectors.filter(s => !OVERRIDDEN.has(s))
+      if (rule.inAtRule || kept.length === 0) continue
+      for (const [prop, value] of rule.decls) if (prop === 'color') colours.push({ who: kept.join(', '), colour: value })
+    }
+    // 讀檔或解析壞掉時清單只剩本文一色、照樣全綠
+    expect(colours.length, `${HIGHLIGHT.spec} 讀不到字色`).toBeGreaterThan(1)
+    const low = colours.flatMap(({ who, colour }) => lowContrast(colour, [bg]).map(l => `${who}（${colour}）配 ${l}`))
+    expect(low, `${theme} 的程式碼區塊對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it('highlight.js 樣式裡只有 .hljs 設底色（上面的對比都對 --color-code-bg 算）', () => {
+    const backgrounds = HIGHLIGHT.rules
+      .filter(r => r.decls.some(([prop]) => prop === 'background' || prop === 'background-color'))
+      .map(r => r.selectors.join(', '))
+    expect(backgrounds, `${HIGHLIGHT.spec} 有別的底色：那些字要改成對它算`).toEqual(['.hljs'])
+  })
+
+  it('每個畫 MarkdownRenderer 的地方，包住它的那層都有程式碼區塊的規則', () => {
+    const { mounts, refs } = markdownMounts()
+    // 掃描壞掉時清單是空的、照樣全綠：已知的兩處要找得到
+    expect(mounts.map(m => path.basename(m.file))).toEqual(expect.arrayContaining(['MessageBubble.tsx', 'ThinkingBlock.tsx']))
+    const unrecognised = refs.filter(file => !mounts.some(m => m.file === file))
+      .map(file => `${file}：引用了 MarkdownRenderer，卻認不出它畫在哪裡（只認得 import X from 或 import { default as X } from，再寫成 <X />）`)
+    const problems = mounts.flatMap(({ file, wrapper, css }) => {
+      if (!wrapper || !css) return [`${file}：MarkdownRenderer 沒有包在 className={styles.x} 的元素裡，或沒有 import styles`]
+      const rules = cssRules(readFileSync(path.join(RENDERER_DIR, css), 'utf-8'))
+      const wrapperClass = new RegExp(`\\.${wrapper}(?![\\w-])`)
+      return CODE_BLOCK_RULES.flatMap(({ target, match, props, want, label }) => {
+        const selector = `.${wrapper} ${target}`
+        const value = lastValue(rules, selector, props)
+        const base = value !== undefined && want.test(value) ? [] : [`${css}：${selector} 的 ${props[0]} 是 ${value ?? '（沒寫）'}，要 ${label}`]
+        // 同一個元素的其他規則（主題限定、更具體、@media 裡）：設了這個屬性就要是同一個值，不然上面的對比前提不成立
+        const overrides = rules.flatMap(rule => rule.selectors
+          .filter(s => (s !== selector || rule.inAtRule) && match.test(splitSubject(s).subject) && wrapperClass.test(splitSubject(s).context))
+          .flatMap(s => rule.decls.filter(([prop, v]) => props.includes(prop) && !want.test(v)).map(([prop, v]) => `${css}：${s} { ${prop}: ${v} }，要 ${label}`)))
+        return [...base, ...overrides]
+      })
+    })
+    expect([...unrecognised, ...problems], [...unrecognised, ...problems].join('\n')).toEqual([])
+  })
+
+  it('renderer 的 CSS 給 .hljs-comment／.hljs-quote 的字色都是 --color-code-comment', () => {
+    const found: { file: string; rule: string; ok: boolean }[] = []
+    for (const file of readdirSync(RENDERER_DIR, { recursive: true, encoding: 'utf8' })) {
+      if (!file.endsWith('.css')) continue
+      for (const rule of cssRules(readFileSync(path.join(RENDERER_DIR, file), 'utf-8'))) {
+        // 只看選擇器最右邊那段：.hljs-comment .hljs-doctag 設的是註解裡 doctag 的字色，不是註解的
+        const hits = rule.selectors.filter(s => /\.hljs-(comment|quote)(?![\w-])/.test(splitSubject(s).subject))
+        if (hits.length === 0) continue
+        for (const [prop, value] of rule.decls) {
+          if (prop === 'color') found.push({ file, rule: `${hits.join(', ')} { color: ${value} }`, ok: COMMENT_TOKEN.test(value) })
+        }
+      }
+    }
+    // 掃描壞掉時什麼都找不到、照樣全綠：兩個掛載點的規則要找得到
+    expect(found.filter(f => f.ok).map(f => path.basename(f.file))).toEqual(expect.arrayContaining(['MessageBubble.module.css', 'ThinkingBlock.module.css']))
+    const others = found.filter(f => !f.ok).map(f => `${f.file}：${f.rule}`)
+    expect(others, others.join('\n')).toEqual([])
   })
 })
