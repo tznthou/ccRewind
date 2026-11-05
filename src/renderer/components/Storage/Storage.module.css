@@ -261,7 +261,7 @@
 
 .dangerButton:hover:not(:disabled) {
   background: var(--color-error);
-  /* Not #fff: the terminal theme's error red is light, and white on it is 2.8:1. Swapping the pair keeps the
+  /* Not #fff: the board theme's error red is light, and white on it is under 2:1. Swapping the pair keeps the
      contrast of the resting state (error text on --color-bg) in every theme. */
   color: var(--color-bg);
 }

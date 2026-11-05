@@ -6,17 +6,6 @@ import styles from './ThemeSwitcher.module.css'
 
 const themes: { id: ThemeId; labelKey: MessageKey; icon: React.ReactNode }[] = [
   {
-    id: 'archive',
-    labelKey: 'theme.archive',
-    icon: (
-      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <rect x="2" y="1" width="10" height="12" />
-        <line x1="2" y1="5" x2="12" y2="5" />
-        <line x1="5" y1="5" x2="5" y2="1" />
-      </svg>
-    ),
-  },
-  {
     id: 'timeline',
     labelKey: 'theme.timeline',
     icon: (
@@ -30,12 +19,14 @@ const themes: { id: ThemeId; labelKey: MessageKey; icon: React.ReactNode }[] = [
     ),
   },
   {
-    id: 'terminal',
-    labelKey: 'theme.terminal',
+    id: 'board',
+    labelKey: 'theme.board',
     icon: (
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <polyline points="2,4 5,7 2,10" />
-        <line x1="7" y1="10" x2="12" y2="10" />
+        <rect x="1" y="2" width="12" height="9" />
+        <line x1="3.5" y1="5" x2="8" y2="5" />
+        <line x1="3.5" y1="8" x2="6" y2="8" />
+        <line x1="4" y1="13" x2="10" y2="13" />
       </svg>
     ),
   },

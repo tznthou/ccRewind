@@ -113,17 +113,3 @@
   border-color: var(--color-accent);
   color: var(--color-text);
 }
-
-/* Theme C — Terminal: mono input, dashed border */
-:global([data-theme="terminal"]) .input {
-  font-family: var(--font-code);
-  border-style: dashed;
-}
-
-:global([data-theme="terminal"]) .container {
-  border-bottom-style: dashed;
-}
-
-:global([data-theme="terminal"]) .scopeLabel {
-  font-family: var(--font-code);
-}

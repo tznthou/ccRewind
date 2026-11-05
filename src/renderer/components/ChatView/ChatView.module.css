@@ -456,7 +456,7 @@
   background: var(--color-bg);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
-  /* accent 色的柔和光暈把按鈕從背景分出來（archive 主題的 bg 與 bg-sidebar 幾乎同色，只靠底色會被吃掉）。
+  /* accent 色的柔和光暈把按鈕從背景分出來（當初為了已移除的檔案室主題：它的 bg 與 bg-sidebar 幾乎同色，只靠底色會被吃掉）。
      刻意不用半透明與動畫：半透明更容易被背景吃掉，動畫會搶走閱讀注意力 */
   box-shadow:
     0 0 10px 1px color-mix(in srgb, var(--color-accent) 45%, transparent),

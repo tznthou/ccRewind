@@ -194,24 +194,6 @@
 }
 
 /* ============================================================
-   Theme A — Archive Room
-   ============================================================ */
-
-:global([data-theme="archive"]) .bubble {
-  box-shadow: var(--shadow-bubble);
-}
-
-:global([data-theme="archive"]) .role {
-  font-family: var(--font-display);
-  font-variant: small-caps;
-  border: 1px solid var(--color-accent);
-  padding: 1px 6px;
-  /* 跟字級表走（原本寫死 10px，選「特大」也不變） */
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.5px;
-}
-
-/* ============================================================
    Theme B — Timeline
    ============================================================ */
 
@@ -226,47 +208,6 @@
 }
 
 /* ============================================================
-   Theme C — Terminal Memory
-   ============================================================ */
-
-:global([data-theme="terminal"]) .bubble {
-  background: transparent;
-  border: none;
-  border-bottom: 1px dashed var(--color-border);
-  border-radius: 0;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-:global([data-theme="terminal"]) .role {
-  font-family: var(--font-code);
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-:global([data-theme="terminal"]) .user .role::before {
-  content: '\25B8 ';
-  color: var(--color-accent-user);
-}
-
-:global([data-theme="terminal"]) .assistant .role::before {
-  content: '\25C2 ';
-  color: var(--color-accent-assistant);
-}
-
-:global([data-theme="terminal"]) .user .role {
-  color: var(--color-accent-user);
-}
-
-:global([data-theme="terminal"]) .assistant .role {
-  color: var(--color-accent-assistant);
-}
-
-:global([data-theme="terminal"]) .content :global(pre) {
-  border: 1px dashed var(--color-border);
-}
-
-/* ============================================================
    Token Heat Gutter — theme-aware left border
    ============================================================ */
 
@@ -276,9 +217,4 @@
 .bubble[data-heat] {
   --current-heat-color: color-mix(in srgb, var(--heat-base) var(--heat-intensity, 50%), transparent);
   border-left: 4px solid var(--current-heat-color);
-}
-
-/* Terminal — glow effect for depth on transparent bubbles */
-:global([data-theme="terminal"]) .bubble[data-heat] {
-  box-shadow: 0 0 8px var(--current-heat-color);
 }

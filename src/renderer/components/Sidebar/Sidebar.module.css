@@ -383,24 +383,6 @@
 }
 
 /* ============================================================
-   Theme A — Archive Room
-   ============================================================ */
-
-:global([data-theme="archive"]) .sectionLabel {
-  font-family: var(--font-display);
-  font-variant: small-caps;
-  letter-spacing: 1.5px;
-}
-
-:global([data-theme="archive"]) .badge {
-  border-radius: 0;
-}
-
-:global([data-theme="archive"]) .title {
-  font-family: var(--font-display);
-}
-
-/* ============================================================
    Theme B — Timeline
    ============================================================ */
 
@@ -445,42 +427,4 @@
 :global([data-theme="timeline"]) .sessionItem:hover::after {
   background: var(--color-accent);
   border-color: var(--color-accent);
-}
-
-/* ============================================================
-   Theme C — Terminal Memory
-   ============================================================ */
-
-:global([data-theme="terminal"]) .title {
-  font-family: var(--font-display);
-  letter-spacing: 0.02em;
-}
-
-:global([data-theme="terminal"]) .subtitle {
-  font-family: var(--font-code);
-}
-
-:global([data-theme="terminal"]) .sectionLabel {
-  font-family: var(--font-code);
-  letter-spacing: 0.02em;
-}
-
-:global([data-theme="terminal"]) .sessionTitle {
-  font-family: var(--font-code);
-}
-
-:global([data-theme="terminal"]) .sessionMeta {
-  font-family: var(--font-code);
-}
-
-:global([data-theme="terminal"]) .section {
-  border-bottom-style: dashed;
-}
-
-:global([data-theme="terminal"]) .sessionItem {
-  border-bottom-style: dashed;
-}
-
-:global([data-theme="terminal"]) .indexerStatus {
-  border-top-style: dashed;
 }
