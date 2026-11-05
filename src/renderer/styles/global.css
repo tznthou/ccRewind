@@ -187,3 +187,133 @@ mark {
   border-radius: 2px;
   padding: 0 1px;
 }
+
+/* ============================================================
+   黑板：取代檔案室與終端機（存著舊主題的使用者，檔案室遷到時間線、終端機遷到黑板：context/resolveTheme.ts）。
+   這裡只寫跟 :root 不同的值；字色、用途字色、徽章、圖表色與熱度色的對比在 tests/renderer/themeContrast.test.ts。
+   ============================================================ */
+[data-theme="board"] {
+  color-scheme: dark;
+  --color-bg: #15402C;
+  --color-bg-sidebar: #0E3221;
+  --color-bg-hover: #1F4B36;
+  --color-bg-selected: #24543D;
+  --color-border: #4A6556;
+  --color-text: #F2F0E7;
+  --color-text-secondary: #D5D6C7;
+  --color-text-muted: #BEC4B2;
+  --color-accent: #F8E06A;
+  --color-accent-light: #24543D;
+  --color-accent-user: #94D0F4;
+  --color-accent-assistant: #F8E06A;
+  /* 熱度條：正值天藍、負值粉筆橘（粉紅只留給已捨棄分支，兩種色條才分得開） */
+  --color-heat-positive: #94D0F4;
+  --color-heat-negative: #FBB77B;
+  /* 比粉筆粉紅亮一點：強調色淡底（.highlightTarget 等閃一下的起點，#24543D）上 4.55:1 */
+  --color-error: #FFA2A5;
+  --color-bubble-user: transparent;
+  --color-bubble-assistant: transparent;
+  --color-bubble-system: transparent;
+  --color-code-bg: #0D2F1F;
+  --color-code-text: #F2F0E7;
+  --color-code-inline-bg: #0D2F1F;
+  /* 搜尋命中不塗底，改黃色波浪底線（下面的 mark） */
+  --color-mark-bg: transparent;
+  --color-system-label: #94D0F4;
+  /* 嵌入板面的輸入框、下拉與工具區塊的底 */
+  --color-inset-bg: #0B2A1B;
+  /* 木框（標題列）上的字：木紋漸層暗端上 7.24:1 */
+  --color-on-wood: #23140B;
+  /* 健康度長條段內的名稱：黑字在每個 outcome 色上都至少 6.35:1（板面綠與粉筆白在較暗的幾階都不到 4.5） */
+  --color-segment-label-text: #000000;
+  --logo-ring: #F2F0E7;
+  --logo-mark: #F8E06A;
+  --chalk-yellow: #F8E06A;
+  --chalk-pink: #FAAFBF;
+  --chalk-sky: #94D0F4;
+  --chalk-orange: #FBB77B;
+  --chalk-green: #B9E39A;
+  --chalk-lilac: #D3B2F0;
+  --wood-light: #DDB585;
+  --wood-dark: #C99D6B;
+  --wood-edge: #8B6A44;
+  /* 用途字色：同色相的粉筆色（outcome：committed 天藍、tested 黃、in-progress 橘、quick-qa 粉紅） */
+  --color-outcome-committed-text: #94D0F4;
+  --color-outcome-tested-text: #F8E06A;
+  --color-outcome-in-progress-text: #FBB77B;
+  --color-outcome-quick-qa-text: #FAAFBF;
+  --color-remote-text: #B9E39A;
+  --color-op-edit-text: #FBB77B;
+  --color-op-write-text: #B9E39A;
+  --color-op-read-text: #94D0F4;
+  --color-op-discovery-text: #D3B2F0;
+  --color-jaccard-text: #94D0F4;
+  --color-task-in-progress-text: #FBB77B;
+  --color-task-completed-text: #B9E39A;
+  --color-subagent-text: #D3B2F0;
+  --color-health-up-text: #B9E39A;
+  --color-health-down-text: #FAAFBF;
+  --color-copied-text: #B9E39A;
+  /* 未收尾對話的 outcome 徽章：板面綠的字配粉筆色實心底（至少 6.51:1）。
+     in-progress 用淺橘、不用圖表的 #D98546：板面綠的字在那上面只有 4.10:1 */
+  --color-outcome-unknown-badge-bg: #BEC4B2;
+  --color-outcome-in-progress-badge-bg: #FBB77B;
+  --color-outcome-quick-qa-badge-bg: #FAAFBF;
+  --color-outcome-badge-text: #15402C;
+  /* 圖表色：八階亮度，對板面從 10.2 到 3.52:1（各色相在 OKLCH 裡解）。第二輪的粉筆色都在 6.3–8.1:1、相鄰最近只差 1.02 倍，
+     灰階與紅綠色弱下會混在一起。下限 3.5 不是 3.0：.main 的擦痕不隨內容捲動，最亮處（粉筆白 5.5% 疊板面）上也要有 3:1。
+     順序讓工具圓餅（1..8）與標籤圓餅（3,1,4,5,6,7,2,8）都明暗交錯：一般、綠色弱、紅色弱下相鄰最近 1.23 倍 */
+  --chart-cat-1: #F2F0E7;
+  --chart-cat-2: #A6DF9A;
+  --chart-cat-3: #B696EF;
+  --chart-cat-4: #84CAF2;
+  --chart-cat-5: #D98546;
+  --chart-cat-6: #F8E06A;
+  --chart-cat-7: #F39AAE;
+  --chart-cat-8: #AC8660;
+  /* outcome 長條：committed 天藍、tested 黃、in-progress 橘、quick-qa 粉紅，unknown 暗粉筆灰；名稱寫在段內。
+     相鄰最近 1.20 倍（紅色弱下的天藍與黃） */
+  --chart-outcome-committed: #84CAF2;
+  --chart-outcome-tested: #F8E06A;
+  --chart-outcome-in-progress: #D98546;
+  --chart-outcome-quick-qa: #F39AAE;
+  --chart-outcome-unknown: #898F88;
+  --chart-usage-sessions: #94D0F4;
+  --chart-usage-tokens: #F8E06A;
+  --chart-efficiency: #B9E39A;
+  --chart-heat: #F8E06A;
+  /* 字體：不打包新字型。拉丁字用系統 UI 字體，程式碼用 app 已帶的 Fira Code，標題用 macOS 內建的 Chalkduster
+     （Windows 退到內建的 Segoe Print，沒在 Windows 試過）。中文用楷體-繁（Kaiti TC）：macOS 用到才下載，沒下載過的 Mac
+     退到泛用字族（sans-serif 是蘋方）；Windows 用內建的標楷體（DFKai-SB）。樣稿寫的 BiauKai 不是 Chromium 認得的字族名
+     （macOS 標楷體叫 BiauKaiTC），樣稿實際畫出來的就是楷體-繁 */
+  --font-hand-cjk: 'Kaiti TC', 'DFKai-SB', serif;
+  --font-display: 'Chalkduster', 'Segoe Print', 'Kaiti TC', 'DFKai-SB', cursive;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Kaiti TC', 'DFKai-SB', sans-serif;
+  --font-code: 'Fira Code', 'Kaiti TC', 'DFKai-SB', monospace;
+  /* 原生的單選、勾選、日期選擇器用粉筆黃，不用系統藍 */
+  accent-color: #F8E06A;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-bubble: 6px;
+  --shadow-card: none;
+  --shadow-bubble: none;
+}
+
+[data-theme="board"] ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+}
+
+[data-theme="board"] ::-webkit-scrollbar-thumb:hover {
+  background: #6B8A78;
+}
+
+/* 搜尋命中：黃色粉筆波浪底線，不塗螢光底 */
+[data-theme="board"] mark {
+  background: transparent;
+  color: var(--chalk-yellow);
+  text-decoration: underline wavy var(--chalk-yellow);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  padding: 0;
+}

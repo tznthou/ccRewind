@@ -618,10 +618,16 @@ const WOOD_SURFACES: Surface[] = [
 
 /** 健康度長條段內的名稱畫在 outcome 色上（裁決 21） */
 const OUTCOME_CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-outcome-'))
-/** 圖形色（裁決 17）：:root 的每個 --chart-*（chartColorTokens.test.ts 鎖住黑板區塊跟 :root 同一組） */
+/**
+ * 圖形色（裁決 17）：:root 的每個 --chart-*（chartColorTokens.test.ts 鎖住黑板區塊跟 :root 同一組），加上泡泡左緣的熱度條
+ * （--color-heat-*；畫出來是 color-mix 的濃淡，這裡量的是最濃那一格）
+ */
 const CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-'))
+const GRAPHIC_TOKENS = [...CHART_TOKENS, '--color-heat-positive', '--color-heat-negative']
 const CHART_MIN_ON_BOARD = 3.5
 const CHART_MIN_ON_SMUDGE = 3.0
+/** 兩個色條要分得開的距離（RGB 歐氏距離；實畫面的色條像素檢查用同一個門檻分辨熱度條與已捨棄條） */
+const COLOR_BARS_MIN_DISTANCE = 40
 
 /** 黑板生效的 token；ThemeId 還沒有黑板時是斷言失敗（不是 TypeError） */
 function boardTokens(): Record<string, string> {
@@ -634,6 +640,7 @@ describe('黑板的對比', () => {
     expect(Object.keys(BOARD_USAGE_SURFACES).sort()).toEqual([...USAGE_TOKENS].sort())
     expect(OUTCOME_CHART_TOKENS).toHaveLength(5)
     expect(CHART_TOKENS.length).toBeGreaterThan(OUTCOME_CHART_TOKENS.length)
+    expect(GRAPHIC_TOKENS.every(name => name in ROOT), '熱度色在 :root 要有定義').toBe(true)
     // 擦痕最亮處 = 粉筆白 5.5% 疊板面：拿 spike 的值算，要是母計畫量到的 #214A36（巢狀的淡底也照這個算法）
     const spike = { '--color-bg': '#15402C', '--color-text': '#F2F0E7', '--color-bg-sidebar': '#0E3221' }
     expect(resolveSurface(spike, SMUDGE).color.map(Math.round)).toEqual([0x21, 0x4a, 0x36, 1])
@@ -677,7 +684,16 @@ describe('黑板的對比', () => {
     expect(low, `黑板段內名稱（${b['--color-segment-label-text']}）對比不足：\n${low.join('\n')}`).toEqual([])
   })
 
-  it.each(CHART_TOKENS)(`黑板 %s 對板面至少 ${CHART_MIN_ON_BOARD}:1、對擦痕最亮處至少 ${CHART_MIN_ON_SMUDGE}:1`, name => {
+  it('黑板熱度負值跟已捨棄分支的粉紅分得開（裁決 25：粉紅只留給已捨棄，熱度負值改粉筆橘）', () => {
+    const b = boardTokens()
+    const [r1, g1, b1] = tokenColor(b, '--color-heat-negative')
+    const [r2, g2, b2] = tokenColor(b, '--chalk-pink')
+    const distance = Math.hypot(r1 - r2, g1 - g2, b1 - b2)
+    expect(distance, `--color-heat-negative（${b['--color-heat-negative']}）與 --chalk-pink（${b['--chalk-pink']}）距離 ${distance.toFixed(1)}`)
+      .toBeGreaterThanOrEqual(COLOR_BARS_MIN_DISTANCE)
+  })
+
+  it.each(GRAPHIC_TOKENS)(`黑板 %s 對板面至少 ${CHART_MIN_ON_BOARD}:1、對擦痕最亮處至少 ${CHART_MIN_ON_SMUDGE}:1`, name => {
     const b = boardTokens()
     const board = tokenColor(b, '--color-bg')
     const smudge = resolveSurface(b, SMUDGE).color
