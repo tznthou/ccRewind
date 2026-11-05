@@ -19,26 +19,33 @@ import { formatTokens } from '../../src/renderer/utils/formatTokens'
  *
  * 字寬是事實：各主題刻度字型在 12px 的字寬，2026-11-05 在 app 裡量（複製一個縱軸刻度的 <text>、逐字換文字，
  * 量 getBoundingClientRect 的寬度）。刻度字型就是內文字型（--font-body），當天三個主題實測都是。
- * 整串比逐字加總窄一點（字距調整，最多 0.27px），所以逐字加總是上界。換字型或加主題時「每個主題的內文字型都在
- * 字寬表裡」會紅：用同樣的方法量新字型補進來（系統字型在每個平台不一樣，每個平台都量、取最寬的）。
+ * 字距調整只會讓整串變窄：同一天量過兩種字型的 13 × 13 個字對，刻度裡會出現的字對沒有一個是正的（Plus Jakarta Sans
+ * 縮最多的是 "74"，−1.09px；IBM Plex Sans 唯一正的是 "K." +0.12px，刻度裡 K 後面不會再有字），所以逐字加總是上界。
+ * 換字型或加主題時「每個主題的內文字型都在字寬表裡」會紅：用同樣的方法量新字型的字寬與字對補進來
+ * （系統字型在每個平台不一樣，每個平台都量、取最寬的）。
  *
- * 已知抓不到：圖表外層的元素另外設 font-family（刻度字會繼承它，不是 --font-body）；只認具名匯入的 YAxis 與
- * 圖表元件（同 chartTooltips.test.ts）。width、刻度字級、tickSize／tickMargin、圖表 margin 要寫成數字，
- * 其他寫法看不出能放多寬，直接列成問題。
+ * 已知抓不到：圖表外層的元素設了字型相關的屬性（font-family、font-weight、letter-spacing…都會繼承到刻度字）；
+ * 只認具名匯入的 YAxis 與圖表元件（同 chartTooltips.test.ts）。<YAxis> 只能用 AXIS_PROPS_OK 裡的屬性，
+ * width、刻度字級、tickSize／tickMargin、圖表 margin 要寫成數字，其他寫法看不出能放多寬，直接列成問題。
  */
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
 
-// recharts 的預設值從套件讀（3.10.1：tickSize 6、tickMargin 2、YAxis width 60、圖表 margin 四邊 5），升版改了這裡跟著算
+// recharts 的預設值與刻度產生器從套件讀，升版改了這裡跟著算（3.10.1 的值釘在「從 recharts 讀到的預設值」那條）
 const requireCjs = createRequire(import.meta.url)
 const AXIS_DEFAULTS = (requireCjs('recharts/lib/cartesian/CartesianAxis') as {
   defaultCartesianAxisProps: { tickSize: number; tickMargin: number }
 }).defaultCartesianAxisProps
-const YAXIS_DEFAULT_WIDTH = (requireCjs('recharts/lib/cartesian/YAxis') as { yAxisDefaultProps: { width: number } })
-  .yAxisDefaultProps.width
+const YAXIS_DEFAULTS = (requireCjs('recharts/lib/cartesian/YAxis') as {
+  yAxisDefaultProps: { width: number; tickCount: number; allowDecimals: boolean }
+}).yAxisDefaultProps
 const CHART_DEFAULT_MARGIN = (requireCjs('recharts/lib/chart/CartesianChart') as {
   defaultCartesianChartProps: { margin: { left: number; right: number } }
 }).defaultCartesianChartProps.margin
+// 數字軸的 domain 有 'auto'（YAxis 預設 [0, 'auto']）時，刻度由它產生（recharts 的 state/selectors/axisSelectors.js）
+const { getNiceTickValues } = requireCjs('recharts/lib/util/scale/getNiceTickValues') as {
+  getNiceTickValues: (domain: [number, number], tickCount: number, allowDecimals: boolean, mode: string) => unknown[]
+}
 
 /** 各主題刻度字型 12px 的字寬（px），2026-11-05 在 app 裡量 */
 const GLYPH_WIDTH_12PX: Record<string, Record<string, number>> = {
@@ -54,29 +61,43 @@ const GLYPH_WIDTH_12PX: Record<string, Record<string, number>> = {
   },
 }
 
-/** 同一次量的整串寬度：逐字加總要比它寬一點點（上界），差太多就是表抄錯了 */
+/**
+ * 同一次量的整串寬度：逐字加總不能比它窄（上界），寬太多就是表抄錯了。
+ * 寬多少看字距調整：含 "74" 的 "740.0K" 寬 1.10px，其他幾串不到 0.27px
+ */
 const MEASURED_WHOLE_12PX: Record<string, Record<string, number>> = {
-  'Plus Jakarta Sans': { '500.0K': 45.031, '240.0K': 43.492, '750.0K': 42.523, '1400.0M': 51.828 },
+  'Plus Jakarta Sans': { '500.0K': 45.031, '240.0K': 43.492, '740.0K': 41.852, '750.0K': 42.523, '1400.0M': 51.828 },
   'IBM Plex Sans': { '500.0K': 39.68, '1400.0M': 49.016 },
 }
 
 /**
- * 每個縱軸最長的刻度長什麼樣（key：src/renderer 底下的路徑#yAxisId，沒給 yAxisId 是 recharts 預設的 0）。
+ * 每個縱軸最長的刻度（key：src/renderer 底下的路徑#yAxisId，沒給 yAxisId 是 recharts 預設的 0）。
+ * format 是那個軸的 tickFormatter（沒寫是 null，刻度就是數字本身），values 用它印成刻度字，寫兩個以上就取最寬的。
  * 刻度是 recharts 挑的整齊數字（250K、350M 這類），不會是 999,999 這種被 formatTokens 進位成 "1000.0K" 的值，
- * 所以 K 最多三位整數。寫兩個以上就取最寬的。
+ * 所以 K 最多三位整數。資料能到多少要從刻度回推：recharts 會把最上面一格往上取整（資料 80 億畫成 8000.0M，
+ * 多 1 就是 10000.0M），最上面一格常常比資料大；「資料上限 → 最上面一格」那條把下面用到的邊界釘住。
  */
-const LONGEST_TICKS: Record<string, string[]> = {
-  // 對話長度：一次呼叫的 context 最多 1M
-  'components/TokenBudget/ContextGrowthChart.tsx#0': [formatTokens(999_900), formatTokens(9_900_000)],
-  // 每天的 session 數：當作少於 1000；session 少的時候 recharts 會挑 0.25、0.75、2.25 這種小數刻度
-  'components/Dashboard/UsageTrendChart.tsx#sessions': [String(999), String(2.25)],
-  // 每天的 token 數：當作少於 100 億（formatTokens 沒有 B，再多就是 8 個字的 "10000.0M"）
-  'components/Dashboard/UsageTrendChart.tsx#tokens': [formatTokens(999_900), formatTokens(9_999_900_000)],
+const LONGEST_TICKS: Record<string, { format: ((n: number) => string) | null; values: number[] }> = {
+  // 對話長度：一次呼叫的 context 最多 1M，最上面一格是 "1.0M"
+  'components/TokenBudget/ContextGrowthChart.tsx#0': { format: formatTokens, values: [999_900, 9_900_000] },
+  // 每天的 session 數：刻度到 "999"，資料最多 800 場（801 場最上面一格就是 1000）；
+  // session 少的時候 recharts 會挑 0.25、0.75、2.25 這種小數刻度
+  'components/Dashboard/UsageTrendChart.tsx#sessions': { format: null, values: [999, 2.25] },
+  // 每天的 token 數：刻度到 "9999.9M"，資料最多 80 億（再多 1，最上面一格就是 8 個字的 "10000.0M"）
+  'components/Dashboard/UsageTrendChart.tsx#tokens': { format: formatTokens, values: [999_900, 9_999_900_000] },
   // 每則訊息平均的 token：一次呼叫的 context 最多 1M
-  'components/Dashboard/EfficiencyTrendChart.tsx#0': [formatTokens(999_900), formatTokens(9_900_000)],
+  'components/Dashboard/EfficiencyTrendChart.tsx#0': { format: formatTokens, values: [999_900, 9_900_000] },
 }
 
+/** 宣告的最長刻度印出來的字 */
+const longestSamples = (key: string): string[] => LONGEST_TICKS[key].values.map(v => (LONGEST_TICKS[key].format ?? String)(v))
+
 const CHART_KINDS = ['AreaChart', 'BarChart', 'ComposedChart', 'LineChart', 'ScatterChart']
+/**
+ * <YAxis> 上算得到的屬性。其他屬性 recharts 會套到每個刻度字上（字型、字距、dx、textAnchor、style、className…），
+ * 或改掉刻度的字（unit、ticks、domain、allowDecimals…），這裡都算不到
+ */
+const AXIS_PROPS_OK = ['yAxisId', 'orientation', 'width', 'tick', 'tickFormatter', 'tickLine', 'axisLine', 'tickSize', 'tickMargin', 'hide']
 /** tick 物件裡不影響字寬的屬性；其他（fontFamily、fontWeight、letterSpacing…）會讓字寬表不準 */
 const TICK_KEYS_OK = ['fontSize', 'fill']
 
@@ -86,6 +107,8 @@ interface YAxisFacts {
   /** 能放多寬（px）；看不出來是 null，原因在 problems */
   room: number | null
   fontSize: number | null
+  /** tickFormatter 的原始碼（沒寫是 null） */
+  formatter: string | null
   problems: string[]
 }
 
@@ -140,29 +163,39 @@ function scanYAxes(file: string, source: string): YAxisFacts[] {
   }
   const kind = (el: ts.JsxOpeningLikeElement) => recharts.get(el.tagName.getText(sf))
 
-  const axes: (YAxisFacts & { chart: ts.Node | undefined; side: string | null })[] = []
+  const axes: (YAxisFacts & { chart: ts.Node | undefined; side: string | null; hidden: boolean; drawsTicks: boolean })[] = []
   const visit = (node: ts.Node): void => {
     if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && kind(node) === 'YAxis') {
       const problems: string[] = []
       const { attrs, spread } = attributes(node, sf)
+      const isTrue = (name: string) =>
+        attrs.has(name) && (attrs.get(name) === null || attrs.get(name)?.kind === ts.SyntaxKind.TrueKeyword)
+      // hide 的軸不畫也不佔位；tick={false} 的軸不畫刻度字，但軸寬照算（recharts 排版只跳過 hide 與 mirror 的軸）
+      const hidden = isTrue('hide')
+      const drawsTicks = !hidden && attrs.get('tick')?.kind !== ts.SyntaxKind.FalseKeyword
       if (spread) problems.push('有 {...} 展開的屬性，看不出寫了什麼')
+      for (const name of attrs.keys()) {
+        if (!AXIS_PROPS_OK.includes(name)) problems.push(`<YAxis> 的 ${name} 會套到刻度字上或改變刻度，這裡沒算`)
+      }
       const id = attrs.has('yAxisId') ? text(attrs.get('yAxisId')) : '0'
       if (id === null) problems.push('yAxisId 要寫成字串或數字')
       const side = attrs.has('orientation') ? text(attrs.get('orientation')) : 'left'
       if (side !== 'left' && side !== 'right') problems.push('orientation 要寫成 "left" 或 "right"')
-      const width = attrs.has('width') ? num(attrs.get('width')) : YAXIS_DEFAULT_WIDTH
+      const width = attrs.has('width') ? num(attrs.get('width')) : YAXIS_DEFAULTS.width
       if (width === null) problems.push('width 要寫成數字')
       const tickSize = attrs.has('tickSize') ? num(attrs.get('tickSize')) : AXIS_DEFAULTS.tickSize
       const tickMargin = attrs.has('tickMargin') ? num(attrs.get('tickMargin')) : AXIS_DEFAULTS.tickMargin
       if (tickSize === null || tickMargin === null) problems.push('tickSize／tickMargin 要寫成數字')
-      for (const name of ['mirror', 'angle']) if (attrs.has(name)) problems.push(`${name} 會改刻度的位置或寬度，這裡沒算`)
-      const tick = objectLiteral(attrs.get('tick'))
+      const formatter = attrs.has('tickFormatter') ? (attrs.get('tickFormatter')?.getText(sf) ?? '') : null
       let fontSize: number | null = null
-      if (!tick) problems.push('tick 要寫成 { fontSize: 數字, fill } 物件（沒寫字級就跟著內文字級變）')
-      else {
-        fontSize = num(tick.get('fontSize'))
-        if (fontSize === null) problems.push('tick.fontSize 要寫成數字')
-        for (const k of tick.keys()) if (!TICK_KEYS_OK.includes(k)) problems.push(`tick 的 ${k} 會改字寬，字寬表沒算到`)
+      if (drawsTicks) {
+        const tick = objectLiteral(attrs.get('tick'))
+        if (!tick) problems.push('tick 要寫成 { fontSize: 數字, fill } 物件（沒寫字級就跟著內文字級變）')
+        else {
+          fontSize = num(tick.get('fontSize'))
+          if (fontSize === null) problems.push('tick.fontSize 要寫成數字')
+          for (const k of tick.keys()) if (!TICK_KEYS_OK.includes(k)) problems.push(`tick 的 ${k} 會改字寬，字寬表沒算到`)
+        }
       }
       // 往上找包著它的圖表，讀那一側的 margin
       let chart: ts.Node | undefined = node.parent
@@ -188,22 +221,27 @@ function scanYAxes(file: string, source: string): YAxisFacts[] {
         key: `${file}#${id}`,
         room,
         fontSize,
+        formatter,
         problems,
         chart,
         side,
+        hidden,
+        drawsTicks,
       })
     }
     ts.forEachChild(node, visit)
   }
   visit(sf)
-  // 同一張圖同一側有兩個縱軸時，裡面那個的外側不是 margin，上面的算法不成立
+  // 同一張圖同一側有兩個佔位的縱軸時，裡面那個的外側不是 margin，上面的算法不成立
   for (const a of axes) {
-    if (a.chart && axes.some(b => b !== a && b.chart === a.chart && b.side === a.side)) {
+    if (!a.hidden && a.chart && axes.some(b => b !== a && !b.hidden && b.chart === a.chart && b.side === a.side)) {
       a.problems.push(`同一張圖的 ${a.side} 側有兩個以上縱軸，這裡沒算`)
       a.room = null
     }
   }
-  return axes.map(a => ({ where: a.where, key: a.key, room: a.room, fontSize: a.fontSize, problems: a.problems }))
+  return axes
+    .filter(a => a.drawsTicks)
+    .map(a => ({ where: a.where, key: a.key, room: a.room, fontSize: a.fontSize, formatter: a.formatter, problems: a.problems }))
 }
 
 let scanned: Promise<YAxisFacts[]> | undefined
@@ -241,14 +279,29 @@ function firstFamily(value: string): string {
   return value.split(',')[0].trim().replace(/^(['"])(.*)\1$/, '$2')
 }
 
+/** 會改字寬的屬性。font-kerning、text-rendering 只會關掉字距調整，整串變回逐字加總，不會超過上界 */
+const FONT_PROP =
+  /(?<![-\w])(font|font-family|font-size|font-size-adjust|font-weight|font-style|font-stretch|font-width|font-variant(?:-[\w-]+)?|font-feature-settings|font-variation-settings|letter-spacing|word-spacing)\s*:/
+/** 會選到刻度字的選擇器：recharts 的 class，或 svg、text、tspan 元素 */
+const TICK_SELECTOR = /recharts|cartesian-axis|(?:^|[\s>+~,(])(?:svg|text|tspan)(?=$|[\s.#:[>+~,)])/
+
+/** 選到刻度字、又改了字寬的規則 */
+function fontOverrides(file: string, css: string): string[] {
+  const out: string[] = []
+  for (const m of stripCssComments(css).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
+    if (TICK_SELECTOR.test(m[1]) && FONT_PROP.test(m[2])) out.push(`${file}: ${m[1].trim()}`)
+  }
+  return out
+}
+
 describe('縱軸的刻度字放得下', () => {
-  it('字寬表跟同一次量的整串寬度對得上：逐字加總比整串寬一點點', () => {
+  it('字寬表跟同一次量的整串寬度對得上：逐字加總不比整串窄，最多寬一個字距調整', () => {
     expect(Object.keys(MEASURED_WHOLE_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
     for (const [font, strings] of Object.entries(MEASURED_WHOLE_12PX)) {
       for (const [s, whole] of Object.entries(strings)) {
         const sum = [...s].reduce((acc, c) => acc + GLYPH_WIDTH_12PX[font][c], 0)
         expect(sum - whole, `${font} "${s}"`).toBeGreaterThanOrEqual(0)
-        expect(sum - whole, `${font} "${s}"`).toBeLessThan(0.3)
+        expect(sum - whole, `${font} "${s}"`).toBeLessThan(1.2)
       }
     }
   })
@@ -261,14 +314,8 @@ describe('縱軸的刻度字放得下', () => {
     expect([...families].sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
   })
 
-  it('沒有樣式另外改 recharts 的字型、字級或字距（字寬表量的是內文字型）', async () => {
-    const offenders: string[] = []
-    const FONT_PROP = /(?<![-\w])(font|font-family|font-size|font-weight|font-style|font-stretch|font-variant(?:-[\w-]+)?|font-feature-settings|letter-spacing|word-spacing)\s*:/
-    for (const { file, css } of await readCss()) {
-      for (const m of css.matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-        if (/recharts/.test(m[1]) && FONT_PROP.test(m[2])) offenders.push(`${file}: ${m[1].trim()}`)
-      }
-    }
+  it('沒有樣式另外改刻度字的字型、字級或字距（字寬表量的是內文字型）', async () => {
+    const offenders = (await readCss()).flatMap(({ file, css }) => fontOverrides(file, css))
     expect(offenders).toEqual([])
   })
 
@@ -282,9 +329,11 @@ describe('縱軸的刻度字放得下', () => {
     expect(axis, `找不到 ${key}`).toBeDefined()
     if (!axis) return
     expect(axis.problems, axis.where).toEqual([])
+    // 宣告的最長刻度要用軸實際印字的方式印
+    expect(axis.formatter, `${axis.where} 的 tickFormatter`).toBe(LONGEST_TICKS[key].format?.name ?? null)
     const short: string[] = []
     for (const [font, glyphs] of Object.entries(GLYPH_WIDTH_12PX)) {
-      for (const sample of LONGEST_TICKS[key]) {
+      for (const sample of longestSamples(key)) {
         const need = (widestWidth(sample, glyphs) * (axis.fontSize ?? NaN)) / 12
         if (!(need <= (axis.room ?? NaN))) short.push(`${font} "${sample}" 最寬要 ${need.toFixed(2)}px，軸只放得下 ${axis.room}px`)
       }
@@ -293,8 +342,30 @@ describe('縱軸的刻度字放得下', () => {
   })
 
   it('從 recharts 讀到的預設值（3.10.1；升版改了這裡會紅，核對新值後改這裡，上面的算法已經跟著用新值）', () => {
-    expect({ ...AXIS_DEFAULTS, width: YAXIS_DEFAULT_WIDTH, left: CHART_DEFAULT_MARGIN.left, right: CHART_DEFAULT_MARGIN.right })
-      .toMatchObject({ tickSize: 6, tickMargin: 2, width: 60, left: 5, right: 5 })
+    expect({
+      ...AXIS_DEFAULTS,
+      width: YAXIS_DEFAULTS.width,
+      tickCount: YAXIS_DEFAULTS.tickCount,
+      allowDecimals: YAXIS_DEFAULTS.allowDecimals,
+      left: CHART_DEFAULT_MARGIN.left,
+      right: CHART_DEFAULT_MARGIN.right,
+    }).toMatchObject({ tickSize: 6, tickMargin: 2, width: 60, tickCount: 5, allowDecimals: true, left: 5, right: 5 })
+  })
+
+  it('資料上限 → 最上面一格：recharts 往上取整後還在宣告的最長刻度以內，多 1 就超出', () => {
+    const ticks = (max: number) =>
+      getNiceTickValues([0, max], YAXIS_DEFAULTS.tickCount, YAXIS_DEFAULTS.allowDecimals, 'adaptive').map(Number)
+    const top = (max: number) => Math.max(...ticks(max))
+    // 呼叫方式跟 app 一樣：2026-11-05 在 app 裡量的使用量趨勢，畫的就是這五個刻度
+    expect(ticks(1.4e9).map(formatTokens)).toEqual(['0', '350.0M', '700.0M', '1050.0M', '1400.0M'])
+    // 每天的 token 數：80 億畫成 8000.0M；多 1 就是 8 個字的 10000.0M
+    expect(formatTokens(top(8e9))).toBe('8000.0M')
+    expect(formatTokens(top(8e9 + 1))).toBe('10000.0M')
+    // 每天的 session 數：800 場畫成 800；801 場就是 1000
+    expect(top(800)).toBe(800)
+    expect(top(801)).toBe(1000)
+    // 對話長度到 1M：最上面一格是 1.0M
+    expect(formatTokens(top(1_000_000))).toBe('1.0M')
   })
 
   it('最寬的刻度：每一位換成最寬的數字，其他字照表', () => {
@@ -304,44 +375,71 @@ describe('縱軸的刻度字放得下', () => {
     expect(() => widestWidth('1.0B', glyphs)).toThrow('字寬表沒有「B」')
   })
 
-  it('掃描器：讀得到寬度、字級、預設值與那一側的 margin，看不出來的寫法列成問題', () => {
+  it('CSS 檢查：選到 recharts 元素或 svg、text、tspan 的規則改了字寬就算，其他不算', () => {
+    const css = [
+      '.recharts-text { font-family: serif }',
+      '.chart text { letter-spacing: 1px }',
+      'svg tspan { font-weight: 700 }',
+      '[class*="cartesian-axis-tick"] { font-size: 14px }',
+      ':global(.recharts-cartesian-axis-tick-value) { font-variation-settings: "wght" 700 }',
+      '@media (min-width: 1px) { .x text { font-size-adjust: 0.5 } }',
+      '.recharts-surface { overflow: visible }',
+      '.textMuted { font-weight: 700 }',
+      '.icon svg { width: 16px }',
+      '/* .recharts-text { font-family: serif } */',
+    ].join('\n')
+    expect(fontOverrides('x.css', css)).toEqual([
+      'x.css: .recharts-text',
+      'x.css: .chart text',
+      'x.css: svg tspan',
+      'x.css: [class*="cartesian-axis-tick"]',
+      'x.css: :global(.recharts-cartesian-axis-tick-value)',
+      'x.css: .x text',
+    ])
+  })
+
+  it('掃描器：讀得到寬度、字級、formatter、預設值與那一側的 margin；不畫刻度字的軸跳過；看不出來的寫法列成問題', () => {
     const src = [
       "import { AreaChart, LineChart, YAxis, YAxis as Axis } from 'recharts'",
       'const a = (',
       '  <AreaChart margin={{ top: 4, right: 8, left: 3, bottom: 0 }}>',
-      '    <YAxis tick={{ fontSize: 12, fill: c }} width={50} />',
+      '    <YAxis tick={{ fontSize: 12, fill: c }} width={50} tickFormatter={formatTokens} />',
       '    <Axis yAxisId="r" orientation="right" tick={{ fontSize: 11 }} width={40} tickMargin={4} />',
+      '    <YAxis yAxisId="h" hide />',
       '  </AreaChart>',
       ')',
       'const b = (',
       '  <LineChart>',
       '    <YAxis yAxisId={1} tick={{ fontSize: 12 }} />',
-      '    <YAxis yAxisId={2} tick={{ fontSize: 12, fontFamily: f }} width="auto" mirror />',
+      '    <YAxis yAxisId={2} tick={{ fontSize: 12, fontFamily: f }} width="auto" mirror unit="/msg" />',
+      '    <YAxis yAxisId="n" orientation="right" tick={false} />',
       '  </LineChart>',
       ')',
-      'const c = <YAxis tick={t} width={40} />',
+      'const c = <YAxis tick={t} width={40} letterSpacing={1} />',
     ].join('\n')
     const axes = scanYAxes('x.tsx', src)
-    expect(axes.map(a => [a.where, a.key, a.room, a.fontSize])).toEqual([
-      // 50 − 6 − 2 + 左邊 margin 3
-      ['x.tsx:4', 'x.tsx#0', 45, 12],
+    expect(axes.map(a => [a.where, a.key, a.room, a.fontSize, a.formatter])).toEqual([
+      // 50 − 6 − 2 + 左邊 margin 3；隱藏的 h 軸不佔位，左側還是只有這一個
+      ['x.tsx:4', 'x.tsx#0', 45, 12, 'formatTokens'],
       // 40 − 6 − 4 + 右邊 margin 8
-      ['x.tsx:5', 'x.tsx#r', 38, 11],
-      // 沒寫 width、margin：recharts 預設 60 − 6 − 2 + 5；但同一側有兩個軸
-      ['x.tsx:10', 'x.tsx#1', null, 12],
-      ['x.tsx:11', 'x.tsx#2', null, 12],
-      ['x.tsx:14', 'x.tsx#0', null, null],
+      ['x.tsx:5', 'x.tsx#r', 38, 11, null],
+      // 左側有兩個佔位的軸；tick={false} 的 n 軸不畫刻度字，不列出
+      ['x.tsx:11', 'x.tsx#1', null, 12, null],
+      ['x.tsx:12', 'x.tsx#2', null, 12, null],
+      ['x.tsx:16', 'x.tsx#0', null, null, null],
     ])
     expect(axes[0].problems).toEqual([])
     expect(axes[1].problems).toEqual([])
     expect(axes[2].problems).toEqual(['同一張圖的 left 側有兩個以上縱軸，這裡沒算'])
     expect(axes[3].problems).toEqual([
+      '<YAxis> 的 mirror 會套到刻度字上或改變刻度，這裡沒算',
+      '<YAxis> 的 unit 會套到刻度字上或改變刻度，這裡沒算',
       'width 要寫成數字',
-      'mirror 會改刻度的位置或寬度，這裡沒算',
       'tick 的 fontFamily 會改字寬，字寬表沒算到',
       '同一張圖的 left 側有兩個以上縱軸，這裡沒算',
     ])
     expect(axes[4].problems).toEqual([
+      '<YAxis> 的 letterSpacing 會套到刻度字上或改變刻度，這裡沒算',
       'tick 要寫成 { fontSize: 數字, fill } 物件（沒寫字級就跟著內文字級變）',
       '不在 recharts 的圖表元件裡',
     ])
