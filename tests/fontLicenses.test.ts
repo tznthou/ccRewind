@@ -41,7 +41,7 @@ function readManifest(): FontEntry[] {
   return (JSON.parse(readFileSync(MANIFEST, 'utf8')) as { fonts: FontEntry[] }).fonts
 }
 
-/** 授權檔原樣保存(IBM 的是 CRLF), 比對前統一成 LF */
+/** 授權檔原樣保存, 有的是 CRLF(以前打包的 IBM Plex 那份就是), 比對前統一成 LF */
 function readLicense(name: string): string | null {
   const p = path.join(LICENSE_DIR, name)
   return existsSync(p) ? readFileSync(p, 'utf8').replace(/\r\n/g, '\n') : null
@@ -74,7 +74,7 @@ function reservedNameClauses(notice: string): string[] {
 
 /**
  * OFL 1.1 本文(標題到結尾, 拿掉分隔線、壓縮空白)的 SHA-256。SIL 官方的 OFL.txt
- * (https://openfontlicense.org/documents/OFL.txt, 2026-11-03 抓)與五份打包的授權檔都是這個值。
+ * (https://openfontlicense.org/documents/OFL.txt, 2026-11-03 抓)與每份打包的授權檔都是這個值。
  * 只檢查幾段文字的話, 砍掉一半的授權檔也會過(2026-11-03 審查實測)。
  */
 const OFL_BODY_SHA256 = '70006bea3c19ca31505acc2ab97296f48cccbf972825a66d81321f1474e30ebf'
