@@ -159,3 +159,47 @@ describe('打包字型的授權', () => {
     expect(problems).toEqual([])
   })
 })
+
+/**
+ * 解析器直接吃字串的案例: 2026-11 刪掉 IBM Plex 之後, 打包的授權檔都沒有宣告保留字型名稱,
+ * 「保留字型名稱照授權檔登記」那條只剩負例, 解析器壞到一律回空也照樣綠(突變實測)。每條各釘一種寫法。
+ */
+describe('保留字型名稱的解析', () => {
+  it.each([
+    // 刪掉的 OFL-IBMPlex.txt 第一行
+    {
+      label: 'IBM 原句: 雙引號、句尾沒有句點',
+      notice: 'Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"',
+      name: 'Plex',
+    },
+    // SIL 官方 OFL.txt 範本開頭兩行的格式, 佔位字換成名稱
+    {
+      label: 'SIL 範本: 名稱不加引號',
+      notice: 'Copyright (c) 2020, Example Type Foundry (https://example.com),\nwith Reserved Font Name Example Sans.',
+      name: 'Example Sans',
+    },
+    // 2026-11-03 盲審之後的負向案例: 要求 Name 後面接空白的版本整個漏掉
+    {
+      label: 'Name 後面接冒號',
+      notice: 'Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)\nwith Reserved Font Name: "Fira".',
+      name: 'Fira',
+    },
+    // Adobe Source Han Sans 的 LICENSE.txt 開頭(2026-11-03 盲審抓的原文, 取到第一個句點)
+    {
+      label: 'Adobe: Font 與 Name 之間換行、單引號',
+      notice: "Copyright 2014-2025 Adobe (http://www.adobe.com/), with Reserved Font\nName 'Source'.",
+      name: 'Source',
+    },
+  ])('$label', ({ notice, name }) => {
+    const clauses = reservedNameClauses(notice)
+    expect(clauses).toHaveLength(1)
+    expect(clauses[0]).toContain(name)
+  })
+
+  it('沒宣告的聲明抽不出任何一段, 就算有 reserved、Font 這些字', () => {
+    const notice =
+      'Copyright 2020 The Example Project Authors (https://github.com/example/example). All rights reserved.\n\n' +
+      'This Font Software is licensed under the SIL Open Font License, Version 1.1.'
+    expect(reservedNameClauses(notice)).toEqual([])
+  })
+})
