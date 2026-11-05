@@ -130,6 +130,7 @@ const TEXT_COLOR_TOKENS = new Map<string, string>([
   ['--color-outcome-badge-text', 'themeContrast：徽章'],
   ['--color-system-label', '系統訊息的標籤（沒有對比測試）'],
   ['--color-code-text', '程式碼區塊，在深色的 --color-code-bg 上（沒有對比測試）'],
+  ['--color-code-comment', 'themeContrast：程式碼註解（蓋掉 atom-one-dark 的 .hljs-comment／.hljs-quote）'],
   ['--color-bg', '危險按鈕 hover：錯誤色底配頁面底色的字，同一對顏色由錯誤色那條守'],
   ['--color-border', '搜尋篩選中間的分隔線「|」：裝飾，aria-hidden'],
   ['--color-accent', '只准終端機限定的更新橫幅（上面那條）'],

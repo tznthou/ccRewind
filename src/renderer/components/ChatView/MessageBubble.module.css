@@ -87,6 +87,12 @@
   padding: 0;
 }
 
+/* atom-one-dark 的註解色是配它自己的 #282c34，在主題的程式碼底上太暗：換成主題的註解色（斜體照舊） */
+.content :global(.hljs-comment),
+.content :global(.hljs-quote) {
+  color: var(--color-code-comment);
+}
+
 .content :global(:not(pre) > code) {
   background-color: var(--color-code-inline-bg);
   padding: 1px 4px;

@@ -294,3 +294,28 @@ describe('佈景主題 A：時間線的對比', () => {
     expect(low, `時間線徽章（${t[BADGE_TEXT]} 配 ${t[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
   })
 })
+
+/**
+ * 程式碼註解（2026-11-05）：MarkdownRenderer 對每個主題都載 highlight.js 的 atom-one-dark.css，MessageBubble 把 .hljs 的底改透明，
+ * 程式碼區塊的底是主題的 --color-code-bg。atom-one-dark 的註解色 #5c6370 是配它自己的 #282c34（在那上面也只有 2.32:1），
+ * 在 --color-code-bg 上：時間線 2.42、檔案室 2.53、終端機 3.02 → 註解與引用改用主題的 --color-code-comment。
+ * atom-one-dark 其他 token 的字色在這三種底上都過 4.5（最低是 #e06c75 在時間線的 4.58），這裡只守被換掉的那一色。
+ */
+const MESSAGE_BUBBLE_CSS = read('../../src/renderer/components/ChatView/MessageBubble.module.css')
+
+describe('程式碼註解的對比', () => {
+  it.each(THEME_IDS)('%s：--color-code-comment 在程式碼底（--color-code-bg）上至少 4.5:1', theme => {
+    const t = THEMES[theme]
+    expect(t['--color-code-comment'], `${theme} 沒有 --color-code-comment`).toBeDefined()
+    const low = lowContrast(t['--color-code-comment'], [{ label: '--color-code-bg', color: surface(t, '--color-code-bg') }])
+    expect(low, `${theme} 的程式碼註解（${t['--color-code-comment']} 配 ${t['--color-code-bg']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it('MessageBubble 用 --color-code-comment 蓋掉 atom-one-dark 的 .hljs-comment 與 .hljs-quote', () => {
+    const css = MESSAGE_BUBBLE_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+    const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)].map(m => ({ selector: m[1], body: m[2] }))
+    const hit = rules.find(r => /\.hljs-comment\b/.test(r.selector) && /\.hljs-quote\b/.test(r.selector)
+      && /(?<![-\w])color\s*:\s*var\(\s*--color-code-comment\s*\)/.test(r.body))
+    expect(hit, 'MessageBubble.module.css 沒有同時蓋 .hljs-comment 與 .hljs-quote 的 color: var(--color-code-comment)').toBeDefined()
+  })
+})
