@@ -60,8 +60,10 @@
   overflow-y: auto;
 }
 
-/* 程式碼區塊：跟 MessageBubble 的 .content 同一組規則（themeContrast「每個畫 MarkdownRenderer 的地方」守著）。
-   沒有這組時，highlight.js 的 atom-one-dark 原樣畫在它自己的 #282c34 上：註解 #5c6370 只有 2.32:1。行內程式碼不動 */
+/* 程式碼區塊：跟 MessageBubble 的 .content 同一組規則（底、字色、註解色由 themeContrast「每個畫 MarkdownRenderer 的地方」守著；
+   終端機的虛線框照抄，沒有測試）。每個主題都套，檔案室、終端機也一起換（刻意不照裁決 5）。行內程式碼不動。
+   沒有這組時：有標語言的程式碼照 highlight.js atom-one-dark 畫在它自己的 #282c34 上（註解 #5c6370 只有 2.32:1），
+   沒標語言的只是頁面上的等寬字、沒有框 */
 .content :global(pre) {
   background-color: var(--color-code-bg);
   color: var(--color-code-text);
@@ -87,6 +89,11 @@
 .content :global(.hljs-comment),
 .content :global(.hljs-quote) {
   color: var(--color-code-comment);
+}
+
+/* 終端機的思考區塊底（--color-bg）跟程式碼底只差 1.08:1：跟訊息的程式碼區塊一樣加虛線框 */
+:global([data-theme="terminal"]) .content :global(pre) {
+  border: 1px dashed var(--color-border);
 }
 
 /* Theme A — Archive: hard shadow（與 ToolBlock 視覺一致） */
