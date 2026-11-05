@@ -117,7 +117,7 @@ Built for depth, not breadth.
 
 | Feature | Description |
 |---------|-------------|
-| **Three Themes** | Archive, Timeline, and Terminal themes, one-click toggle |
+| **Two Themes** | Timeline and Blackboard, one-click toggle |
 | **Active Time** | Session duration prioritizes active time (excluding >5min idle periods), with wall-clock time shown in parentheses. Dashboard averages use active time |
 | **Update Notification** | Detects new GitHub releases on launch, one-click to open download page |
 | **Virtual Scrolling** | Handles large session lists smoothly (@tanstack/react-virtual) |
@@ -175,20 +175,25 @@ In the conversation view, press "Show Token Budget" and the panel reads top to b
 
 > **About the screenshots**: they were taken in the app, but the data is synthetic: the projects, the conversations and the token counts are all made up, shaped so that one session shows a compaction, all three causes of a cache break and a context over 200K. It is nobody's real usage. The data comes from [`scripts/readme-fixture.mjs`](scripts/readme-fixture.mjs), and the same data reproduces these screenshots.
 
-### Three Themes
+### Two Themes
 
-Switch between three visual themes with one click. Below is the same demo session's Token Budget panel (the sentence, the number cards and the conversation length chart) in each theme.
+Switch between two visual themes with one click: **Timeline** is a light, cool-toned layout; **Blackboard** is a dark theme that draws the whole app as a blackboard:
+
+- Chalk-white text on a dark green board, with highlights in chalk yellow; the selected session in the sidebar is circled in yellow chalk, and page titles and chart curves have a rough chalk edge
+- Titles use the chalk font Chalkduster (built into macOS) and Chinese text uses Kaiti TC; the app does not bundle these fonts, so a computer without them falls back to system fonts
+- In a conversation, the jump-to-top and jump-to-bottom buttons are drawn as two erasers; where the conversation was compacted, the summary sits in a yellow chalk frame with the note "The board was wiped here" on its edge
+- The Blackboard theme has only been checked on macOS so far
+
+Below is the same demo session's Token Budget panel (the sentence, the number cards and the conversation length chart) in each theme.
 
 <table>
   <tr>
-    <td align="center"><strong>📂 Archive</strong></td>
     <td align="center"><strong>🕐 Timeline</strong></td>
-    <td align="center"><strong>💻 Terminal</strong></td>
+    <td align="center"><strong>🖍️ Blackboard</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/theme-archive-en.webp" alt="The Token Budget panel in the Archive theme (warm-toned file cabinet style): the sentence, the number cards and the conversation length chart" width="320" /></td>
-    <td><img src="docs/theme-timeline-en.webp" alt="The Token Budget panel in the Timeline theme (cool-toned timeline style): the sentence, the number cards and the conversation length chart" width="320" /></td>
-    <td><img src="docs/theme-terminal-en.webp" alt="The Token Budget panel in the Terminal theme (dark terminal style): the sentence, the number cards and the conversation length chart" width="320" /></td>
+    <td><img src="docs/theme-timeline-en.webp" alt="The Token Budget panel in the Timeline theme (cool-toned timeline style): the sentence, the number cards and the conversation length chart" width="400" /></td>
+    <td><img src="docs/theme-board-en.webp" alt="The Token Budget panel in the Blackboard theme (dark green board, chalk text): the sentence, the number cards and the conversation length chart" width="400" /></td>
   </tr>
 </table>
 
@@ -328,7 +333,7 @@ ccRewind/
 │   │   │   ├── Archaeology/   # Cross-session archaeology: FileHistoryDrawer, RelatedSessionsPanel
 │   │   │   ├── Storage/       # Storage management: overview cards, project breakdown bars, exclusion rules, unified Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget panel: summary, conversation length chart, events and advice, pie chart, heat bar
-│   │   │   ├── ThemeSwitcher/ # Three-theme toggle
+│   │   │   ├── ThemeSwitcher/ # Theme toggle (Timeline / Blackboard)
 │   │   │   ├── FontScaleSwitcher/ # Three-tier font zoom with ARIA radio keyboard pattern
 │   │   │   ├── LiveRegion/    # Global aria-live announcements (search results, sync status)
 │   │   │   ├── ErrorBoundary/ # Two layers: app shell and every individual message

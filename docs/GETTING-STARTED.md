@@ -103,7 +103,7 @@ Sidebar 最上方的搜尋列支援兩種模式（右側 radio 切換）：
 
 - **Dashboard**（四格方塊圖示）：跨 Session 分析儀表板——使用趨勢、專案健康度、未收尾的對話、工具/標籤分佈、工作模式熱力圖
 - **Storage**（圓柱圖示）：索引資料庫管理——DB 大小、專案佔用、排除規則、資料庫壓縮
-- **ThemeSwitcher**：三種主題一鍵切換——檔案室 Archive / 時間線 Timeline / 終端回憶 Terminal
+- **ThemeSwitcher**：兩種主題一鍵切換——時間線 Timeline / 黑板 Blackboard
 
 ---
 
