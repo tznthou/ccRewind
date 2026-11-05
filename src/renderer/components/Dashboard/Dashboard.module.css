@@ -429,3 +429,32 @@
 :global([data-theme="board"]) .rangeButton {
   font-family: var(--font-display);
 }
+
+/* 健康度長條（裁決 21：段夠寬的在段內寫 outcome 名稱）：長條加大到 220×18（ProjectHealth.tsx 的 BOARD_BAR_PX 是同一個寬度），
+   段與段之間切一道板面色的縫（同圓餅的縫，段才不只靠顏色分） */
+:global([data-theme="board"]) .healthBar {
+  width: 220px;
+  height: 18px;
+  border-radius: 4px;
+}
+
+:global([data-theme="board"]) .healthBarSegment {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+}
+
+:global([data-theme="board"]) .healthBarSegment + .healthBarSegment {
+  box-shadow: inset 2px 0 0 var(--color-bg);
+}
+
+/* 段內的 outcome 名稱（只有黑板會畫）：黑字在每個 outcome 色上都至少 6.35:1。寬度估算在 segmentLabel.ts（padding 要跟這裡一樣） */
+.segmentLabel {
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  color: var(--color-segment-label-text);
+  white-space: nowrap;
+  padding: 0 4px;
+}

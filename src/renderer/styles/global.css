@@ -109,6 +109,12 @@
   --chart-marker-warning: #f59e0b;
   --chart-marker-info: #3b82f6;
   --chart-cost-heat: #f59e0b;
+  /* recharts 沒傳就自己畫的字面色（3.10.1 的預設值）：圓餅每片的框、Area 的 hover 圓點外圈、軸線與刻度線、Tooltip 的游標線。
+     元件改傳這幾個 token（TokenBudget/chartConstants.ts），時間線的值照舊 */
+  --chart-slice-gap: #fff;
+  --chart-dot-ring: #fff;
+  --chart-axis: #666;
+  --chart-cursor: #ccc;
 
   /* Spacing */
   --space-xs: 4px;
@@ -282,6 +288,21 @@ mark {
   --chart-usage-tokens: #F8E06A;
   --chart-efficiency: #B9E39A;
   --chart-heat: #F8E06A;
+  /* Token Budget 的圓餅 4 片頭尾相接：用上面的粉筆圖表色明暗交錯（黃、木、白、橘；一般、綠色弱、紅色弱下相鄰最近 2.02 倍，
+     樣稿的天藍、粉紅、白、黃只有 1.03）。new input 照樣稿用白，output 照時間線用暖色 */
+  --chart-token-cache-read: #F8E06A;
+  --chart-token-cache-creation: #AC8660;
+  --chart-token-new-input: #F2F0E7;
+  --chart-token-output: #D98546;
+  /* context 曲線上快取中斷的點、建議清單的左框與淡底：warning 深橘（曲線是粉筆黃，淺橘跟它只差 1.30 倍）、info 天藍 */
+  --chart-marker-warning: #D98546;
+  --chart-marker-info: #84CAF2;
+  --chart-cost-heat: #F8E06A;
+  /* recharts 預設色的黑板值：圓餅的縫與 hover 圓點外圈是板面色，軸線與游標線是粉筆灰（跟刻度字同色） */
+  --chart-slice-gap: var(--color-bg);
+  --chart-dot-ring: var(--color-bg);
+  --chart-axis: var(--color-text-muted);
+  --chart-cursor: var(--color-text-muted);
   /* 字體：不打包新字型。拉丁字用系統 UI 字體，程式碼用 app 已帶的 Fira Code，標題用 macOS 內建的 Chalkduster
      （Windows 退到內建的 Segoe Print，沒在 Windows 試過）。中文用楷體-繁（Kaiti TC）：macOS 用到才下載，沒下載過的 Mac
      退到泛用字族（sans-serif 是蘋方）；Windows 用內建的標楷體（DFKai-SB）。樣稿寫的 BiauKai 不是 Chromium 認得的字族名
@@ -306,6 +327,17 @@ mark {
 
 [data-theme="board"] ::-webkit-scrollbar-thumb:hover {
   background: #6B8A78;
+}
+
+/* recharts（全域 class 名）：粉筆質感只套在資料線上。套在實心的面積、圓餅與長條上，斑點挖掉的像素多到顏色比圖例淡一截。
+   圓餅片與片之間的縫加寬到 3px，片才不只靠顏色分（縫的顏色是 --chart-slice-gap，元件傳的） */
+[data-theme="board"] .recharts-area-curve {
+  stroke-width: 2.5px;
+  filter: url(#chalk);
+}
+
+[data-theme="board"] .recharts-pie-sector path {
+  stroke-width: 3px;
 }
 
 /* 搜尋命中：黃色粉筆波浪底線，不塗螢光底 */

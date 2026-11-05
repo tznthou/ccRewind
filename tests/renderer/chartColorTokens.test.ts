@@ -230,6 +230,50 @@ const BEFORE: Record<string, string> = {
   '--chart-marker-warning': '#f59e0b',
   '--chart-marker-info': '#3b82f6',
   '--chart-cost-heat': '#f59e0b',
+  // recharts 3.10.1 沒傳時自己畫的字面色（黑板計畫 PR2 改動 6）：圓餅每片的框（polar/Pie.js）、Area 的 hover 圓點外圈
+  // （component/ActivePoints.js）、軸線與刻度線（cartesian/CartesianAxis.js）、Tooltip 的游標線（component/Cursor.js）
+  '--chart-slice-gap': '#fff',
+  '--chart-dot-ring': '#fff',
+  '--chart-axis': '#666',
+  '--chart-cursor': '#ccc',
+}
+
+/**
+ * recharts 沒傳就畫自己的字面色（上面 BEFORE 的最後四個）。「沒有寫死的顏色」看不到它們（不在我們的原始碼裡），
+ * 主題也換不到 → 會畫的元件都要傳主題 token（時間線的 token 值就是 recharts 的預設值，畫面不變）。
+ * 軸線、刻度線傳 false（不畫）也算；Tooltip 的游標線只在直角座標圖畫，圓餅圖的 Tooltip 不用傳。
+ */
+const RECHARTS_DEFAULT_PROPS: Record<string, string[]> = {
+  Pie: ['stroke'],
+  XAxis: ['axisLine', 'tickLine'],
+  YAxis: ['axisLine', 'tickLine'],
+  Area: ['activeDot'],
+}
+const CARTESIAN_CHART = /<(AreaChart|BarChart|LineChart|ComposedChart)\b/
+
+/** 會畫 recharts 預設色、卻沒傳對應屬性的元件（`檔案:行 元件 缺的屬性`），以及掃到的元件數（防空過） */
+function missingRechartsProps(sources: Source[]): { missing: string[]; seen: Record<string, number> } {
+  const missing: string[] = []
+  const seen: Record<string, number> = {}
+  for (const { file, text } of sources) {
+    if (!file.endsWith('.tsx')) continue
+    const required: Record<string, string[]> = CARTESIAN_CHART.test(text) ? { ...RECHARTS_DEFAULT_PROPS, Tooltip: ['cursor'] } : RECHARTS_DEFAULT_PROPS
+    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+    const visit = (node: ts.Node): void => {
+      if (ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) {
+        const tag = node.tagName.getText(sf)
+        if (tag in required) {
+          seen[tag] = (seen[tag] ?? 0) + 1
+          const attrs = new Set(node.attributes.properties.flatMap(p => (ts.isJsxAttribute(p) ? [p.name.getText(sf)] : [])))
+          const lacking = required[tag].filter(name => !attrs.has(name))
+          if (lacking.length) missing.push(`${file}:${sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1} ${tag} ${lacking.join(',')}`)
+        }
+      }
+      ts.forEachChild(node, visit)
+    }
+    visit(sf)
+  }
+  return { missing, seen }
 }
 
 /** `color-mix(in srgb, var(--x) P%, transparent)` 的 P；格式或 token 不對就紅 */
@@ -343,6 +387,36 @@ describe('圖表色走 CSS 變數', () => {
       'B.tsx:4 rgba(59, 130, 246, ',
       'c.ts:1 #f59e0b',
     ])
+  })
+
+  it('recharts 會自己畫預設色的元件都傳了主題 token（圓餅的框、軸線與刻度線、直角座標圖的游標線、hover 圓點外圈）', async () => {
+    const { missing, seen } = missingRechartsProps(await collect())
+    // 掃不到元件時「沒有缺」會空著通過：儀表板與 Token Budget 現在有 2 個圓餅、4 個 Area、3 張直角座標圖（7 個軸）
+    expect(seen.Pie, '圓餅').toBeGreaterThanOrEqual(2)
+    expect(seen.Area, 'Area').toBeGreaterThanOrEqual(4)
+    expect(seen.Tooltip, '直角座標圖的 Tooltip').toBeGreaterThanOrEqual(3)
+    expect((seen.XAxis ?? 0) + (seen.YAxis ?? 0), '軸').toBeGreaterThanOrEqual(7)
+    expect(missing, `要傳主題 token（時間線的值 = recharts 預設）：\n${missing.join('\n')}`).toEqual([])
+  })
+
+  it('抓得到沒傳的屬性；傳 false 算有傳；圓餅圖的 Tooltip 不用傳游標線', () => {
+    const { missing } = missingRechartsProps([
+      {
+        file: 'A.tsx',
+        text: [
+          'export const A = () => (',
+          '  <AreaChart>',
+          '    <XAxis tickLine={false} />',
+          '    <YAxis axisLine={false} tickLine={false} />',
+          '    <Tooltip />',
+          '    <Area stroke="var(--x)" />',
+          '  </AreaChart>',
+          ')',
+        ].join('\n'),
+      },
+      { file: 'P.tsx', text: 'export const P = () => <PieChart><Pie data={[]} /><Tooltip /></PieChart>' },
+    ])
+    expect(missing).toEqual(['A.tsx:3 XAxis axisLine', 'A.tsx:5 Tooltip cursor', 'A.tsx:6 Area activeDot', 'P.tsx:1 Pie stroke'])
   })
 
   it('at-rule 裡包規則照常掃；CSS nesting 直接報錯，不靜默跳過外層的宣告', () => {

@@ -1,5 +1,7 @@
 import { useMemo } from 'react'
 import type { ProjectHealth as ProjectHealthType } from '../../../shared/types'
+import { useTheme } from '../../context/ThemeContext'
+import { SCALE_VALUES, useFontScale } from '../../context/FontScaleContext'
 import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
 import { lastSegment } from '../../utils/pathDisplay'
@@ -10,7 +12,11 @@ import {
   OUTCOME_I18N_KEY,
   OUTCOME_KEYS,
 } from './outcomeColors'
+import { segmentLabelFits } from './segmentLabel'
 import styles from './Dashboard.module.css'
+
+/** 黑板的長條寬（Dashboard.module.css 黑板的 .healthBar 寫死同一個值）：段夠寬的才在段內寫 outcome 名稱（裁決 21） */
+const BOARD_BAR_PX = 220
 
 interface Props {
   data: ProjectHealthType[]
@@ -41,6 +47,9 @@ function TrendArrow({ recent, previous }: { recent: number; previous: number }) 
 
 export default function ProjectHealthComponent({ data }: Props) {
   const { t } = useI18n()
+  const { theme } = useTheme()
+  const { scale } = useFontScale()
+  const labelled = theme === 'board'
   const items = useMemo(() => data.slice(0, 10), [data])
 
   if (items.length === 0) {
@@ -78,13 +87,18 @@ export default function ProjectHealthComponent({ data }: Props) {
                     const count = dist[key]
                     if (count === 0) return null
                     const outcomeKey = DISTRIBUTION_KEY_TO_OUTCOME[key]
+                    const name = t(OUTCOME_I18N_KEY[outcomeKey])
                     return (
                       <div
                         key={key}
                         className={styles.healthBarSegment}
                         style={{ width: `${(count / total) * 100}%`, background: OUTCOME_COLORS[outcomeKey] }}
-                        title={`${t(OUTCOME_I18N_KEY[outcomeKey])}: ${count}`}
-                      />
+                        title={`${name}: ${count}`}
+                      >
+                        {labelled && segmentLabelFits(name, count / total, BOARD_BAR_PX, SCALE_VALUES[scale]) && (
+                          <span className={styles.segmentLabel}>{name}</span>
+                        )}
+                      </div>
                     )
                   })}
                 </div>

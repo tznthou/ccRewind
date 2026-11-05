@@ -11,7 +11,7 @@ import {
   chartRows, defaultLimit, eventItems, legendItems, timelineMarkers, tooltipContent,
   type ChartRow, type LegendId, type SessionFacts, type Translate,
 } from './sessionStory'
-import { CHART_TOOLTIP_STYLE, MARKER_COLORS } from './chartConstants'
+import { CHART_ACTIVE_DOT, CHART_AXIS_LINE, CHART_CURSOR, CHART_TOOLTIP_STYLE, MARKER_COLORS } from './chartConstants'
 import { ChartEventIcon, EventIcon } from './EventIcon'
 import styles from './TokenBudget.module.css'
 
@@ -115,6 +115,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
             allowDecimals={false}
             tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
             tickLine={false}
+            axisLine={CHART_AXIS_LINE}
           />
           <YAxis
             tickFormatter={formatTokens}
@@ -124,7 +125,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
             // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
             width={56}
           />
-          <Tooltip content={props => <ChartTooltip {...props} titles={titles} t={t} />} />
+          <Tooltip cursor={CHART_CURSOR} content={props => <ChartTooltip {...props} titles={titles} t={t} />} />
           {limitLine && (
             <ReferenceLine
               y={limitLine.value}
@@ -154,6 +155,7 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
             fill="var(--color-accent)"
             fillOpacity={0.16}
             isAnimationActive={!disableAnimation}
+            activeDot={CHART_ACTIVE_DOT}
           />
           {markers.breaks.map(b => (
             <ReferenceDot

@@ -623,7 +623,9 @@ const OUTCOME_CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('-
  * （--color-heat-*；畫出來是 color-mix 的濃淡，這裡量的是最濃那一格）
  */
 const CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-'))
-const GRAPHIC_TOKENS = [...CHART_TOKENS, '--color-heat-positive', '--color-heat-negative']
+/** 畫的是底色：圓餅片與片之間的縫、hover 圓點外圈（把點跟線隔開）。不是圖形，不量對比；黑板上要是板面色 */
+const GAP_TOKENS = ['--chart-slice-gap', '--chart-dot-ring']
+const GRAPHIC_TOKENS = [...CHART_TOKENS.filter(name => !GAP_TOKENS.includes(name)), '--color-heat-positive', '--color-heat-negative']
 const CHART_MIN_ON_BOARD = 3.5
 const CHART_MIN_ON_SMUDGE = 3.0
 /** 兩個色條要分得開的距離（RGB 歐氏距離；實畫面的色條像素檢查用同一個門檻分辨熱度條與已捨棄條） */
@@ -641,6 +643,7 @@ describe('黑板的對比', () => {
     expect(OUTCOME_CHART_TOKENS).toHaveLength(5)
     expect(CHART_TOKENS.length).toBeGreaterThan(OUTCOME_CHART_TOKENS.length)
     expect(GRAPHIC_TOKENS.every(name => name in ROOT), '熱度色在 :root 要有定義').toBe(true)
+    expect(GAP_TOKENS.filter(name => !CHART_TOKENS.includes(name)), '排除的縫要是 :root 現有的圖表 token').toEqual([])
     // 擦痕最亮處 = 粉筆白 5.5% 疊板面：拿 spike 的值算，要是母計畫量到的 #214A36（巢狀的淡底也照這個算法）
     const spike = { '--color-bg': '#15402C', '--color-text': '#F2F0E7', '--color-bg-sidebar': '#0E3221' }
     expect(resolveSurface(spike, SMUDGE).color.map(Math.round)).toEqual([0x21, 0x4a, 0x36, 1])
@@ -682,6 +685,11 @@ describe('黑板的對比', () => {
     expect(b['--color-segment-label-text'], '黑板沒有 --color-segment-label-text').toBeDefined()
     const low = lowContrast(b['--color-segment-label-text'], [{ label: name, color: over(tokenColor(b, name), tokenColor(b, '--color-bg')) }])
     expect(low, `黑板段內名稱（${b['--color-segment-label-text']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(GAP_TOKENS)('黑板 %s 是板面色（卡片透明，縫要跟周圍一樣）', name => {
+    const b = boardTokens()
+    expect(tokenColor(b, name), `黑板 ${name}（${b[name]}）`).toEqual(tokenColor(b, '--color-bg'))
   })
 
   it('黑板熱度負值跟已捨棄分支的粉紅分得開（裁決 25：粉紅只留給已捨棄，熱度負值改粉筆橘）', () => {
