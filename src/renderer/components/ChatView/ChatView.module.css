@@ -475,3 +475,50 @@
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* ============================================================
+   黑板：tasks 的狀態徽章、板擦形狀的跳頂／跳底鍵
+   ============================================================ */
+
+/* 狀態徽章（四種）拿掉底色、改粉筆虛線框（裁決 32；淡底疊在閃一下的起點上，進行中只有 4.32:1）。
+   框線取代上下各 1px 的 padding，徽章大小不變；底色表在 themeContrast.test.ts */
+:global([data-theme="board"]) .taskStatusBadge {
+  background: transparent;
+  border: 1px dashed currentColor;
+  padding: 0 5px;
+}
+
+/* 跳頂／跳底鍵是兩塊板擦（樣稿 .jb）：上 58% 深木柄、下 42% 淺毛氈，並排、墊高到粉筆槽上面。
+   粉筆白的箭頭只能畫在木柄上（對毛氈只有 1.27:1）：箭頭包在 .jumpArrow 裡、木柄色直接墊在它底下（對比量測量得到字底下的顏色），
+   行高 1 讓字框跟字一樣高、靠上對齊 → 字框的底在按鈕高的 58% 以內（19 × 字級 ≤ 20.9 × 字級；寬高、字級、padding 都跟著 --font-scale） */
+:global([data-theme="board"]) .jumpButtons {
+  flex-direction: row;
+  bottom: calc(var(--space-lg) + 22px);
+}
+
+:global([data-theme="board"]) .jumpButton {
+  width: calc(54px * var(--font-scale));
+  height: calc(36px * var(--font-scale));
+  align-items: flex-start;
+  padding-top: calc(1px * var(--font-scale));
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(var(--eraser-handle) 0 58%, var(--eraser-felt) 58%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
+}
+
+:global([data-theme="board"]) .jumpButton:hover {
+  color: var(--color-text);
+  background: linear-gradient(var(--eraser-handle-hover) 0 58%, var(--eraser-felt-hover) 58%);
+}
+
+:global([data-theme="board"]) .jumpArrow {
+  line-height: 1;
+  background: var(--eraser-handle);
+}
+
+:global([data-theme="board"]) .jumpButton:hover .jumpArrow {
+  background: var(--eraser-handle-hover);
+}

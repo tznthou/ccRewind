@@ -60,8 +60,9 @@
   overflow-y: auto;
 }
 
-/* 程式碼區塊：跟 MessageBubble 的 .content 同一組規則（底、字色、註解色由 themeContrast「每個畫 MarkdownRenderer 的地方」守著）。
-   行內程式碼不動。沒有這組時：有標語言的程式碼照 highlight.js atom-one-dark 畫在它自己的 #282c34 上（註解 #5c6370 只有 2.32:1），
+/* 程式碼區塊：跟 MessageBubble 的 .content 同一組規則（底、字色、註解色由 themeContrast「每個畫 MarkdownRenderer 的地方」守著；
+   黑板的 1.5px 框也照抄、在檔尾黑板段，框線沒有測試）。行內程式碼不動。
+   沒有這組時：有標語言的程式碼照 highlight.js atom-one-dark 畫在它自己的 #282c34 上（註解 #5c6370 只有 2.32:1），
    沒標語言的只是頁面上的等寬字、沒有框 */
 .content :global(pre) {
   background-color: var(--color-code-bg);
@@ -88,4 +89,35 @@
 .content :global(.hljs-comment),
 .content :global(.hljs-quote) {
   color: var(--color-code-comment);
+}
+
+/* emoji 換成 1em 的線條圖示（BlockIcon，兩個主題）：往下 0.125em，跟旁邊的字對齊 */
+.icon svg {
+  vertical-align: -0.125em;
+}
+
+/* ============================================================
+   黑板：思考過程是一圈粉筆虛線，標題用手寫楷體（楷體沒有斜體，硬斜會變形）
+   ============================================================ */
+:global([data-theme="board"]) .thinkingBlock {
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+  border-radius: 12px;
+}
+
+:global([data-theme="board"]) .summary {
+  font-family: var(--font-hand-cjk);
+}
+
+:global([data-theme="board"]) .label {
+  font-size: var(--font-size-sm);
+  font-style: normal;
+}
+
+:global([data-theme="board"]) .omitted {
+  font-style: normal;
+}
+
+/* 程式碼區塊的框照抄訊息那邊（MessageBubble 的黑板 pre）：思考區塊底 #15402C 跟程式碼底 #0D2F1F 只差 1.25:1，沒框看不出邊界 */
+:global([data-theme="board"]) .content :global(pre) {
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 30%, transparent);
 }

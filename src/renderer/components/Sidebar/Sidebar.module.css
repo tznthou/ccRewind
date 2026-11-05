@@ -517,3 +517,8 @@
 :global([data-theme="board"]) .remoteBadgeLink:hover {
   text-decoration-thickness: 2px;
 }
+
+/* logo 也是粉筆畫的 */
+:global([data-theme="board"]) .logo {
+  filter: url(#chalk);
+}

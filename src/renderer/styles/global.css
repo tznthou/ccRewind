@@ -243,6 +243,11 @@ mark {
   --wood-light: #DDB585;
   --wood-dark: #C99D6B;
   --wood-edge: #8B6A44;
+  /* 板擦形狀的跳頂／跳底鍵：上 58% 深木柄、下 42% 淺毛氈（hover 各亮一階）；粉筆白的箭頭只畫在木柄上 */
+  --eraser-handle: #3A2A1E;
+  --eraser-handle-hover: #4A3828;
+  --eraser-felt: #DCD6C8;
+  --eraser-felt-hover: #E8E2D4;
   /* 用途字色：同色相的粉筆色（outcome：committed 天藍、tested 黃、in-progress 橘、quick-qa 粉紅） */
   --color-outcome-committed-text: #94D0F4;
   --color-outcome-tested-text: #F8E06A;

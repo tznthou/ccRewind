@@ -7,6 +7,7 @@ import { extractThinkingBlocks, extractToolBlocks } from './contentBlocks'
 import { formatTime } from '../../utils/formatTime'
 import { highlightText } from '../../utils/highlightText'
 import { useI18n } from '../../i18n/useI18n'
+import { useTheme } from '../../context/ThemeContext'
 import { getHeatProps, type HeatInfo } from './TokenHeatGutter'
 import styles from './MessageBubble.module.css'
 
@@ -18,6 +19,7 @@ interface MessageBubbleProps {
 
 export default memo(function MessageBubble({ message, searchQuery = '', heat }: MessageBubbleProps) {
   const { t } = useI18n()
+  const { theme } = useTheme()
   const isUser = message.role === 'user'
   const isSystem = message.type === 'queue-operation'
   const toolBlocks = useMemo(() => extractToolBlocks(message.contentJson), [message.contentJson])
@@ -47,7 +49,11 @@ export default memo(function MessageBubble({ message, searchQuery = '', heat }: 
   }
 
   return (
-    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} data-abandoned={message.isAbandonedBranch || undefined} tabIndex={-1} style={heatProps?.style}>
+    <div className={`${styles.bubble} ${isUser ? styles.user : styles.assistant}`} data-message-id={message.id} data-heat={heatProps?.attr} data-abandoned={message.isAbandonedBranch || undefined} data-compact={message.isCompactSummary || undefined} tabIndex={-1} style={heatProps?.style}>
+      {/* 壓縮分界：黑板把這則畫成黃粉筆框，框上寫一句說明（是資訊，留給螢幕閱讀器讀；只有黑板有框，所以只在黑板畫） */}
+      {message.isCompactSummary && theme === 'board' && (
+        <p className={styles.compactNote} data-compact-note>{t('chatView.message.compactNote')}</p>
+      )}
       <div className={styles.header}>
         <span className={styles.role}>{isUser ? t('chatView.message.role.user') : t('chatView.message.role.assistant')}</span>
         <span className={styles.time}>{formatTime(message.timestamp)}</span>

@@ -585,7 +585,8 @@ const BOARD_USAGE_SURFACES: Record<string, Surface[]> = {
   '--color-outcome-tested-text': BOARD_SESSION_ROW,
   '--color-outcome-in-progress-text': BOARD_SESSION_ROW,
   '--color-outcome-quick-qa-text': BOARD_SESSION_ROW,
-  // .remoteBadge、.remoteBadgeLink:hover：黑板拿掉青綠淡底、改虛線框（裁決 31；淡底疊在選中列上只有 4.46、連結 hover 3.61），字直接在 session 列上
+  // .remoteBadge、.remoteBadgeLink:hover：黑板拿掉青綠淡底、跟 outcome 標籤一樣只留粉筆字（裁決 31；淡底疊在選中列上只有 4.46、連結 hover 3.61），
+  // 字直接在 session 列上
   '--color-remote-text': BOARD_SESSION_ROW,
   // Archaeology.module.css .opBadge[data-op]：黑板拿掉淡底、改虛線框（spike），在抽屜的 --color-bg 與 .timelineEntry:hover 上
   '--color-op-edit-text': plain(DRAWER_ENTRY),
@@ -594,9 +595,10 @@ const BOARD_USAGE_SURFACES: Record<string, Surface[]> = {
   '--color-op-discovery-text': plain(DRAWER_ENTRY),
   // .jaccardBadge 與 .relatedPanel 黑板都透明（spike）→ 落在對話頁的 .main 上；.relatedCard:hover
   '--color-jaccard-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
-  // ChatView.module.css 的 tasks 與 subagent 徽章：對話頁 spike 沒做、樣稿沒提 → 淡底照舊
-  '--color-task-in-progress-text': tinted('#f59e0b', 0.12, TASK_ITEM),
-  '--color-task-completed-text': tinted('#10b981', 0.12, TASK_ITEM),
+  // ChatView.module.css .taskStatusBadge：黑板拿掉淡底、改虛線框（裁決 32；淡底疊在 .taskItemFlash 起點上進行中只有 4.32），字直接在 tasks 面板上
+  '--color-task-in-progress-text': plain(TASK_ITEM),
+  '--color-task-completed-text': plain(TASK_ITEM),
+  // .subagentTypeBadge：對話頁 spike 沒做、樣稿沒提 → 紫色淡底照舊（5.07，有過）
   '--color-subagent-text': tinted('#8b5cf6', 0.1, ['--color-bg-hover']),
   // Dashboard.module.css .healthTrendUp／Down 沒有自己的底，.card 黑板透明（spike）→ .main；.healthItem:hover
   '--color-health-up-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
@@ -615,6 +617,12 @@ const WOOD_SURFACES: Surface[] = [
   ...tinted('--color-on-wood', 0.14, ['--wood-dark']),
   ...tinted('#fff0d2', 0.55, ['--wood-dark']),
 ]
+
+/**
+ * 板擦形狀的跳頂／跳底鍵（樣稿 .jb）：上 58% 深木柄、下 42% 淺毛氈。箭頭（--color-text）只畫在木柄上 —— 對毛氈只有 1.27:1，
+ * 所以箭頭包在子元素裡、木柄色直接墊在子元素上，幾何上不准掉到毛氈（計畫改動 7b，dev app 三種字級另量）。這裡量木柄平常與 hover 的色
+ */
+const ERASER_HANDLES = ['--eraser-handle', '--eraser-handle-hover']
 
 /** 健康度長條段內的名稱畫在 outcome 色上（裁決 21） */
 const OUTCOME_CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-outcome-'))
@@ -678,6 +686,13 @@ describe('黑板的對比', () => {
     expect(b['--color-on-wood'], '黑板沒有 --color-on-wood').toBeDefined()
     const low = lowContrast(b['--color-on-wood'], WOOD_SURFACES.map(s => resolveSurface(b, s)))
     expect(low, `黑板 --color-on-wood（${b['--color-on-wood']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(ERASER_HANDLES)('黑板跳頂／跳底鍵的箭頭（--color-text）在板擦木柄 %s 上至少 4.5:1', name => {
+    const b = boardTokens()
+    expect(b[name], `黑板沒有 ${name}`).toBeDefined()
+    const low = lowContrast(b['--color-text'], [{ label: name, color: surface(b, name) }])
+    expect(low, `黑板跳頂鍵的箭頭（${b['--color-text']} 配 ${b[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
   })
 
   it.each(OUTCOME_CHART_TOKENS)('黑板健康度段內的名稱（--color-segment-label-text）在 %s 上至少 4.5:1', name => {

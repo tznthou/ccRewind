@@ -337,7 +337,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
                   title={t('chatView.jump.top')}
                   aria-label={t('chatView.jump.top')}
                 >
-                  {'↑'}
+                  <span className={styles.jumpArrow}>{'↑'}</span>
                 </button>
                 <button
                   type="button"
@@ -346,7 +346,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
                   title={t('chatView.jump.bottom')}
                   aria-label={t('chatView.jump.bottom')}
                 >
-                  {'↓'}
+                  <span className={styles.jumpArrow}>{'↓'}</span>
                 </button>
               </div>
             </div>
