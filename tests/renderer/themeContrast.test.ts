@@ -285,7 +285,7 @@ describe('佈景主題 A：時間線的對比', () => {
  * 程式碼區塊（2026-11-05）：MarkdownRenderer 對每個主題都載同一份 highlight.js 樣式（下面讀 import 那行，目前是 atom-one-dark），
  * 那份樣式是配它自己的底（atom-one-dark 的 #282c34）。用 MarkdownRenderer 的元件在包住它的那層把 <pre> 的底換成 --color-code-bg、
  * 字換成 --color-code-text，.hljs 的底改透明、字色沿用 → 程式碼區塊實際的底是主題的 --color-code-bg。
- * atom-one-dark 的註解色 #5c6370 在 --color-code-bg 上只有 2.42（時間線）、2.53（檔案室）、3.02（終端機），在 #282c34 上也只有 2.32
+ * atom-one-dark 的註解色 #5c6370 在 --color-code-bg 上只有 2.42（時間線）、2.41（黑板），在 #282c34 上也只有 2.32
  * → 註解與引用改用 --color-code-comment（每個主題共用一個值，見 global.css）。樣式其餘的字色直接讀檔逐色檢查：
  * highlight.js 的 patch 會自動合併，樣式換上的顏色不到 4.5:1（或是認不得的寫法）時這裡會紅。
  * 同日盲審：思考區塊（ThinkingBlock）也用 MarkdownRenderer，原本沒有這組規則：有標語言的程式碼照 atom-one-dark 原樣畫
