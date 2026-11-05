@@ -42,7 +42,8 @@ export default function EfficiencyTrendChart({ data }: Props) {
             <YAxis
               tickFormatter={formatTokens}
               tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
-              width={52}
+              // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
+              width={56}
             />
             <Tooltip
               contentStyle={CHART_TOOLTIP_STYLE}
