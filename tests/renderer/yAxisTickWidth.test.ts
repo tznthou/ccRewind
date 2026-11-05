@@ -22,7 +22,8 @@ import { formatTokens } from '../../src/renderer/utils/formatTokens'
  * 字距調整也量了：兩種字型的 13 × 13 個字對，刻度裡會出現的字對沒有一個是正的（Plus Jakarta Sans 縮最多的是 "74"，
  * −1.09px；IBM Plex Sans 唯一正的是 "K." +0.12px，刻度裡 K 後面不會再有字），所以逐字加總是上界；
  * 每個字型的最大值記在 TICK_PAIR_KERN_MAX_12PX，正的會加進上界。換字型或加主題時「每個主題的內文字型都在字寬表裡」
- * 會紅：用同樣的方法量新字型，補進這兩張表（系統字型在每個平台不一樣，每個平台都量、取最寬的）。
+ * 會紅：用同樣的方法量新字型，補進字寬、字對、整串三張表（系統字型在每個平台不一樣，每個平台都量、取最寬的）。
+ * 同名字型換了檔案也要重量：字型檔的 SHA-256 由 fontLicenses.test.ts 守著，那邊紅的時候順便重量這裡。
  *
  * 已知抓不到：svg 外層的元素設了字型相關的屬性（font-family、font-weight、letter-spacing…都會繼承到刻度字）；
  * tickFormatter 只比名稱，同名但印法不同的函式也會過；只認具名匯入的 YAxis 與圖表元件（同 chartTooltips.test.ts）。
@@ -87,7 +88,8 @@ const MEASURED_WHOLE_12PX: Record<string, Record<string, number>> = {
  * 刻度是 recharts 挑的整齊數字（250K、350M 這類），不會是 999,999 這種被 formatTokens 進位成 "1000.0K" 的值，
  * 所以 K 最多三位整數。maxData 是資料上限：recharts 會把最上面一格往上取整（資料 80 億畫成 8000.0M，多 1 就是
  * 10000.0M），所以「資料上限畫出來的最上面一格」那條用 recharts 的刻度產生器檢查上限的最上面一格在宣告以內；
- * tight 的上限正好卡在刻度多一位的邊界，多 1 就要超出宣告（上限寫得比宣告保守，那條會紅）。
+ * tight 的上限正好卡在刻度多一位的邊界，多 1 就要超出宣告（上限寫得比宣告保守，那條會紅）。沒有 tight 的軸，
+ * maxData 只說明資料從哪來，宣告的最長刻度比它寬鬆（對話長度宣告到 "9.9M"），上限改大也不會紅。
  */
 const LONGEST_TICKS: Record<string, { format: ((n: number) => string) | null; values: number[]; maxData: number; tight?: boolean }> = {
   // 對話長度：一次呼叫的 context 最多 1M，最上面一格是 "1.0M"
@@ -251,7 +253,7 @@ function scanYAxes(file: string, source: string): YAxisFacts[] {
   visit(sf)
   // 同一張圖同一側有兩個以上縱軸時，位置要看 recharts 怎麼排，上面的算法不成立。不畫字的軸也算：
   // tick={false} 的軸照樣佔寬；hide 的軸雖然不算進圖表內框（selectChartOffsetInternal），排各軸位置時照樣算它的寬
-  // （axisSelectors 的 selectAllYAxesOffsetSteps），排在它後面的軸會被推出去
+  // （axisSelectors 的 selectAllYAxesOffsetSteps），依 yAxisId 排在它後面的軸會被推出去（recharts 照 id 排，跟 JSX 的順序無關）
   for (const a of axes) {
     if (a.chart && axes.some(b => b !== a && b.chart === a.chart && b.side === a.side)) {
       a.problems.push(`同一張圖的 ${a.side} 側有兩個以上縱軸，這裡沒算`)
@@ -301,30 +303,48 @@ function firstFamily(value: string): string {
 /** 會改字寬的屬性。font-kerning、text-rendering 只會關掉字距調整，整串變回逐字加總，不會超過上界 */
 const FONT_PROP =
   /(?<![-\w])(font|font-family|font-size|font-size-adjust|font-weight|font-style|font-stretch|font-width|font-variant(?:-[\w-]+)?|font-feature-settings|font-variation-settings|letter-spacing|word-spacing)\s*:/
+/** 會選到刻度字的選擇器：recharts 的 class，或 svg 裡的元素（svg、g、text、tspan）與通用選擇器 * */
+const TICK_SELECTOR = /recharts|cartesian-axis|(?:^|[\s>+~,(])(?:svg|g|text|tspan|\*)(?=$|[\s.#:[>+~,)])/
 /**
- * 會選到刻度字的選擇器：recharts 的 class、class 屬性選擇器裡有 tick 或 axis 的，或 svg 裡的元素（svg、g、text、tspan）
- * 與通用選擇器 *。刻度字在 svg.recharts-surface 底下的 g 圖層裡（不在 .recharts-yAxis 底下）
+ * 縱軸刻度字和它在 svg 裡各層祖先的 class（2026-11-05 在 app 裡讀的 DOM，recharts 3.10.1）：
+ * 刻度字在 svg.recharts-surface 底下的 z-index 圖層裡，不在 .recharts-yAxis 底下
  */
-const TICK_SELECTOR =
-  /recharts|cartesian-axis|\[class[~|^$*]?=[^\]]*(?:tick|axis)|(?:^|[\s>+~,(])(?:svg|g|text|tspan|\*)(?=$|[\s.#:[>+~,)])/
+const TICK_CLASS_CHAIN = [
+  'recharts-text recharts-cartesian-axis-tick-value',
+  'recharts-layer recharts-cartesian-axis-tick-label',
+  'recharts-cartesian-axis-tick-labels recharts-yAxis-tick-labels',
+  'recharts-zIndex-layer_2000',
+  'recharts-surface',
+]
+
+/**
+ * class 屬性選擇器會不會選到刻度字或它的祖先：值是任何一層 class 的一段就算（不分大小寫，^= $= ~= |= 都當 *= 看，
+ * 寧可多抓）；只寫 [class] 也算
+ */
+function classAttributeHitsTick(selector: string): boolean {
+  if (/\[\s*class\s*\]/i.test(selector)) return true
+  return [...selector.matchAll(/\[\s*class\s*[~|^$*]?=\s*(["']?)([^"'\]]*?)\1(?:\s+[is])?\s*\]/gi)]
+    .some(m => TICK_CLASS_CHAIN.some(cls => cls.toLowerCase().includes(m[2].trim().toLowerCase())))
+}
 
 /** 選到刻度字、又改了字寬的規則 */
 function fontOverrides(file: string, css: string): string[] {
   const out: string[] = []
   for (const m of stripCssComments(css).matchAll(/([^{}]*)\{([^{}]*)\}/g)) {
-    if (TICK_SELECTOR.test(m[1]) && FONT_PROP.test(m[2])) out.push(`${file}: ${m[1].trim()}`)
+    if ((TICK_SELECTOR.test(m[1]) || classAttributeHitsTick(m[1])) && FONT_PROP.test(m[2])) out.push(`${file}: ${m[1].trim()}`)
   }
   return out
 }
 
 describe('縱軸的刻度字放得下', () => {
-  it('字寬表跟同一次量的整串寬度對得上：逐字加總不比整串窄，最多寬一個字距調整；每個字型都有字對的值', () => {
+  it('字寬表跟同一次量的整串寬度對得上：逐字加總（加上正的字距）不比整串窄，最多寬一個字距調整；每個字型都有字對的值', () => {
     expect(Object.keys(MEASURED_WHOLE_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
     expect(Object.keys(TICK_PAIR_KERN_MAX_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
     for (const [font, strings] of Object.entries(MEASURED_WHOLE_12PX)) {
       for (const [s, whole] of Object.entries(strings)) {
         const sum = [...s].reduce((acc, c) => acc + GLYPH_WIDTH_12PX[font][c], 0)
-        expect(sum - whole, `${font} "${s}"`).toBeGreaterThanOrEqual(0)
+        const pairs = Math.max(0, TICK_PAIR_KERN_MAX_12PX[font]) * ([...s].length - 1)
+        expect(sum + pairs - whole, `${font} "${s}"`).toBeGreaterThanOrEqual(0)
         // 含 "74" 的整串窄 1.10px；其他不到 0.27px，0.3 才抓得到抄錯的字寬
         expect(sum - whole, `${font} "${s}"`).toBeLessThan(s.includes('74') ? 1.2 : 0.3)
       }
@@ -364,7 +384,7 @@ describe('縱軸的刻度字放得下', () => {
     expect(short, axis.where).toEqual([])
   })
 
-  it.each(Object.keys(LONGEST_TICKS))('%s：資料上限畫出來的最上面一格，在每個主題都不比宣告的最長刻度寬', key => {
+  it.each(Object.keys(LONGEST_TICKS))('%s：資料上限畫出來的最上面一格不比宣告的最長刻度寬；tight 的上限多 1 就要超出', key => {
     const { format, maxData, tight } = LONGEST_TICKS[key]
     const print = format ?? String
     for (const font of Object.keys(GLYPH_WIDTH_12PX)) {
@@ -379,6 +399,8 @@ describe('縱軸的刻度字放得下', () => {
 
   it('刻度產生器的呼叫方式跟 app 一樣：2026-11-05 在 app 裡量的使用量趨勢，畫的就是這五個刻度', () => {
     expect(ticks(1.4e9).map(formatTokens)).toEqual(['0', '350.0M', '700.0M', '1050.0M', '1400.0M'])
+    // 對話長度到 context 上限 1M，最上面一格是 "1.0M"（LONGEST_TICKS 的說明）
+    expect(formatTokens(top(1_000_000))).toBe('1.0M')
   })
 
   it('從 recharts 讀到的預設值（3.10.1；升版改了這裡會紅，核對新值後改這裡，上面的算法已經跟著用新值）', () => {
@@ -397,6 +419,7 @@ describe('縱軸的刻度字放得下', () => {
     expect(widestWidth('240.0K', glyphs, 0)).toBeCloseTo(8.789 * 4 + 3.438 + 7.852, 6)
     expect(widestWidth('12', glyphs, 0)).toBeCloseTo(8.789 * 2, 6)
     expect(widestWidth('12', glyphs, 0.5)).toBeCloseTo(8.789 * 2 + 0.5, 6)
+    expect(widestWidth('240.0K', glyphs, 0.5)).toBeCloseTo(8.789 * 4 + 3.438 + 7.852 + 0.5 * 5, 6)
     expect(widestWidth('12', glyphs, -1)).toBeCloseTo(8.789 * 2, 6)
     expect(() => widestWidth('1.0B', glyphs, 0)).toThrow('字寬表沒有「B」')
   })
@@ -410,6 +433,10 @@ describe('縱軸的刻度字放得下', () => {
       '.chart tspan { font-weight: 700 }',
       '.chart * { font-size: 14px }',
       '[class*="axis-tick"] { font-size: 14px }',
+      '[class *= "yAxis"] { letter-spacing: 1px }',
+      '[class*="yaxis" i] { font-weight: 700 }',
+      '[class$=value] { font-size: 14px }',
+      '[class] { font-weight: 700 }',
       '[class*="cartesian-axis-tick"] { font-size: 14px }',
       ':global(.recharts-cartesian-axis-tick-value) { font-variation-settings: "wght" 700 }',
       '@media (min-width: 1px) { .x text { font-size-adjust: 0.5 } }',
@@ -429,10 +456,16 @@ describe('縱軸的刻度字放得下', () => {
       'x.css: .chart tspan',
       'x.css: .chart *',
       'x.css: [class*="axis-tick"]',
+      'x.css: [class *= "yAxis"]',
+      'x.css: [class*="yaxis" i]',
+      'x.css: [class$=value]',
+      'x.css: [class]',
       'x.css: [class*="cartesian-axis-tick"]',
       'x.css: :global(.recharts-cartesian-axis-tick-value)',
       'x.css: .x text',
     ])
+    // 檔案第一條規則從第一個字就是元素選擇器
+    expect(fontOverrides('y.css', 'text { font-size: 14px }')).toEqual(['y.css: text'])
   })
 
   it('掃描器：讀得到寬度、字級、formatter、預設值與那一側的 margin；不畫刻度字的軸不列出但照樣佔位；看不出來的寫法列成問題', () => {
