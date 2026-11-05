@@ -5,8 +5,9 @@ import { fileURLToPath } from 'node:url'
 import ts from 'typescript'
 
 /**
- * recharts 預設的 tooltip 把每一項的字畫成該系列的顏色（圓餅那一塊、那條線的顏色）。系列色是寫死的，不跟主題：
- * 淺青與橘色在亮色主題的底上只有 1.3–2:1，深藍在 terminal 只有 1.8:1。
+ * recharts 預設的 tooltip 把每一項的字畫成該系列的顏色（圓餅那一塊、那條線的顏色）。系列色是圖形色、不是字色，
+ * 沒有一個主題保證它們當字讀得清楚：tooltip 的底是 --color-bg，時間線的淺青與橘色在上面只有 1.4–2.1:1，
+ * 黑板的木色與深橘也只有 3.5–4.1:1（字要 4.5:1）。
  * 所以每個 recharts 的 <Tooltip> 都要自己畫內容（content），或用 itemStyle 把字換成主題的文字色。
  *
  * 字不再是系列色之後，tooltip 就不能拿來對照「哪個顏色是哪個系列」：有兩個以上系列的圖（或圓餅的多個類別）
