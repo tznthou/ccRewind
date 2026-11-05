@@ -264,3 +264,35 @@
   outline: 2px solid var(--color-accent);
   outline-offset: -2px;
 }
+
+/* ============================================================
+   黑板：命中處是黃色粉筆波浪底線（這個 module 自己的 mark 規則會蓋過全域那條，所以這裡也要寫），
+   筆數與標籤改粉筆虛線框、不塗底
+   ============================================================ */
+:global([data-theme="board"]) .snippet :global(mark) {
+  background: transparent;
+  color: var(--chalk-yellow);
+  text-decoration: underline wavy var(--chalk-yellow);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 3px;
+  padding: 0;
+}
+
+/* .snippet 會裁切（overflow: hidden + 兩行截斷），單行命中的波浪線會被切掉 */
+:global([data-theme="board"]) .snippet {
+  padding-bottom: 4px;
+}
+
+:global([data-theme="board"]) .itemActive {
+  outline: 2px dashed color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+:global([data-theme="board"]) .group {
+  border-bottom-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+}
+
+:global([data-theme="board"]) .matchCount,
+:global([data-theme="board"]) .tagBadge {
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+}

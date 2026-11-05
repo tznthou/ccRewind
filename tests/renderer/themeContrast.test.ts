@@ -585,8 +585,8 @@ const BOARD_USAGE_SURFACES: Record<string, Surface[]> = {
   '--color-outcome-tested-text': BOARD_SESSION_ROW,
   '--color-outcome-in-progress-text': BOARD_SESSION_ROW,
   '--color-outcome-quick-qa-text': BOARD_SESSION_ROW,
-  // .remoteBadge（22%）、.remoteBadgeLink:hover（38%）：spike 沒改，青綠淡底照舊疊在 session 列上
-  '--color-remote-text': [...tinted('#14b8a6', 0.22, BOARD_SESSION_ROW), ...tinted('#14b8a6', 0.38, BOARD_SESSION_ROW)],
+  // .remoteBadge、.remoteBadgeLink:hover：黑板拿掉青綠淡底、改虛線框（裁決 31；淡底疊在選中列上只有 4.46、連結 hover 3.61），字直接在 session 列上
+  '--color-remote-text': BOARD_SESSION_ROW,
   // Archaeology.module.css .opBadge[data-op]：黑板拿掉淡底、改虛線框（spike），在抽屜的 --color-bg 與 .timelineEntry:hover 上
   '--color-op-edit-text': plain(DRAWER_ENTRY),
   '--color-op-write-text': plain(DRAWER_ENTRY),

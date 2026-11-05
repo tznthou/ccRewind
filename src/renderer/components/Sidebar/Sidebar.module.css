@@ -428,3 +428,91 @@
   background: var(--color-accent);
   border-color: var(--color-accent);
 }
+
+/* ============================================================
+   黑板：粉筆標題、黃色分區標題配粉筆底線、波浪底線標出選中的專案、黃粉筆圈出選中的 session、
+   outcome 標籤只留粉筆字、遠端徽章改虛線框
+   ============================================================ */
+:global([data-theme="board"]) .title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: calc(var(--font-size-xl) * 1.15);
+}
+
+:global([data-theme="board"]) .sectionLabel {
+  font-family: var(--font-hand-cjk);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.14em;
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .sectionLabel::after {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--chalk-yellow);
+  opacity: 0.7;
+  filter: url(#chalk);
+}
+
+:global([data-theme="board"]) .projectItem.selected {
+  background-color: transparent;
+  color: var(--chalk-yellow);
+  text-decoration: underline wavy var(--chalk-yellow);
+  text-underline-offset: 5px;
+}
+
+/* .projectName 為了省略號是 overflow: hidden：替底線留位置，列高不變 */
+:global([data-theme="board"]) .projectItem.selected .projectName {
+  padding-bottom: 8px;
+  margin-bottom: -8px;
+}
+
+/* 鍵盤游標用粉筆虛線框，不蓋掉選中 session 的黃粉筆圈 */
+:global([data-theme="board"]) .optionActive {
+  outline: 2px dashed color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+
+:global([data-theme="board"]) .sessionItem {
+  position: relative;
+  border-bottom-color: color-mix(in srgb, var(--color-text) 12%, transparent);
+}
+
+:global([data-theme="board"]) .sessionItem:hover {
+  background-color: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+/* 選中的 session：黃粉筆圈，用偽元素畫。不用 data: 圖：兩處 CSP 都沒有 img-src，data: 圖會被擋，background 簡寫還會把底色一起清掉。
+   底色（基底規則的 --color-accent-light）照留，濾鏡沒套上時也看得出選中。圈在列內縮 3–4px，碰不到列裡的字 */
+:global([data-theme="board"]) .sessionItem.selected::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border: 2.5px solid var(--chalk-yellow);
+  border-radius: 48% 52% 45% 55% / 58% 46% 54% 42%;
+  filter: url(#chalk);
+  pointer-events: none;
+}
+
+:global([data-theme="board"]) .outcomeTag[data-outcome] {
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+/* 遠端：拿掉青綠淡底、改粉筆虛線框（淡底疊在選中列上字只有 4.46:1）；可點的那種滑過時虛線變實線。
+   .tag 是 inline，框線不改列高 */
+:global([data-theme="board"]) .remoteBadge {
+  background: transparent;
+  border: 1px dashed currentColor;
+}
+
+:global([data-theme="board"]) .remoteBadgeLink:hover {
+  background: transparent;
+  border-style: solid;
+}

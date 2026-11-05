@@ -113,3 +113,9 @@
   border-color: var(--color-accent);
   color: var(--color-text);
 }
+
+/* 黑板：搜尋框嵌進板面 */
+:global([data-theme="board"]) .input {
+  background: var(--color-inset-bg);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+}

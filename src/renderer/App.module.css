@@ -69,3 +69,54 @@
   color: var(--color-text-muted);
   font-size: var(--font-size-lg);
 }
+
+/* ============================================================
+   黑板：木框（標題列、側欄邊）、板面擦痕、粉筆槽
+   ============================================================ */
+
+/* 淺色木框：重新指向切換鍵會讀的 token，並直接設 color（繼承下來的 color 已經算好，只改 --color-text 碰不到單純繼承的字）。
+   --color-on-wood 在木紋漸層暗端上 7.24:1 */
+:global([data-theme="board"]) .titleBar {
+  --color-text: var(--color-on-wood);
+  --color-text-muted: var(--color-on-wood);
+  --color-text-secondary: var(--color-on-wood);
+  --color-accent: var(--color-on-wood);
+  --color-accent-light: rgba(255, 240, 210, 0.55);
+  --color-bg-hover: color-mix(in srgb, var(--color-on-wood) 14%, transparent);
+  color: var(--color-on-wood);
+  /* 漸層下墊暗端的實心色（深字最差的那端）：對比量測讀不到漸層，沒墊的話量到的是後面的板面綠（1.53:1） */
+  background: linear-gradient(var(--wood-light), var(--wood-dark)) var(--wood-dark);
+  border-bottom: 2px solid var(--wood-edge);
+}
+
+:global([data-theme="board"]) .sidebar {
+  border-right: 10px solid var(--wood-dark);
+  box-shadow: inset -2px 0 0 var(--wood-edge);
+}
+
+/* 三團擦痕：粉筆白 5.5%／4.5%／4% 的光暈，跟著 .main 的外框、不隨內容捲動（字的對比要連最亮處一起算） */
+:global([data-theme="board"]) .main {
+  background:
+    radial-gradient(40% 26% at 26% 18%, color-mix(in srgb, var(--color-text) 5.5%, transparent), transparent 70%),
+    radial-gradient(34% 22% at 78% 58%, color-mix(in srgb, var(--color-text) 4.5%, transparent), transparent 70%),
+    radial-gradient(30% 18% at 40% 88%, color-mix(in srgb, var(--color-text) 4%, transparent), transparent 70%),
+    var(--color-bg);
+}
+
+/* 粉筆槽：.main 捲動區的最後一個 flex 子項、sticky 貼底，不會蓋住最後一列。三根粉筆（白、黃、粉紅）、木槽、木槽上緣的陰影 */
+:global([data-theme="board"]) .main::after {
+  content: '';
+  flex-shrink: 0;
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  height: 22px;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, var(--color-text) 0 46px, transparent 46px) right 260px top 3px / 46px 7px no-repeat,
+    linear-gradient(90deg, var(--chalk-yellow) 0 30px, transparent 30px) right 214px top 4px / 30px 7px no-repeat,
+    linear-gradient(90deg, var(--chalk-pink) 0 22px, transparent 22px) right 180px top 3px / 22px 7px no-repeat,
+    linear-gradient(#D2A877, #A97F52) bottom / 100% 12px no-repeat,
+    linear-gradient(rgba(0, 0, 0, 0.28), transparent) bottom 12px left 0 / 100% 6px no-repeat;
+}
