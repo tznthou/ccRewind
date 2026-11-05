@@ -11,11 +11,11 @@
 ### Fixed
 
 - **啟動時不再閃白，視窗一出現就是存好的主題與字級**（[#167](https://github.com/tznthou/ccRewind/pull/167)、[#169](https://github.com/tznthou/ccRewind/pull/169)）
-  - 以前視窗一建立就顯示，網頁畫出來之前是 Electron 預設的白底，用深色的終端機主題時，每次啟動都會先白一下。現在等網頁畫好第一幀才顯示視窗，3 秒內沒畫好也照樣顯示
-  - 讓存好的主題與字級在介面載入前就套用的兩支小腳本，打包出來的 app 一直沒帶到（主題的那支從 v0.5.0 起、字級的從 v1.10.0 起），存好的設定要等介面載入完才套上；開發版直接讀原始碼資料夾，所以一直沒發現。現在網頁的第一幀就是存好的主題與字級
+  - 以前視窗一建立就顯示，網頁畫出來之前是 Electron 預設的白底，用深色的終端機主題時，每次啟動都會先白一下。現在等網頁畫好第一幀（Electron 的 `ready-to-show` 事件）才顯示視窗；建立視窗 3 秒後還沒等到這個事件，也照樣顯示
+  - 讓存好的主題與字級在介面載入前就套用的兩支小腳本，打包出來的 app 一直沒帶到（主題的那支從 v0.5.0 起、字級的從 v1.10.0 起），存好的設定要等介面載入完才套上；開發版直接讀原始碼資料夾，不受影響。現在網頁的第一幀就是存好的主題與字級
   - 只在 macOS 上驗過：維護者用終端機主題把打包版的啟動各錄了 3 次，以前視窗出現時先有 2–3 格白畫面（34–51ms），現在 0 格。錄影是 60fps，短於約 17ms 的白畫面錄不到；Windows 沒有錄
 - **macOS 上關掉視窗、再從 Dock 打開，新視窗也會索引**（[#170](https://github.com/tznthou/ccRewind/pull/170)）：macOS 上關掉最後一個視窗後 app 還在執行，點 Dock 圖示會開一個新視窗。以前「頁面載入完成時索引」與「視窗取得焦點時重新索引」只接在啟動時的那個視窗上，重新打開的視窗不會開始索引；除非前一個視窗開始的掃描還在跑，否則也收不到索引狀態，側欄的同步列（上次同步的時間與「立即同步」鈕）不會出現。新的 session 要結束 app 再開才看得到
-- **時間線主題的圖表縱軸刻度不再被切掉**（[#171](https://github.com/tznthou/ccRewind/pull/171)）：v1.29.0 把圖表刻度的字從 11px 放大到 12px，縱軸寬度沒跟著改。Token Budget「對話長度（第幾次呼叫）」圖的刻度左邊會被切掉一截（「500.0K」寬 45px，軸只留 40px 給字）；儀表板「使用量趨勢」每天 token 數的刻度遇到「1000.0M」「2000.0M」這類數字也會被切到。時間線的字型每個數字寬度不同（「1」4.5px、「0」8.8px），刻度多寬要看剛好是哪些數字。縱軸加寬，三個主題都一樣：「對話長度」48 → 56px，「使用量趨勢」的 session 數 36 → 40px、token 數 52 → 60px，「效率趨勢」52 → 56px
+- **時間線主題的圖表縱軸刻度不再被切掉**（[#171](https://github.com/tznthou/ccRewind/pull/171)）：v1.29.0 把圖表刻度的字從 11px 放大到 12px，縱軸寬度沒跟著改。Token Budget「對話長度（第幾次呼叫）」圖的刻度左邊會被切掉一截（「500.0K」寬 45px，軸只留 40px 給字）；儀表板「使用量趨勢」每天 token 數的刻度遇到「1000.0M」「2000.0M」這類數字也會被切到。時間線的字型每個數字寬度不同（「1」4.5px、「0」8.8px），刻度多寬要看剛好是哪些數字。縱軸加寬，三個主題都一樣：「對話長度」48 → 56px，「使用量趨勢」的 session 數 36 → 40px、token 數 52 → 60px，「效率趨勢」52 → 56px；寬度照每天最多 800 個 session、80 億個 token 算，超過時刻度多一位，可能又會被切到
 
 ### Changed
 
@@ -24,7 +24,7 @@
   - **IBM Plex**：IBM Plex 保留了字型名稱「Plex」。以前打包的是修改過的版本（拿掉了 hinting，Sans 也少了寬度軸）卻沿用原名，OFL 條款 3 不允許這樣做（除非 IBM 書面同意）。現在換成 IBM 自己發布的檔案，檔案室、終端機主題會用到：macOS 上量過的畫面不變；新檔帶 TrueType hinting，Windows 上的字可能略有不同（沒在 Windows 上看過）
   - 新的 IBM Plex Mono 多了 53 個字（西里爾字母、U+3000 全形空白等 Unicode 空白、U+FFFD）。終端機主題的 session 標題用 IBM Plex Mono，這些字改由它來畫，不再借用別的字型；標題裡的全形空白因此從 1em 寬變成 0.6em
 - **依賴更新**：Electron 從 44.9.3 更新到 44.10.0（[#161](https://github.com/tznthou/ccRewind/pull/161)）；`@tanstack/react-virtual` 3.14.24（[#162](https://github.com/tznthou/ccRewind/pull/162)，同一支 PR 也把 ESLint、React、React DOM、typescript-eslint、Vite 的版本範圍調到已安裝的版本，安裝的版本不變）；開發用的 pnpm 從 11.27.0 更新到 11.28.9（[#164](https://github.com/tznthou/ccRewind/pull/164)）；lockfile 例行更新，只動到間接依賴（[#165](https://github.com/tznthou/ccRewind/pull/165)）
-- **開發**：儀表板與 Token Budget 的圖表色改成 CSS 變數（`--chart-*`），三個主題沿用原本的顏色；「工作型態」的熱力格、「輸出強度」的格子，以及 Token Budget「發生了什麼」「可以省的地方」裡項目的淡底改用 `color-mix()`，保留原本宣告的透明度，色值可能跟 1.29.0 差 1/255（[#168](https://github.com/tznthou/ccRewind/pull/168)）；視窗改成畫好才顯示後，顯示帶來的那次焦點不再讓啟動多跑一輪索引（[#169](https://github.com/tznthou/ccRewind/pull/169)）；新增測試：訊息的 Markdown 管線會濾掉危險的內容、表格與程式碼標色照常（[#163](https://github.com/tznthou/ccRewind/pull/163)），視窗的建立與 `index.ts` 的接線（[#170](https://github.com/tznthou/ccRewind/pull/170)），每個縱軸放得下它最寬的刻度（[#171](https://github.com/tznthou/ccRewind/pull/171)）
+- **開發**：儀表板與 Token Budget 的圖表色改成 CSS 變數（`--chart-*`），三個主題沿用原本的顏色；「工作型態」的熱力格、「輸出強度」的格子，以及 Token Budget「發生了什麼」「可以省的地方」裡項目的淡底改用 `color-mix()`，保留原本宣告的透明度，色值可能跟 1.29.0 差 1/255（[#168](https://github.com/tznthou/ccRewind/pull/168)）；新增測試：訊息的 Markdown 管線會濾掉危險的內容、表格與程式碼標色照常（[#163](https://github.com/tznthou/ccRewind/pull/163)），視窗的建立與 `index.ts` 的接線（[#170](https://github.com/tznthou/ccRewind/pull/170)）
 
 ## [1.29.0] - 2026-11-02
 
