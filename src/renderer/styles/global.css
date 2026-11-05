@@ -354,3 +354,8 @@ mark {
   text-underline-offset: 4px;
   padding: 0;
 }
+
+/* 連結：天藍粉筆。沒寫的話 color-scheme: dark 讓 Chromium 給深色配色的預設連結色 #9E9EFF，擦痕最亮處只有 4.19:1 */
+[data-theme="board"] a {
+  color: var(--chalk-sky);
+}

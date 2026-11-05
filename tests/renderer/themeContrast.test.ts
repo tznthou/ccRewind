@@ -576,7 +576,7 @@ const BOARD_TEXT_SURFACES: Surface[] = [
   ...tinted('--chart-marker-warning', 0.06, ['--color-bg']),
   ...tinted('--chart-marker-info', 0.06, ['--color-bg']),
 ]
-const BOARD_TEXT_TOKENS = ['--color-text-secondary', '--color-text-muted', '--color-error', '--chalk-yellow', '--chalk-pink']
+const BOARD_TEXT_TOKENS = ['--color-text-secondary', '--color-text-muted', '--color-error', '--chalk-yellow', '--chalk-pink', '--chalk-sky']
 
 /** 黑板用途 token 實際的底（選擇器同時間線那張表；寫死的淡底基色照元件 CSS） */
 const BOARD_USAGE_SURFACES: Record<string, Surface[]> = {
@@ -659,6 +659,26 @@ describe('黑板的對比', () => {
     expect(nested.label).toBe('#14b8a6 38% over --color-text 5% over --color-bg-sidebar')
     // 先疊裡層（粉筆白 5% 疊側欄）再疊外層；順序反過來是 [28, 108, 91]
     expect(nested.color.map(Math.round)).toEqual([23, 107, 90, 1])
+  })
+
+  /**
+   * 連結（2026-11-05 完成條件 1）：renderer 沒有任何 CSS 給 <a> 上色，主題設了 color-scheme: dark 時 Chromium 給深色配色的預設連結色
+   * #9E9EFF —— 黑板板面 4.88、擦痕最亮處 4.19、搜尋跳轉閃色起點（accent-light）3.65。字色 token 的掃描抓不到（沒有 color: 宣告）。
+   * 所以：這種主題要在 global.css 寫 `[data-theme="x"] a { color: var(--…) }`，而且那個 token 要在上面的字色對比清單裡。
+   */
+  it('設了 color-scheme: dark 的主題給連結明確的字色，而且那個色有對比測試', () => {
+    const block = (id: string) => {
+      const start = GLOBAL_CSS.indexOf(`[data-theme="${id}"] {`)
+      return start === -1 ? '' : GLOBAL_CSS.slice(start, GLOBAL_CSS.indexOf('\n}', start))
+    }
+    const dark = THEME_IDS.filter(id => /(?<![-\w])color-scheme\s*:\s*dark\b/.test(block(id)))
+    expect(dark, '黑板設了 color-scheme: dark').toContain('board')
+    for (const id of dark) {
+      const rule = GLOBAL_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
+        .match(new RegExp(`\\[data-theme="${id}"\\]\\s+a\\s*\\{[^}]*?(?<![-\\w])color\\s*:\\s*var\\(\\s*(--[\\w-]+)`))
+      expect(rule, `global.css 沒有 [data-theme="${id}"] a { color: var(--…) }`).not.toBeNull()
+      expect(BOARD_TEXT_TOKENS, `${id} 的連結色 ${rule?.[1]} 不在有對比測試的字色清單裡`).toContain(rule?.[1])
+    }
   })
 
   it.each(BOARD_TEXT_TOKENS)('黑板 %s 在每種會出現的底上都至少 4.5:1（含擦痕最亮處）', name => {

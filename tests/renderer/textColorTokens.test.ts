@@ -154,6 +154,7 @@ const TEXT_COLOR_TOKENS = new Map<string, string>([
   ['--color-on-wood', 'themeContrast：黑板木框上的字'],
   ['--chalk-yellow', 'themeContrast：黑板的粉筆黃字'],
   ['--chalk-pink', 'themeContrast：黑板的粉筆粉紅字'],
+  ['--chalk-sky', 'themeContrast：黑板的連結（天藍粉筆）'],
   ['--color-segment-label-text', 'themeContrast：黑板健康度長條段內的名稱'],
 ])
 
