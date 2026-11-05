@@ -505,14 +505,15 @@
   font-weight: 400;
 }
 
-/* 遠端：拿掉青綠淡底、改粉筆虛線框（淡底疊在選中列上字只有 4.46:1）；可點的那種滑過時虛線變實線。
-   .tag 是 inline，框線不改列高 */
-:global([data-theme="board"]) .remoteBadge {
+/* 遠端：拿掉青綠淡底（淡底疊在選中列上字只有 4.46:1），跟同一列的 outcome 標籤一樣只留粉筆字；
+   可點的那種本來就有底線，滑過時底線加粗當回饋 */
+:global([data-theme="board"]) .remoteBadge,
+:global([data-theme="board"]) .remoteBadgeLink:hover {
   background: transparent;
-  border: 1px dashed currentColor;
+  font-family: var(--font-display);
+  font-weight: 400;
 }
 
 :global([data-theme="board"]) .remoteBadgeLink:hover {
-  background: transparent;
-  border-style: solid;
+  text-decoration-thickness: 2px;
 }
