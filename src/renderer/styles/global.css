@@ -39,7 +39,8 @@
   /* Code blocks */
   --color-code-bg: #1E293B;
   --color-code-text: #E2E8F0;
-  /* 程式碼註解：atom-one-dark 的 #5c6370 在各主題的 --color-code-bg 上都不到 3:1，換這色（三個主題的程式碼底都 ≥ 5.7:1） */
+  /* 程式碼註解：highlight.js atom-one-dark 的 #5c6370 在 --color-code-bg 上只有 2.42（時間線）／2.53（檔案室）／3.02（終端機），
+     換這色：5.71／5.97／7.12。每個主題共用這一個值，刻意不照裁決 5（舊主題不調色）：舊主題的註解也一起調亮 */
   --color-code-comment: #94A3B8;
   --color-code-inline-bg: rgba(30, 41, 59, 0.06);
 
