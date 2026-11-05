@@ -95,11 +95,23 @@ const THEMES: Record<string, Record<string, string>> = Object.fromEntries(
   THEME_IDS.map(id => [id, { ...ROOT, ...OWN[id] }]),
 )
 
+/** token 的顏色；值是 var(--x) 的話取同一個主題的 --x（:root 的 --chart-outcome-unknown 就是 var(--color-text-muted)） */
+function tokenColor(t: Record<string, string>, token: string): Rgba {
+  let value = t[token]
+  if (value === undefined) throw new Error(`沒有 ${token}`)
+  for (let depth = 0; depth < 5; depth++) {
+    const ref = value.match(/^var\(\s*(--[\w-]+)\s*\)$/)
+    if (!ref) return parseColor(value)
+    const next = t[ref[1]]
+    if (next === undefined) throw new Error(`${token} 參照的 ${ref[1]} 沒有定義`)
+    value = next
+  }
+  throw new Error(`${token} 的 var() 參照太多層`)
+}
+
 /** 某主題的一個底色 token，半透明的話疊在該主題的 --color-bg 上 */
 function surface(t: Record<string, string>, token: string): Rgba {
-  const value = t[token]
-  if (value === undefined) throw new Error(`沒有 ${token}`)
-  return over(parseColor(value), parseColor(t['--color-bg']))
+  return over(tokenColor(t, token), tokenColor(t, '--color-bg'))
 }
 
 /** 字色在每個底色上的對比，回傳不到 4.5 的那些（`底色說明 對比`） */
@@ -123,6 +135,10 @@ describe('主題的錯誤色對比', () => {
   it('認不得的顏色寫法直接報錯，不會變成 NaN 被略過；主題清單讀得到', () => {
     expect(() => parseColor('rgb(10% 20% 30%)')).toThrow()
     expect(() => parseColor('var(--color-bg)')).toThrow()
+    // token 的 var() 參照只取同一個主題的值；參照不到或繞圈直接報錯
+    expect(tokenColor({ '--a': 'var(--b)', '--b': '#102030' }, '--a')).toEqual([16, 32, 48, 1])
+    expect(() => tokenColor({ '--a': 'var(--b)' }, '--a')).toThrow()
+    expect(() => tokenColor({ '--a': 'var(--a)' }, '--a')).toThrow()
     expect(themeIds("export type ThemeId = 'a' | 'b'")).toEqual(['a', 'b'])
     // 剛好這兩個：舊主題沒刪乾淨（ThemeId 還列著）也要紅，不只「有黑板」
     expect([...THEME_IDS].sort()).toEqual(['board', 'timeline'])
@@ -170,8 +186,9 @@ const LOGO_VALUES: Record<string, [string, string]> = {
  * ⚠️ 元件 CSS 的淡底或容器改了要同步更新這張表；真實渲染以 dev app 的 contrast_audit 為準（計畫完成條件 1）。
  * 11-01 逐一讀元件 CSS 組出來，各 token 的現況最差值跟計畫表格的審查數字逐一相同（committed 2.33、遠端 3.34、task 1.62……）。
  */
-interface Surface { container: string; tint?: { base: string; alpha: number } }
-const tinted = (base: string, alpha: number, containers: string[]): Surface[] => containers.map(container => ({ container, tint: { base, alpha } }))
+/** 底：容器 token（半透明的疊在主題的 --color-bg 上）或另一個底，上面可以再疊一層淡底（黑板的徽章淡底疊在側欄列的 hover 淡底上） */
+interface Surface { container: string | Surface; tint?: { base: string; alpha: number } }
+const tinted = (base: string, alpha: number, containers: (string | Surface)[]): Surface[] => containers.map(container => ({ container, tint: { base, alpha } }))
 const plain = (containers: string[]): Surface[] => containers.map(container => ({ container }))
 const SESSION_ROW = ['--color-bg-sidebar', '--color-bg-hover', '--color-accent-light'] // 側欄 session 列：平常（側欄底）／hover／選中
 const DRAWER_ENTRY = ['--color-bg', '--color-bg-hover'] // 檔案歷史抽屜：.drawer 底／.timelineEntry:hover
@@ -217,13 +234,13 @@ const GRAY_SURFACES: Surface[] = [
 ]
 
 function resolveSurface(t: Record<string, string>, s: Surface): { label: string; color: Rgba } {
-  const container = surface(t, s.container)
-  if (!s.tint) return { label: s.container, color: container }
+  const under = typeof s.container === 'string'
+    ? { label: s.container, color: surface(t, s.container) }
+    : resolveSurface(t, s.container)
+  if (!s.tint) return under
   // 基色可以是 hex，也可以是 token 名稱（取這個主題的值）
-  const base = s.tint.base.startsWith('--') ? t[s.tint.base] : s.tint.base
-  if (!base) throw new Error(`沒有 ${s.tint.base}`)
-  const [r, g, b] = parseColor(base)
-  return { label: `${s.tint.base} ${Math.round(s.tint.alpha * 100)}% over ${s.container}`, color: over([r, g, b, s.tint.alpha], container) }
+  const [r, g, b] = s.tint.base.startsWith('--') ? tokenColor(t, s.tint.base) : parseColor(s.tint.base)
+  return { label: `${s.tint.base} ${+(s.tint.alpha * 100).toFixed(1)}% over ${under.label}`, color: over([r, g, b, s.tint.alpha], under.color) }
 }
 
 describe('佈景主題 A：新增的 token', () => {
@@ -515,5 +532,159 @@ describe('程式碼區塊的對比', () => {
     expect(found.filter(f => f.ok).map(f => path.basename(f.file))).toEqual(expect.arrayContaining(['MessageBubble.module.css', 'ThinkingBlock.module.css']))
     const others = found.filter(f => !f.ok).map(f => `${f.file}：${f.rule}`)
     expect(others, others.join('\n')).toEqual([])
+  })
+})
+
+// ── 黑板（黑板計畫 PR2 改動 10）──────────────────────────────
+
+/**
+ * 黑板的字畫在哪：黑板的容器大多是透明的（泡泡、卡片、徽章、相關面板，對話與儀表板的外層本來就透明），字直接落在板面、側欄或抽屜上。
+ * .main（對話、儀表板、儲存空間三頁的捲動區）的背景另有三團擦痕（粉筆白 5.5%／4.5%／4% 的 radial-gradient；spike App.module.css .main），
+ * 擦痕不隨內容捲動、什麼字都可能捲到它上面 → .main 裡的字也要對擦痕最亮處（粉筆白 5.5% 疊板面，spike 的值是 #214A36）算。
+ * 亮字在越亮的底上越差：黑板最亮的容器底是 --color-bg-selected／--color-accent-light（spike 都是 #24543D）。
+ *
+ * 表照 spike（f435aaa）的 CSS 加上計畫的改寫組出來：spike 的 rgba(242, 240, 231, α) 改成 --color-text 的 color-mix、
+ * 寫死的 #0B2A1B 嵌入底改 --color-inset-bg、選中 session 保留 background-color（--color-accent-light）當記號的備援（改動 2、5）。
+ * spike 沒做的對話頁與 Token Budget 照樣稿（.draft/theme-redesign/index.html 的 .win[data-theme="board"]）；兩邊都沒提的元件照現在的 CSS。
+ * ⚠️ 元件 CSS 的底或容器改了要同步更新這張表；真實渲染以 dev app 的 contrast_audit 為準（計畫完成條件 1）。
+ */
+const SMUDGE: Surface = { container: '--color-bg', tint: { base: '--color-text', alpha: 0.055 } }
+/** .main 裡透明元件的底：板面、擦痕最亮處 */
+const BOARD_MAIN: Surface[] = [{ container: '--color-bg' }, SMUDGE]
+/** 側欄 session 列：平常（側欄底）／hover（粉筆白 5%，spike .sessionItem:hover）／選中（保留的 background-color） */
+const BOARD_SESSION_ROW: Surface[] = [
+  ...plain(['--color-bg-sidebar']),
+  ...tinted('--color-text', 0.05, ['--color-bg-sidebar']),
+  ...plain(['--color-accent-light']),
+]
+
+/**
+ * 黑板灰字、錯誤色與粉筆黃、粉紅（頁面與卡片標題、側欄分區標題、選中的專案、搜尋命中、使用者的角色名、壓縮與已捨棄的標示）會出現的底：
+ * - --color-bg：抽屜 .drawer、儲存空間的確認框 .dialog（黑板沒改底；兩個都在 .main 外，沒有擦痕）
+ * - BOARD_MAIN：對話、儀表板、儲存空間
+ * - 側欄 session 列（BOARD_SESSION_ROW）
+ * - --color-bg-hover、--color-bg-selected：各頁的 chip 與 hover（元件現在的 CSS，黑板沒改）
+ * - --color-inset-bg：嵌入板面的輸入框與下拉（搜尋框、儀表板篩選、儲存空間；spike 寫死的 #0B2A1B）
+ * - 工具區塊：嵌入底 55% 疊在 .main 上（樣稿 .tool 的 rgba(11, 42, 27, .55)）
+ * - Token Budget 建議的 warning／info 6% 淡底，疊在 .insightsPanel 的 --color-bg 上（同時間線）
+ */
+const BOARD_TEXT_SURFACES: Surface[] = [
+  ...BOARD_MAIN,
+  ...BOARD_SESSION_ROW,
+  ...plain(['--color-bg-hover', '--color-bg-selected', '--color-inset-bg']),
+  ...tinted('--color-inset-bg', 0.55, BOARD_MAIN),
+  ...tinted('--chart-marker-warning', 0.06, ['--color-bg']),
+  ...tinted('--chart-marker-info', 0.06, ['--color-bg']),
+]
+const BOARD_TEXT_TOKENS = ['--color-text-secondary', '--color-text-muted', '--color-error', '--chalk-yellow', '--chalk-pink']
+
+/** 黑板用途 token 實際的底（選擇器同時間線那張表；寫死的淡底基色照元件 CSS） */
+const BOARD_USAGE_SURFACES: Record<string, Surface[]> = {
+  // Sidebar.module.css .outcomeTag[data-outcome]：黑板拿掉淡底（spike），字直接在 session 列上
+  '--color-outcome-committed-text': BOARD_SESSION_ROW,
+  '--color-outcome-tested-text': BOARD_SESSION_ROW,
+  '--color-outcome-in-progress-text': BOARD_SESSION_ROW,
+  '--color-outcome-quick-qa-text': BOARD_SESSION_ROW,
+  // .remoteBadge（22%）、.remoteBadgeLink:hover（38%）：spike 沒改，青綠淡底照舊疊在 session 列上
+  '--color-remote-text': [...tinted('#14b8a6', 0.22, BOARD_SESSION_ROW), ...tinted('#14b8a6', 0.38, BOARD_SESSION_ROW)],
+  // Archaeology.module.css .opBadge[data-op]：黑板拿掉淡底、改虛線框（spike），在抽屜的 --color-bg 與 .timelineEntry:hover 上
+  '--color-op-edit-text': plain(DRAWER_ENTRY),
+  '--color-op-write-text': plain(DRAWER_ENTRY),
+  '--color-op-read-text': plain(DRAWER_ENTRY),
+  '--color-op-discovery-text': plain(DRAWER_ENTRY),
+  // .jaccardBadge 與 .relatedPanel 黑板都透明（spike）→ 落在對話頁的 .main 上；.relatedCard:hover
+  '--color-jaccard-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
+  // ChatView.module.css 的 tasks 與 subagent 徽章：對話頁 spike 沒做、樣稿沒提 → 淡底照舊
+  '--color-task-in-progress-text': tinted('#f59e0b', 0.12, TASK_ITEM),
+  '--color-task-completed-text': tinted('#10b981', 0.12, TASK_ITEM),
+  '--color-subagent-text': tinted('#8b5cf6', 0.1, ['--color-bg-hover']),
+  // Dashboard.module.css .healthTrendUp／Down 沒有自己的底，.card 黑板透明（spike）→ .main；.healthItem:hover
+  '--color-health-up-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
+  '--color-health-down-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
+  // ChatView.module.css .sessionIdChipCopied：chip 與 .chatView 都透明 → .main；.sessionIdChip:hover
+  '--color-copied-text': [...BOARD_MAIN, ...plain(['--color-bg-hover'])],
+}
+
+/**
+ * 木框標題列（spike App.module.css .titleBar）：字是 --color-on-wood，底是木紋漸層，最差在暗端 --wood-dark（漸層下墊的實心色也是它）；
+ * 標題列裡的鍵 hover 疊 on-wood 14%（spike 在 .titleBar 重新指向的 --color-bg-hover = rgba(35, 20, 11, 0.14)），
+ * 選中疊淺木 55%（重新指向的 --color-accent-light = rgba(255, 240, 210, 0.55)）
+ */
+const WOOD_SURFACES: Surface[] = [
+  ...plain(['--wood-dark']),
+  ...tinted('--color-on-wood', 0.14, ['--wood-dark']),
+  ...tinted('#fff0d2', 0.55, ['--wood-dark']),
+]
+
+/** 健康度長條段內的名稱畫在 outcome 色上（裁決 21） */
+const OUTCOME_CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-outcome-'))
+/** 圖形色（裁決 17）：:root 的每個 --chart-*（chartColorTokens.test.ts 鎖住黑板區塊跟 :root 同一組） */
+const CHART_TOKENS = Object.keys(ROOT).filter(name => name.startsWith('--chart-'))
+const CHART_MIN_ON_BOARD = 3.5
+const CHART_MIN_ON_SMUDGE = 3.0
+
+/** 黑板生效的 token；ThemeId 還沒有黑板時是斷言失敗（不是 TypeError） */
+function boardTokens(): Record<string, string> {
+  expect(THEMES.board, 'ThemeId 還沒有黑板（board）').toBeDefined()
+  return THEMES.board
+}
+
+describe('黑板的對比', () => {
+  it('底色表涵蓋每個用途 token；表裡的底都指得到 token 或另一個底', () => {
+    expect(Object.keys(BOARD_USAGE_SURFACES).sort()).toEqual([...USAGE_TOKENS].sort())
+    expect(OUTCOME_CHART_TOKENS).toHaveLength(5)
+    expect(CHART_TOKENS.length).toBeGreaterThan(OUTCOME_CHART_TOKENS.length)
+    // 擦痕最亮處 = 粉筆白 5.5% 疊板面：拿 spike 的值算，要是母計畫量到的 #214A36（巢狀的淡底也照這個算法）
+    const spike = { '--color-bg': '#15402C', '--color-text': '#F2F0E7', '--color-bg-sidebar': '#0E3221' }
+    expect(resolveSurface(spike, SMUDGE).color.map(Math.round)).toEqual([0x21, 0x4a, 0x36, 1])
+    const nested = resolveSurface(spike, tinted('#14b8a6', 0.38, [tinted('--color-text', 0.05, ['--color-bg-sidebar'])[0]])[0])
+    expect(nested.label).toBe('#14b8a6 38% over --color-text 5% over --color-bg-sidebar')
+    // 先疊裡層（粉筆白 5% 疊側欄）再疊外層；順序反過來是 [28, 108, 91]
+    expect(nested.color.map(Math.round)).toEqual([23, 107, 90, 1])
+  })
+
+  it.each(BOARD_TEXT_TOKENS)('黑板 %s 在每種會出現的底上都至少 4.5:1（含擦痕最亮處）', name => {
+    const b = boardTokens()
+    expect(b[name], `黑板沒有 ${name}`).toBeDefined()
+    const low = lowContrast(b[name], BOARD_TEXT_SURFACES.map(s => resolveSurface(b, s)))
+    expect(low, `黑板 ${name}（${b[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(USAGE_TOKENS)('黑板 %s 在它所有出現處的底上都至少 4.5:1', name => {
+    const b = boardTokens()
+    expect(OWN.board[name], `黑板的區塊沒有明寫 ${name}`).toBeDefined()
+    const low = lowContrast(b[name], BOARD_USAGE_SURFACES[name].map(s => resolveSurface(b, s)))
+    expect(low, `黑板 ${name}（${b[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(BADGE_BG_TOKENS)('黑板徽章字色在 %s 上至少 4.5:1', name => {
+    const b = boardTokens()
+    const low = lowContrast(b[BADGE_TEXT], [{ label: name, color: surface(b, name) }])
+    expect(low, `黑板徽章（${b[BADGE_TEXT]} 配 ${b[name]}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it('黑板木框上的字（--color-on-wood）在木框暗端、hover 與選中的鍵上都至少 4.5:1', () => {
+    const b = boardTokens()
+    expect(b['--color-on-wood'], '黑板沒有 --color-on-wood').toBeDefined()
+    const low = lowContrast(b['--color-on-wood'], WOOD_SURFACES.map(s => resolveSurface(b, s)))
+    expect(low, `黑板 --color-on-wood（${b['--color-on-wood']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(OUTCOME_CHART_TOKENS)('黑板健康度段內的名稱（--color-segment-label-text）在 %s 上至少 4.5:1', name => {
+    const b = boardTokens()
+    expect(b['--color-segment-label-text'], '黑板沒有 --color-segment-label-text').toBeDefined()
+    const low = lowContrast(b['--color-segment-label-text'], [{ label: name, color: over(tokenColor(b, name), tokenColor(b, '--color-bg')) }])
+    expect(low, `黑板段內名稱（${b['--color-segment-label-text']}）對比不足：\n${low.join('\n')}`).toEqual([])
+  })
+
+  it.each(CHART_TOKENS)(`黑板 %s 對板面至少 ${CHART_MIN_ON_BOARD}:1、對擦痕最亮處至少 ${CHART_MIN_ON_SMUDGE}:1`, name => {
+    const b = boardTokens()
+    const board = tokenColor(b, '--color-bg')
+    const smudge = resolveSurface(b, SMUDGE).color
+    const color = tokenColor(b, name)
+    const onBoard = contrast(over(color, board), board)
+    const onSmudge = contrast(over(color, smudge), smudge)
+    expect(onBoard, `黑板 ${name}（${b[name]}）對板面 ${onBoard.toFixed(2)}`).toBeGreaterThanOrEqual(CHART_MIN_ON_BOARD)
+    expect(onSmudge, `黑板 ${name}（${b[name]}）對擦痕最亮處 ${onSmudge.toFixed(2)}`).toBeGreaterThanOrEqual(CHART_MIN_ON_SMUDGE)
   })
 })
