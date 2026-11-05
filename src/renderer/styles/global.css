@@ -53,7 +53,7 @@
   --logo-mark: #1E293B;
 
   /* 用途字色：原本寫死在元件 CSS 裡，換主題不會變。時間線只沿亮度調到它所有出現處（淡底、hover、選中）的底上 ≥ 4.5；
-     檔案室與終端機寫改版前的值（那兩個主題不調色）。按用途命名：同色系在不同地方本來就是不同 hex，合併的話舊主題會變色。
+     黑板在自己的區塊另寫一套。按用途命名：同色系在不同地方本來就是不同 hex，合併的話時間線會變色。
      ⚠️ 每個主題的區塊都要明寫，沒寫會沿用這裡的時間線值（themeContrast.test.ts 會擋）。 */
   --color-outcome-committed-text: #006E13;
   --color-outcome-tested-text: #104DD4;
@@ -70,7 +70,7 @@
   --color-subagent-text: #713DD6;
   --color-health-up-text: #00790A;
   --color-health-down-text: #CC1926;
-  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1）；舊主題寫各自原本的 heat 綠 */
+  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1） */
   --color-copied-text: #00781F;
 
   /* 儀表板「未收尾的對話」的 outcome 徽章：白字配實心底；時間線的底色沿亮度調暗到白字 ≥ 4.5，色相跟同頁圖例一致 */
@@ -79,10 +79,10 @@
   --color-outcome-quick-qa-badge-bg: #00809D;
   --color-outcome-badge-text: #FFFFFF;
 
-  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值；檔案室與終端機不寫，沿用這裡。
+  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值；黑板在自己的區塊逐一明寫，缺的會悄悄沿用這裡的時間線色。
      熱度格、成本熱度格與建議清單的淡底改用 color-mix()，透明度不再被量化成 1/255，畫出來最多差 1 個色階；其他圖表色不變。
      recharts 把 fill／stroke 寫成 SVG 屬性，Chromium 吃屬性裡的 var()。TS 裡每個都寫完整字串（'var(--chart-cat-1)'），不用樣板字串拼名稱：
-     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值、它們只定義在這裡，以及「元件裡沒有寫死的顏色」。 */
+     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值、它們只定義在這裡與黑板區塊、黑板一個不缺，以及「元件裡沒有寫死的顏色」。 */
   --chart-cat-1: #3b82f6;
   --chart-cat-2: #0891b2;
   --chart-cat-3: #22c55e;
@@ -131,7 +131,7 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
 
-  /* 「一般」字級的最小字 12px（佈景主題 A 從 11 起整組上調一級；三個主題共用） */
+  /* 「一般」字級的最小字 12px（佈景主題 A 從 11 起整組上調一級；各主題共用） */
   --font-scale: 1;
   --font-size-xs: calc(12px * var(--font-scale));
   --font-size-sm: calc(14px * var(--font-scale));

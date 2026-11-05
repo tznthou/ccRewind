@@ -25,7 +25,7 @@
 }
 
 /* 頁面底 + accent 框 + 主要文字色（原本 accent 實心底配白字只有 3.7:1）。
-   不用 accent-light 底：橫幅本身就是 accent-light，同色的話比旁邊有框的「略過」還不顯眼。終端機主題另有規則（上面） */
+   不用 accent-light 底：橫幅本身就是 accent-light，同色的話比旁邊有框的「略過」還不顯眼。 */
 .downloadBtn {
   padding: 2px 8px;
   border-radius: 4px;
