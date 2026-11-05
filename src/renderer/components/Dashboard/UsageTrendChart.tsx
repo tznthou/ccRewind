@@ -43,14 +43,16 @@ export default function UsageTrendChart({ data }: Props) {
             <YAxis
               yAxisId="sessions"
               tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
-              width={36}
+              // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
+              width={40}
             />
             <YAxis
               yAxisId="tokens"
               orientation="right"
               tickFormatter={formatTokens}
               tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
-              width={52}
+              // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
+              width={60}
             />
             <Tooltip
               contentStyle={CHART_TOOLTIP_STYLE}

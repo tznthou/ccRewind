@@ -121,7 +121,8 @@ export default function ContextGrowthChart({ stats, facts }: Props) {
             tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
             tickLine={false}
             axisLine={false}
-            width={48}
+            // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
+            width={56}
           />
           <Tooltip content={props => <ChartTooltip {...props} titles={titles} t={t} />} />
           {limitLine && (
