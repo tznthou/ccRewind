@@ -12,7 +12,9 @@ import { fileURLToPath } from 'node:url'
  * 44.10.2 是對圖表的 <svg>（x 0%、寬 50% 的區域在 1127／517／300 寬的圖上都切在正中間）；要是改成對 <filter> 所在的 0×0 <svg>
  * 算，每條線都不畫，而 node 裡的測試看不到。固定數字不看 viewport，這裡驗得到。
  *
- * 掃描的限制：只認選擇器含 `.recharts-` 的規則；var() 間接引用與 TSX 的 inline style 看不到。recharts 的圖例文字與 tooltip 是
+ * 掃描的限制：只認選擇器含 `.recharts-` 的規則；var() 間接引用與 TSX 的 inline style 看不到。宣告開頭以外的 `filter:`（@supports 的
+ * 條件、名字是 filter 的 class 後面接冒號）會被當成宣告，吞掉後面真正的那條，選擇器也回推到前一條規則；巢狀規則（`&:hover { … }`）
+ * 與跳脫寫法（`\66ilter`）也看不到（2026-11-09 盲審 r3 #6；目前的 CSS 沒有這些寫法）。recharts 的圖例文字與 tooltip 是
  * HTML 元素（外框不會是 0），以後替它們加粉筆濾鏡時，這裡會誤要求 userSpaceOnUse：到時把那個選擇器排除掉。
  */
 
