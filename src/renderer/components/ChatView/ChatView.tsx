@@ -215,7 +215,7 @@ export default function ChatView({ sessionId }: ChatViewProps) {
     observer.observe(scroller)
     return () => observer.disconnect()
     // loading 必須進 dep：切 session 時這個 effect 會在 listRef 掛載前先跑一次，那次什麼也量不到。
-    // 而 .chatView 是 min-height:100% 的 flex column，內容塞得進 viewport 的短 session
+    // 而 .chatView 是 min-height:100%（黑板扣掉粉筆槽高，仍是固定值）的 flex column，內容塞得進 viewport 的短 session
     // 從 loading 到載入完成外框高度「必然」不變，ResizeObserver 系統性不會補觸發——不是巧合。
     // displayMessages.length 目前必然跟著 loading 一起翻（useSession 的 reducer 只有
     // RESET / SUCCESS / ERROR 三種 transition），留著是為了日後若改成漸進載入仍能觸發。

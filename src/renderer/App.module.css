@@ -103,14 +103,15 @@
     var(--color-bg);
 }
 
-/* 粉筆槽：.main 捲動區的最後一個 flex 子項、sticky 貼底，不會蓋住最後一列。三根粉筆（白、黃、粉紅）、木槽、木槽上緣的陰影 */
+/* 粉筆槽：.main 捲動區的最後一個 flex 子項、sticky 貼底，不會蓋住最後一列。三根粉筆（白、黃、粉紅）、木槽、木槽上緣的陰影。
+   槽高由 --board-trough-height（global.css 的黑板區塊）決定，黑板的 .chatView 最小高度扣掉它（ChatView.module.css） */
 :global([data-theme="board"]) .main::after {
   content: '';
   flex-shrink: 0;
   margin-top: auto;
   position: sticky;
   bottom: 0;
-  height: 22px;
+  height: var(--board-trough-height);
   z-index: 2;
   pointer-events: none;
   background:
