@@ -488,7 +488,8 @@
 }
 
 /* 選中的 session：黃粉筆圈，用偽元素畫。不用 data: 圖：兩處 CSP 都沒有 img-src，data: 圖會被擋，background 簡寫還會把底色一起清掉。
-   底色（基底規則的 --color-accent-light）照留，濾鏡沒套上時也看得出選中。圈在列內縮 3–4px，碰不到列裡的字 */
+   底色（基底規則的 --color-accent-light）照留，濾鏡沒套上時也看得出選中。圈的外框在列內縮 3–4px，但四角是很大的百分比圓角、
+   整圈沒有直邊，會穿過列首尾的字（時間、標籤；2026-11-06 截圖）。要不要改留到發版前肉眼看 */
 :global([data-theme="board"]) .sessionItem.selected::before {
   content: '';
   position: absolute;
