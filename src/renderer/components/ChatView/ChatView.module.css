@@ -494,12 +494,12 @@
   padding: 0 5px;
 }
 
-/* 跳頂／跳底鍵是兩塊板擦（樣稿 .jb）：上 58% 深木柄、下 42% 淺毛氈，並排、墊高到粉筆槽上面。
+/* 跳頂／跳底鍵是兩塊板擦（樣稿 .jb）：上 58% 深木柄、下 42% 淺毛氈，並排、墊高到粉筆槽上面（墊的就是槽高 --board-trough-height）。
    粉筆白的箭頭只能畫在木柄上（對毛氈只有 1.27:1）：箭頭包在 .jumpArrow 裡、木柄色直接墊在它底下（對比量測量得到字底下的顏色），
    行高 1 讓字框跟字一樣高、靠上對齊 → 字框的底在按鈕高的 58% 以內（19 × 字級 ≤ 20.9 × 字級；寬高、字級、padding 都跟著 --font-scale） */
 :global([data-theme="board"]) .jumpButtons {
   flex-direction: row;
-  bottom: calc(var(--space-lg) + 22px);
+  bottom: calc(var(--space-lg) + var(--board-trough-height));
 }
 
 :global([data-theme="board"]) .jumpButton {

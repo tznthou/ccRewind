@@ -243,7 +243,8 @@ mark {
   --wood-light: #DDB585;
   --wood-dark: #C99D6B;
   --wood-edge: #8B6A44;
-  /* 粉筆槽（App.module.css 的 .main::after）的高度；黑板的 .chatView 最小高度扣掉它（ChatView.module.css），短對話才不多捲 */
+  /* 粉筆槽（App.module.css 的 .main::after）的高度。ChatView.module.css 用到它兩處：黑板的 .chatView 最小高度扣掉它（短對話才不多捲）、
+     跳頂／跳底鍵墊高它（鍵才在槽上面） */
   --board-trough-height: 22px;
   /* 板擦形狀的跳頂／跳底鍵：上 58% 深木柄、下 42% 淺毛氈（hover 各亮一階）；粉筆白的箭頭只畫在木柄上 */
   --eraser-handle: #3A2A1E;

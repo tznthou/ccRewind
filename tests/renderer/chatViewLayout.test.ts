@@ -29,6 +29,12 @@ function findDeclarations(css: string, selector: string): Record<string, string>
   return Object.fromEntries([...body.matchAll(/([\w-]+)\s*:\s*([^;]+);/g)].map(d => [d[1], d[2].trim()]))
 }
 
+/** 黑板粉筆槽（App.module.css 的 .main::after）的 height 用的變數；不是單一個 var() 或沒有這個區塊時回 undefined */
+function boardTroughVar(): string | undefined {
+  const trough = findDeclarations(APP_CSS, ':global([data-theme="board"]) .main::after')
+  return /^var\(\s*(--[\w-]+)\s*\)$/.exec(trough?.height ?? '')?.[1]
+}
+
 function declarations(css: string, selector: string): Record<string, string> {
   const found = findDeclarations(css, selector)
   if (!found) throw new Error(`找不到 ${selector} 區塊`)
@@ -66,5 +72,18 @@ describe('ChatView 版面', () => {
     const minus = /^calc\(\s*100%\s*-\s*var\(\s*(--[\w-]+)\s*\)\s*\)$/.exec(chatView?.['min-height'] ?? '')?.[1]
     expect(minus, `黑板 .chatView 的 min-height 要是 calc(100% - var(--…))（現在是 ${chatView?.['min-height']}）`).toBeDefined()
     expect(minus, '黑板 .chatView 扣掉的變數要跟粉筆槽的 height 是同一個').toBe(troughVar)
+  })
+
+  /**
+   * 黑板的跳頂／跳底鍵（.jumpButtons）墊高到粉筆槽上面：墊的就是槽高，也用同一個變數（2026-11-09 盲審 r2 #1：槽高變數一開始只統一了
+   * 槽本身與 .chatView，鍵還寫死 22px；槽高一改，鍵就壓到槽上，或離槽不再是 --space-lg）。
+   */
+  it('黑板的跳頂／跳底鍵墊高的高度也用粉筆槽的變數', () => {
+    const troughVar = boardTroughVar()
+    expect(troughVar, '粉筆槽的 height 不是單一個變數（見上一條）').toBeDefined()
+    const buttons = findDeclarations(CHAT_CSS, ':global([data-theme="board"]) .jumpButtons')
+    expect(buttons, 'ChatView.module.css 沒有黑板的 .jumpButtons 區塊').not.toBeNull()
+    expect(buttons?.bottom, `黑板跳頂／跳底鍵的 bottom 要用槽高的變數 ${troughVar}（現在是 ${buttons?.bottom}）：寫死的話，`
+      + '槽高一改，鍵就壓到槽上或離槽太遠（盲審 r2 #1）').toMatch(new RegExp(`var\\(\\s*${troughVar}\\s*\\)`))
   })
 })
