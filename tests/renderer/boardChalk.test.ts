@@ -18,8 +18,10 @@ import { fileURLToPath } from 'node:url'
 
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
 const INDEX_HTML = readFileSync(path.join(RENDERER_DIR, 'index.html'), 'utf-8').replace(/<!--[\s\S]*?-->/g, '')
-const FILTER_DECL = /(?<![-\w])filter\s*:\s*([^;}]+)/g
-const URL_REF = /url\(\s*(['"]?)#([\w-]+)\1\s*\)/g
+// -webkit-filter 在 Chromium 是 filter 的別名；屬性名與 url() 都不分大小寫（2026-11-09 盲審 r2 #3：只認小寫 filter: url( 時，
+// 這兩種寫法套在圖表的線上照樣會讓平的線不畫，掃描卻看不到）。backdrop-filter 等其他 -filter 屬性不算
+const FILTER_DECL = /(?<![-\w])(?:-webkit-)?filter\s*:\s*([^;}]+)/gi
+const URL_REF = /url\(\s*(['"]?)#([\w-]+)\1\s*\)/gi
 const REGION_KEYS = ['x', 'y', 'width', 'height'] as const
 /** 區域至少要蓋到的範圍（圖表座標，1 單位 = 1 CSS px）：左上往外留線寬與粉筆的位移，右下比 8K 螢幕的寬（7680 px）還遠 */
 const REGION_NEAR = -10
@@ -113,7 +115,7 @@ describe('黑板粉筆濾鏡', () => {
     }
   })
 
-  it('掃描認得 module CSS 的 :global()、多行選擇器、@media 裡的規則、url 不在第一個、三種引號；註解與非圖表規則不算', () => {
+  it('掃描認得 module CSS 的 :global()、多行選擇器、@media 裡的規則、url 不在第一個、三種引號、-webkit-filter 與大寫；註解、非圖表規則與 backdrop-filter 不算', () => {
     const css = [
       '.title, :global(.recharts-area-curve) { filter: url(#m1); }',
       ':global([data-theme="board"]) .chart :global(.recharts-line-curve) {',
@@ -128,19 +130,24 @@ describe('黑板粉筆濾鏡', () => {
       '@media (min-width: 1px) {',
       '  .x .recharts-area-curve { filter: url(#m4) }',
       '}',
+      ':global(.recharts-line-curve) { -webkit-filter: url(#m5); }',
+      '.recharts-bar-rectangle { FILTER: URL(#m6) }',
+      '.recharts-area-curve { backdrop-filter: url(#not-the-filter-property) }',
     ].join('\n')
     const refs = chartFilterRefs([
       { file: path.join('components', 'X', 'X.module.css'), text: css },
       { file: path.join('components', 'X', 'X.tsx'), text: '.recharts-area-curve { filter: url(#in-tsx) }' },
     ])
-    expect(refs.map(r => r.id)).toEqual(['m1', 'm2', 'm3', 'm4'])
+    expect(refs.map(r => r.id)).toEqual(['m1', 'm2', 'm3', 'm4', 'm5', 'm6'])
     expect(refs.map(r => r.selector)).toEqual([
       '.title, :global(.recharts-area-curve)',
       ':global([data-theme="board"]) .chart :global(.recharts-line-curve)',
       '.recharts-bar-rectangle, .other',
       '.x .recharts-area-curve',
+      ':global(.recharts-line-curve)',
+      '.recharts-bar-rectangle',
     ])
-    expect(refs.map(r => r.line)).toEqual([1, 3, 8, 12])
+    expect(refs.map(r => r.line)).toEqual([1, 3, 8, 12, 14, 15])
   })
 
   it('#chalk-line 跟 #chalk 是同一份配方，只有區域不同（兩份別漂移）', () => {
