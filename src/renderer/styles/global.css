@@ -337,10 +337,12 @@ mark {
 }
 
 /* recharts（全域 class 名）：粉筆質感只套在資料線上。套在實心的面積、圓餅與長條上，斑點挖掉的像素多到顏色比圖例淡一截。
+   資料線用 #chalk-line 不用 #chalk（index.html）：#chalk 的區域跟著線的外框，資料是平的時候外框高 0、整條線不畫；
+   #chalk-line 的區域是圖表座標裡的固定範圍，蓋住整張圖（tests/renderer/boardChalk.test.ts）。
    圓餅片與片之間的縫加寬到 3px，片才不只靠顏色分（縫的顏色是 --chart-slice-gap，元件傳的） */
 [data-theme="board"] .recharts-area-curve {
   stroke-width: 2.5px;
-  filter: url(#chalk);
+  filter: url(#chalk-line);
 }
 
 [data-theme="board"] .recharts-pie-sector path {
