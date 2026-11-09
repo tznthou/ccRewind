@@ -76,14 +76,18 @@ describe('ChatView 版面', () => {
 
   /**
    * 黑板的跳頂／跳底鍵（.jumpButtons）墊高到粉筆槽上面：墊的就是槽高，也用同一個變數（2026-11-09 盲審 r2 #1：槽高變數一開始只統一了
-   * 槽本身與 .chatView，鍵還寫死 22px；槽高一改，鍵就壓到槽上，或離槽不再是 --space-lg）。
+   * 槽本身與 .chatView，鍵還寫死 22px；槽高一改，長對話捲動途中的鍵就壓到槽上，或離槽不再是 --space-lg。捲到底與短對話時鍵本來就離槽
+   * 更遠：錨點 .jumpDock 跟著 .chatView 的內容走）。整個算式釘死：只看「有沒有出現變數」時，+ 寫成 -、乘 0、拿掉 --space-lg 都會過
+   * （盲審 r3 #1）；找不到 bottom 時用 expect 報（r3 #2）。只看第一個行首區塊，後面再寫一個同選擇器的區塊看不到（findDeclarations 的限制）。
    */
   it('黑板的跳頂／跳底鍵墊高的高度也用粉筆槽的變數', () => {
     const troughVar = boardTroughVar()
     expect(troughVar, '粉筆槽的 height 不是單一個變數（見上一條）').toBeDefined()
     const buttons = findDeclarations(CHAT_CSS, ':global([data-theme="board"]) .jumpButtons')
     expect(buttons, 'ChatView.module.css 沒有黑板的 .jumpButtons 區塊').not.toBeNull()
-    expect(buttons?.bottom, `黑板跳頂／跳底鍵的 bottom 要用槽高的變數 ${troughVar}（現在是 ${buttons?.bottom}）：寫死的話，`
-      + '槽高一改，鍵就壓到槽上或離槽太遠（盲審 r2 #1）').toMatch(new RegExp(`var\\(\\s*${troughVar}\\s*\\)`))
+    const bottom = buttons?.bottom ?? ''
+    const lifted = new RegExp(`^calc\\(\\s*var\\(\\s*--space-lg\\s*\\)\\s*\\+\\s*var\\(\\s*${troughVar}\\s*\\)\\s*\\)$`)
+    expect(bottom, `黑板跳頂／跳底鍵的 bottom 要是 calc(var(--space-lg) + var(${troughVar}))（現在是 ${bottom || '沒寫'}）：`
+      + '槽高寫死或算式寫錯，槽高一改，鍵就壓到槽上或離槽太遠（盲審 r2 #1、r3 #1）').toMatch(lifted)
   })
 })
