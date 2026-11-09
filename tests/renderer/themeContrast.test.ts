@@ -667,7 +667,8 @@ describe('黑板的對比', () => {
    * 所以：這種主題要在 global.css 寫 `:where([data-theme="x"]) a { color: var(--…) }`，而且那個 token 要在上面的字色對比清單裡。
    *
    * 主題選擇器要包在 :where() 裡（2026-11-06 盲審 r1 #1）：不包的話特異度 (0,1,1)，壓過元件給自己連結寫的單一 class 字色 (0,1,0)。
-   * 黑板的遠端徽章（renderer 唯一的 <a>，`.remoteBadge` 的 --color-remote-text）就被蓋成天藍，跟同列 committed 標籤同色。
+   * 黑板的遠端徽章（元件裡唯一寫出來的 <a>，`.remoteBadge` 的 --color-remote-text）就被蓋成天藍，跟同列 committed 標籤同色。
+   * 訊息裡的 markdown 連結也是 <a>，但那是 react-markdown 產生的，沒有 class，這條規則主要就是給它們的。
    * 包了是 (0,0,1)：沒有 class 的 markdown 連結照樣吃主題色，有 class 的元件留著自己的字色，UA 的預設連結色照樣被蓋掉（作者層永遠贏）。
    */
   it('設了 color-scheme: dark 的主題給連結明確的字色，而且那個色有對比測試', () => {
