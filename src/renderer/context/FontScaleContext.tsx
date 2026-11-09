@@ -10,7 +10,8 @@ interface FontScaleContextValue {
 const STORAGE_KEY = 'ccrewind-font-scale'
 const DEFAULT_SCALE: FontScaleId = 'normal'
 
-const SCALE_VALUES: Record<FontScaleId, number> = {
+/** --font-scale 的值（public/scripts/font-scale-init.js 內嵌同一張表）；黑板健康度長條估名稱寬度時也要用 */
+export const SCALE_VALUES: Record<FontScaleId, number> = {
   normal: 1.0,
   large: 1.1,
   xlarge: 1.25,

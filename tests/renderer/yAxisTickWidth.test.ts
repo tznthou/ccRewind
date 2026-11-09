@@ -18,14 +18,16 @@ import { formatTokens } from '../../src/renderer/utils/formatTokens'
  * 一場對話量不出最寬的情況：這裡把最長的刻度每一位都換成最寬的數字來算。
  *
  * 字寬是事實：各主題刻度字型在 12px 的字寬，2026-11-05 在 app 裡量（複製一個縱軸刻度的 <text>、逐字換文字，
- * 量 getBoundingClientRect 的寬度）。刻度字型就是內文字型（--font-body），當天三個主題實測都是。
- * 字距調整也量了：兩種字型的 13 × 13 個字對，刻度裡會出現的字對沒有一個是正的（Plus Jakarta Sans 縮最多的是 "74"，
- * −1.09px；IBM Plex Sans 唯一正的是 "K." +0.12px，刻度裡 K 後面不會再有字），所以逐字加總是上界；
- * 每個字型的最大值記在 TICK_PAIR_KERN_MAX_12PX，正的會加進上界。換字型或加主題時「每個主題的內文字型都在字寬表裡」
+ * 量 getBoundingClientRect 的寬度）。刻度字型就是內文字型（--font-body），兩個主題實測都是。
+ * 字距調整也量了：每個字型 13 × 13 個字對。Plus Jakarta Sans 刻度裡會出現的字對沒有一個是正的（縮最多的是 "74"，
+ * −1.09px）；黑板的 -apple-system（macOS 是 SF Pro）有一個正的："77" +0.227px（連寫 4 個 7 量到每對 +0.229px，
+ * 表裡往上取 0.23）。每個字型刻度裡最大的字距記在
+ * TICK_PAIR_KERN_MAX_12PX，正的加到每個字對上，逐字加總才仍是上界。換字型或加主題時「每個主題的內文字型都在字寬表裡」
  * 會紅：用同樣的方法量新字型，補進字寬、字對、整串三張表（系統字型在每個平台不一樣，每個平台都量、取最寬的）。
  * 同名字型換了檔案也要重量：字型檔的 SHA-256 由 fontLicenses.test.ts 守著，那邊紅的時候順便重量這裡。
  *
- * 已知抓不到：svg 外層的元素設了字型相關的屬性（font-family、font-weight、letter-spacing…都會繼承到刻度字）；
+ * 已知抓不到：-apple-system 只量了 macOS（SF Pro），Windows 上它會落到 Segoe UI，那邊的字寬沒量，表裡的值不保證是
+ * Windows 的上界；svg 外層的元素設了字型相關的屬性（font-family、font-weight、letter-spacing…都會繼承到刻度字）；
  * tickFormatter 只比名稱，同名但印法不同的函式也會過；只認具名匯入的 YAxis 與圖表元件（同 chartTooltips.test.ts）。
  * <YAxis> 只能用 AXIS_PROPS_OK 裡的屬性，width、刻度字級、tickSize／tickMargin、圖表 margin 要寫成數字，
  * 其他寫法看不出能放多寬，直接列成問題。
@@ -60,10 +62,10 @@ const GLYPH_WIDTH_12PX: Record<string, Record<string, number>> = {
     0: 8.789, 1: 4.453, 2: 7.203, 3: 7.313, 4: 7.563, 5: 7.398, 6: 7.164, 7: 6.523, 8: 7.539, 9: 7.164,
     '.': 3.438, K: 7.852, M: 10.039,
   },
-  // 終端機、檔案室
-  'IBM Plex Sans': {
-    0: 7.203, 1: 7.203, 2: 7.203, 3: 7.203, 4: 7.203, 5: 7.203, 6: 7.203, 7: 7.203, 8: 7.203, 9: 7.203,
-    '.': 3.266, K: 7.609, M: 9.75,
+  // 黑板：-apple-system 在 macOS 是 SF Pro，數字也不等寬（"1" 5.57px、"4" 7.727px）；Windows 的 Segoe UI 沒量
+  '-apple-system': {
+    0: 7.563, 1: 5.57, 2: 7.242, 3: 7.523, 4: 7.727, 5: 7.422, 6: 7.641, 7: 6.836, 8: 7.664, 9: 7.641,
+    '.': 3.563, K: 7.906, M: 10.492,
   },
 }
 
@@ -71,15 +73,31 @@ const GLYPH_WIDTH_12PX: Record<string, Record<string, number>> = {
  * 刻度裡會出現的字對（數字後面接數字、小數點、K、M；小數點後面接數字）字距最大的值（px，12px），同一天在 app 裡量。
  * 量不到正的記 0；正的會加到每個字對上，逐字加總才仍是上界
  */
-const TICK_PAIR_KERN_MAX_12PX: Record<string, number> = { 'Plus Jakarta Sans': 0, 'IBM Plex Sans': 0 }
+const TICK_PAIR_KERN_MAX_12PX: Record<string, number> = { 'Plus Jakarta Sans': 0, '-apple-system': 0.23 }
 
 /**
- * 同一次量的整串寬度：逐字加總不能比它窄（上界），寬太多就是表抄錯了。
- * 寬多少看字距調整：含 "74" 的 "740.0K" 寬 1.10px，其他幾串不到 0.27px
+ * 同一次量的整串寬度：逐字加總不能比它窄（上界），寬太多就是表抄錯了（寬多少算太多見 MAX_NARROWING_12PX）。
+ * -apple-system 另外量了每個數字連寫 4 次的整串：帶小數點的整串被字距縮掉將近 1px 以上，數字抄錯在那幾串看不出來
+ * （"4" 抄小 0.5px 照過）；連寫的幾乎不縮，數字抄錯 0.2px 就會露出來。K、M、小數點只出現在帶小數點的整串裡，
+ * 這三個字抄錯 1px 以內抓不到
  */
 const MEASURED_WHOLE_12PX: Record<string, Record<string, number>> = {
   'Plus Jakarta Sans': { '500.0K': 45.031, '240.0K': 43.492, '740.0K': 41.852, '750.0K': 42.523, '1400.0M': 51.828 },
-  'IBM Plex Sans': { '500.0K': 39.68, '1400.0M': 49.016 },
+  '-apple-system': {
+    '500.0K': 40.625, '240.0K': 40.438, '740.0K': 39.5, '750.0K': 39.781, '1400.0M': 49.078,
+    '0000': 30.234, '1111': 22.266, '2222': 28.969, '3333': 30.094, '4444': 30.891,
+    '5555': 29.672, '6666': 30.563, '7777': 28.031, '8888': 30.656, '9999': 30.563,
+  },
+}
+
+/**
+ * 逐字加總最多可以比整串寬多少：字距調整縮掉的量，再寬就是字寬表抄錯了。Plus Jakarta Sans 只有含 "74" 的縮得多
+ * （"740.0K" 窄 1.10px），其他幾串不到 0.27px；-apple-system 帶小數點的整串都縮 0.77–1.66px（"7." −1.29px、
+ * ".6"／".9" −0.47px…），不帶的不到 0.02px（"7777" 反而寬 0.69px："77" 是正的字距）
+ */
+const MAX_NARROWING_12PX: Record<string, (s: string) => number> = {
+  'Plus Jakarta Sans': s => (s.includes('74') ? 1.2 : 0.3),
+  '-apple-system': s => (s.includes('.') ? 1.8 : 0.3),
 }
 
 /**
@@ -337,16 +355,16 @@ function fontOverrides(file: string, css: string): string[] {
 }
 
 describe('縱軸的刻度字放得下', () => {
-  it('字寬表跟同一次量的整串寬度對得上：逐字加總（加上正的字距）不比整串窄，最多寬一個字距調整；每個字型都有字對的值', () => {
+  it('字寬表跟同一次量的整串寬度對得上：逐字加總（加上正的字距）不比整串窄，也不比字距調整縮掉的量寬更多；每個字型都有字對的值', () => {
     expect(Object.keys(MEASURED_WHOLE_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
     expect(Object.keys(TICK_PAIR_KERN_MAX_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
+    expect(Object.keys(MAX_NARROWING_12PX).sort()).toEqual(Object.keys(GLYPH_WIDTH_12PX).sort())
     for (const [font, strings] of Object.entries(MEASURED_WHOLE_12PX)) {
       for (const [s, whole] of Object.entries(strings)) {
         const sum = [...s].reduce((acc, c) => acc + GLYPH_WIDTH_12PX[font][c], 0)
         const pairs = Math.max(0, TICK_PAIR_KERN_MAX_12PX[font]) * ([...s].length - 1)
         expect(sum + pairs - whole, `${font} "${s}"`).toBeGreaterThanOrEqual(0)
-        // 含 "74" 的整串窄 1.10px；其他不到 0.27px，0.3 才抓得到抄錯的字寬
-        expect(sum - whole, `${font} "${s}"`).toBeLessThan(s.includes('74') ? 1.2 : 0.3)
+        expect(sum - whole, `${font} "${s}"`).toBeLessThan(MAX_NARROWING_12PX[font](s))
       }
     }
   })

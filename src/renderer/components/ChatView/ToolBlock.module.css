@@ -51,20 +51,33 @@
   overflow-y: auto;
 }
 
-/* Theme A — Archive: hard shadow, no radius */
-:global([data-theme="archive"]) .toolBlock {
-  box-shadow: var(--shadow-card);
+/* emoji 換成 1em 的線條圖示（BlockIcon，兩個主題）：往下 0.125em，跟旁邊的字對齊 */
+.icon svg {
+  vertical-align: -0.125em;
 }
 
-/* Theme C — Terminal: dashed border, mono label */
-:global([data-theme="terminal"]) .toolBlock {
-  border-style: dashed;
+/* ============================================================
+   黑板：工具區塊嵌進板面（嵌入底 55%、粉筆框），標題用程式碼字體，內容用主要文字色
+   ============================================================ */
+:global([data-theme="board"]) .toolBlock {
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 32%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--color-inset-bg) 55%, transparent);
 }
 
-:global([data-theme="terminal"]) .summary {
+:global([data-theme="board"]) .summary {
+  background-color: transparent;
   font-family: var(--font-code);
 }
 
-:global([data-theme="terminal"]) .content {
-  border-top-style: dashed;
+/* 上一條排在基底的 hover 後面、specificity 一樣，會把 hover 的底也蓋掉：這裡再寫一次 */
+:global([data-theme="board"]) .summary:hover,
+:global([data-theme="board"]) .summary:focus-visible {
+  background-color: var(--color-bg-hover);
+}
+
+:global([data-theme="board"]) .content {
+  color: var(--color-text);
+  background-color: transparent;
+  border-top-color: color-mix(in srgb, var(--color-text) 32%, transparent);
 }

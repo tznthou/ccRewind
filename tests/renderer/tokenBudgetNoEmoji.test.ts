@@ -6,6 +6,7 @@ import { LOCALES, messages } from '../../src/renderer/i18n/messages'
 
 /**
  * Token Budget 面板不用 emoji：emoji 不跟著主題變色，各平台的字型也畫得不一樣。面板的圖示一律用 EventIcon 的 SVG。
+ * 對話頁（components/ChatView）也一樣：思考與工具區塊的 🧠🔧📋 換成 SVG，兩個主題都換（黑板計畫 PR2 改動 7d、裁決 20）。
  *
  * emoji 進得了面板的路有兩條，都要擋：
  *   1. 元件原始碼裡的字（含 CSS 的 `content`，以及寫成 JS／CSS 跳脫序列或 HTML 字元參照的）
@@ -17,11 +18,13 @@ import { LOCALES, messages } from '../../src/renderer/i18n/messages'
  *
  * 它擋的是「順手寫進一個 emoji」這種最常見的漏法，不是形式驗證：逐行掃、不認得字串，所以
  *   - 已知抓不到：字串裡的 `//`（例如網址）會被當成註解開頭，同一行後面不掃；字串或正則裡的 `/*` 會被當成區塊註解
- *     開頭，一直到下一個 `*\/` 之前的行都不掃。這個目錄兩種都沒有
- *   - 已知誤報：被跳脫的反斜線（兩個反斜線再接 u 與十六進位）也會被解開、當成 emoji；這個目錄也沒有
+ *     開頭，一直到下一個 `*\/` 之前的行都不掃。這兩個目錄都沒有
+ *   - 已知誤報：被跳脫的反斜線（兩個反斜線再接 u 與十六進位）也會被解開、當成 emoji；這兩個目錄也沒有
  */
 
-const TOKEN_BUDGET_DIR = fileURLToPath(new URL('../../src/renderer/components/TokenBudget', import.meta.url))
+const COMPONENTS_DIR = fileURLToPath(new URL('../../src/renderer/components', import.meta.url))
+const TOKEN_BUDGET_DIR = path.join(COMPONENTS_DIR, 'TokenBudget')
+const CHAT_VIEW_DIR = path.join(COMPONENTS_DIR, 'ChatView')
 
 const PICTOGRAPHIC = /\p{Extended_Pictographic}/u
 
@@ -97,16 +100,22 @@ const WARNING = '\u{26A0}\u{FE0F}'
 // 原始碼裡用跳脫序列寫的 emoji 要組出反斜線：直接寫四位數的跳脫，同樣會被那些工具解成字元，fixture 就不再是跳脫
 const BS = '\\'
 
-describe('Token Budget 面板不用 emoji', () => {
-  it('元件原始碼（註解以外）沒有 emoji', async () => {
+describe('Token Budget 面板與對話頁不用 emoji', () => {
+  it('元件原始碼（註解以外）沒有 emoji：Token Budget 面板與對話頁', async () => {
     const found: string[] = []
-    for await (const file of walk(TOKEN_BUDGET_DIR)) {
-      const src = await readFile(file, 'utf-8')
-      for (const hit of findPictographs(src, file.endsWith('.css'))) {
-        found.push(`  ${path.relative(TOKEN_BUDGET_DIR, file)}:${hit.line}  ${hit.text}`)
+    for (const dir of [TOKEN_BUDGET_DIR, CHAT_VIEW_DIR]) {
+      let files = 0
+      for await (const file of walk(dir)) {
+        files++
+        const src = await readFile(file, 'utf-8')
+        for (const hit of findPictographs(src, file.endsWith('.css'))) {
+          found.push(`  ${path.relative(COMPONENTS_DIR, file)}:${hit.line}  ${hit.text}`)
+        }
       }
+      // 路徑錯的話「沒有 emoji」會空著通過：每個資料夾都要真的掃到檔案
+      expect(files, `${path.relative(COMPONENTS_DIR, dir)} 沒掃到檔案`).toBeGreaterThan(0)
     }
-    expect(found, `面板的圖示請用 EventIcon：\n${found.join('\n')}`).toEqual([])
+    expect(found, `圖示請用 SVG（面板用 EventIcon）：\n${found.join('\n')}`).toEqual([])
   })
 
   it('兩份 catalog 的 tokenBudget.* 文案沒有 emoji', () => {

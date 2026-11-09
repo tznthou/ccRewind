@@ -13,6 +13,31 @@
     <script src="/scripts/font-scale-init.js"></script>
   </head>
   <body>
+    <!-- Chalk texture for the board theme: one recipe, two regions. A same-document fragment, not a loaded resource, so
+         the CSP does not apply; hidden and kept out of the accessibility tree.
+         #chalk is for HTML elements, pseudo-elements and the logo (filter: url(#chalk) in their CSS): its region is a
+         percentage of the box of what it is applied to (filterUnits defaults to objectBoundingBox).
+         #chalk-line is for the chart lines (global.css, .recharts-area-curve). When the data is flat, the line's box is
+         0 high and so is a region taken from it: the whole line would not be drawn. Its region is in the chart's own
+         coordinates instead (userSpaceOnUse; a recharts <svg> has a viewBox the size of the element, so one unit is one
+         CSS px): from -100 to 9900 both ways, wider than any window. Plain numbers, not percentages: which viewport the
+         percentages are taken from is up to the browser (Electron 44.10.2 takes the chart's <svg>; the 0x0 <svg> below
+         would hide every line), and a test cannot see that. Keep the two recipes the same
+         (tests/renderer/boardChalk.test.ts compares them); do not merge them. -->
+    <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+      <filter id="chalk" x="-5%" y="-20%" width="110%" height="140%">
+        <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="4" result="noise" />
+        <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.7 1.32" result="speckle" />
+        <feComposite in="SourceGraphic" in2="speckle" operator="in" result="grainy" />
+        <feDisplacementMap in="grainy" in2="noise" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+      <filter id="chalk-line" filterUnits="userSpaceOnUse" x="-100" y="-100" width="10000" height="10000">
+        <feTurbulence type="fractalNoise" baseFrequency="1.1" numOctaves="2" seed="4" result="noise" />
+        <feColorMatrix in="noise" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -1.7 1.32" result="speckle" />
+        <feComposite in="SourceGraphic" in2="speckle" operator="in" result="grainy" />
+        <feDisplacementMap in="grainy" in2="noise" scale="1.6" xChannelSelector="R" yChannelSelector="G" />
+      </filter>
+    </svg>
     <div id="root"></div>
     <script type="module" src="./main.tsx"></script>
   </body>

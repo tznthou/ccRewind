@@ -383,24 +383,6 @@
 }
 
 /* ============================================================
-   Theme A — Archive Room
-   ============================================================ */
-
-:global([data-theme="archive"]) .sectionLabel {
-  font-family: var(--font-display);
-  font-variant: small-caps;
-  letter-spacing: 1.5px;
-}
-
-:global([data-theme="archive"]) .badge {
-  border-radius: 0;
-}
-
-:global([data-theme="archive"]) .title {
-  font-family: var(--font-display);
-}
-
-/* ============================================================
    Theme B — Timeline
    ============================================================ */
 
@@ -448,39 +430,96 @@
 }
 
 /* ============================================================
-   Theme C — Terminal Memory
+   黑板：粉筆標題、黃色分區標題配粉筆底線、波浪底線標出選中的專案、黃粉筆圈出選中的 session、
+   outcome 標籤只留粉筆字、遠端徽章改虛線框
    ============================================================ */
-
-:global([data-theme="terminal"]) .title {
+:global([data-theme="board"]) .title {
   font-family: var(--font-display);
-  letter-spacing: 0.02em;
+  font-weight: 400;
+  font-size: calc(var(--font-size-xl) * 1.15);
 }
 
-:global([data-theme="terminal"]) .subtitle {
-  font-family: var(--font-code);
+:global([data-theme="board"]) .sectionLabel {
+  font-family: var(--font-hand-cjk);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0.14em;
+  color: var(--chalk-yellow);
 }
 
-:global([data-theme="terminal"]) .sectionLabel {
-  font-family: var(--font-code);
-  letter-spacing: 0.02em;
+:global([data-theme="board"]) .sectionLabel::after {
+  content: '';
+  display: block;
+  width: 56px;
+  height: 3px;
+  margin-top: 2px;
+  border-radius: 2px;
+  background: var(--chalk-yellow);
+  opacity: 0.7;
+  filter: url(#chalk);
 }
 
-:global([data-theme="terminal"]) .sessionTitle {
-  font-family: var(--font-code);
+:global([data-theme="board"]) .projectItem.selected {
+  background-color: transparent;
+  color: var(--chalk-yellow);
+  text-decoration: underline wavy var(--chalk-yellow);
+  text-underline-offset: 5px;
 }
 
-:global([data-theme="terminal"]) .sessionMeta {
-  font-family: var(--font-code);
+/* .projectName 為了省略號是 overflow: hidden：替底線留位置，列高不變 */
+:global([data-theme="board"]) .projectItem.selected .projectName {
+  padding-bottom: 8px;
+  margin-bottom: -8px;
 }
 
-:global([data-theme="terminal"]) .section {
-  border-bottom-style: dashed;
+/* 鍵盤游標用粉筆虛線框，不蓋掉選中 session 的黃粉筆圈 */
+:global([data-theme="board"]) .optionActive {
+  outline: 2px dashed color-mix(in srgb, var(--color-text) 70%, transparent);
 }
 
-:global([data-theme="terminal"]) .sessionItem {
-  border-bottom-style: dashed;
+:global([data-theme="board"]) .sessionItem {
+  position: relative;
+  border-bottom-color: color-mix(in srgb, var(--color-text) 12%, transparent);
 }
 
-:global([data-theme="terminal"]) .indexerStatus {
-  border-top-style: dashed;
+:global([data-theme="board"]) .sessionItem:hover {
+  background-color: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+/* 選中的 session：黃粉筆圈，用偽元素畫。不用 data: 圖：兩處 CSP 都沒有 img-src，data: 圖會被擋，background 簡寫還會把底色一起清掉。
+   底色（基底規則的 --color-accent-light）照留，濾鏡沒套上時也看得出選中。圈的外框在列內縮 3–4px，但四角是很大的百分比圓角、
+   整圈沒有直邊，會穿過列首尾的字（時間、標籤；2026-11-06 截圖）。要不要改留到發版前肉眼看 */
+:global([data-theme="board"]) .sessionItem.selected::before {
+  content: '';
+  position: absolute;
+  inset: 3px 4px;
+  border: 2.5px solid var(--chalk-yellow);
+  border-radius: 48% 52% 45% 55% / 58% 46% 54% 42%;
+  filter: url(#chalk);
+  pointer-events: none;
+}
+
+:global([data-theme="board"]) .outcomeTag[data-outcome] {
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+/* 遠端：拿掉青綠淡底（淡底疊在選中列上字只有 4.46:1），跟同一列的 outcome 標籤一樣只留粉筆字；
+   可點的那種本來就有底線，滑過時底線加粗當回饋 */
+:global([data-theme="board"]) .remoteBadge,
+:global([data-theme="board"]) .remoteBadgeLink:hover {
+  background: transparent;
+  font-family: var(--font-display);
+  font-weight: 400;
+}
+
+:global([data-theme="board"]) .remoteBadgeLink:hover {
+  text-decoration-thickness: 2px;
+}
+
+/* logo 也是粉筆畫的 */
+:global([data-theme="board"]) .logo {
+  filter: url(#chalk);
 }

@@ -261,7 +261,7 @@
 
 .dangerButton:hover:not(:disabled) {
   background: var(--color-error);
-  /* Not #fff: the terminal theme's error red is light, and white on it is 2.8:1. Swapping the pair keeps the
+  /* Not #fff: the board theme's error red is light, and white on it is under 2:1. Swapping the pair keeps the
      contrast of the resting state (error text on --color-bg) in every theme. */
   color: var(--color-bg);
 }
@@ -502,4 +502,66 @@
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
   font-style: italic;
+}
+
+/* ============================================================
+   黑板：粉筆大標題、粉筆框的區塊與卡片、粉筆虛線的按鈕、嵌進板面的輸入框；確認框是一塊框起來的小黑板
+   ============================================================ */
+:global([data-theme="board"]) .title {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: calc(var(--font-size-xl) * 1.3);
+  filter: url(#chalk);
+}
+
+:global([data-theme="board"]) .sectionTitle,
+:global([data-theme="board"]) .details > summary {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .section,
+:global([data-theme="board"]) .card,
+:global([data-theme="board"]) .details,
+:global([data-theme="board"]) .previewBox {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 50%, transparent);
+  border-radius: 9px 14px 8px 12px;
+}
+
+/* 總覽卡片在粉筆框的區塊裡：改虛線，兩層框看得出上下層 */
+:global([data-theme="board"]) .card {
+  border-style: dashed;
+}
+
+:global([data-theme="board"]) .input,
+:global([data-theme="board"]) .select {
+  background: var(--color-inset-bg);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+:global([data-theme="board"]) .button {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+:global([data-theme="board"]) .dangerButton {
+  border-color: var(--color-error);
+}
+
+:global([data-theme="board"]) .backdrop {
+  background: rgba(0, 0, 0, 0.55);
+}
+
+:global([data-theme="board"]) .dialog {
+  border: 10px solid var(--wood-dark);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--wood-edge), 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+/* 標題帶著完整的專案路徑：用 Chalkduster 難讀、還會在「專案」中間斷行 → 用內文字體，哪裡都能斷 */
+:global([data-theme="board"]) .dialogTitle {
+  color: var(--chalk-yellow);
+  overflow-wrap: anywhere;
 }

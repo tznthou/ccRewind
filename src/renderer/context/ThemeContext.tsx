@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { resolveTheme } from './resolveTheme'
 
-export type ThemeId = 'archive' | 'timeline' | 'terminal'
+export type ThemeId = 'timeline' | 'board'
 
 interface ThemeContextValue {
   theme: ThemeId
@@ -8,16 +9,12 @@ interface ThemeContextValue {
 }
 
 const STORAGE_KEY = 'ccrewind-theme'
-const DEFAULT_THEME: ThemeId = 'timeline'
 
 const ThemeContext = createContext<ThemeContextValue | null>(null)
 
+/** 存的是已移除的檔案室／終端機時換成時間線／黑板；下面的 effect 第一次 render 後寫回，遷移只發生一次 */
 function getInitialTheme(): ThemeId {
-  const stored = localStorage.getItem(STORAGE_KEY)
-  if (stored === 'archive' || stored === 'timeline' || stored === 'terminal') {
-    return stored
-  }
-  return DEFAULT_THEME
+  return resolveTheme(localStorage.getItem(STORAGE_KEY))
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {

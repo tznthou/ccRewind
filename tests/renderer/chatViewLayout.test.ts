@@ -20,13 +20,25 @@ const read = (rel: string) => readFileSync(fileURLToPath(new URL(rel, import.met
 const APP_CSS = read('../../src/renderer/App.module.css')
 const CHAT_CSS = read('../../src/renderer/components/ChatView/ChatView.module.css')
 
-/** 第一個 `selector {` 區塊裡的宣告（去掉註解；不處理 @media 與巢狀） */
-function declarations(css: string, selector: string): Record<string, string> {
+/** 第一個行首 `selector {` 區塊裡的宣告（去掉註解；不處理 @media 與巢狀）；沒有這個區塊時回 null */
+function findDeclarations(css: string, selector: string): Record<string, string> | null {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const block = new RegExp(`^${escaped}\\s*\\{([^}]*)\\}`, 'm').exec(css)
-  if (!block) throw new Error(`找不到 ${selector} 區塊`)
+  if (!block) return null
   const body = block[1].replace(/\/\*[\s\S]*?\*\//g, '')
   return Object.fromEntries([...body.matchAll(/([\w-]+)\s*:\s*([^;]+);/g)].map(d => [d[1], d[2].trim()]))
+}
+
+/** 黑板粉筆槽（App.module.css 的 .main::after）的 height 用的變數；不是單一個 var() 或沒有這個區塊時回 undefined */
+function boardTroughVar(): string | undefined {
+  const trough = findDeclarations(APP_CSS, ':global([data-theme="board"]) .main::after')
+  return /^var\(\s*(--[\w-]+)\s*\)$/.exec(trough?.height ?? '')?.[1]
+}
+
+function declarations(css: string, selector: string): Record<string, string> {
+  const found = findDeclarations(css, selector)
+  if (!found) throw new Error(`找不到 ${selector} 區塊`)
+  return found
 }
 
 describe('ChatView 版面', () => {
@@ -41,5 +53,41 @@ describe('ChatView 版面', () => {
     expect(chatView['flex-shrink']).toBe('0')
     // flex 簡寫會蓋掉 flex-shrink，寫了就得重新確認
     expect(chatView.flex).toBeUndefined()
+  })
+
+  /**
+   * 黑板（2026-11-06 盲審 r1 #7）：.main 最後一個 flex 子項是 sticky 貼底的粉筆槽（App.module.css 的 .main::after），它佔版面高度。
+   * .chatView 的 min-height: 100% 再加上槽高，內容塞得進視窗的短對話也能往下捲一個槽高（1 則訊息的對話多捲 22px）；
+   * 載入中、錯誤、空對話也一樣，它們包在 .chatView 裡。黑板的 .chatView 要扣掉槽高，兩邊用同一個變數：改槽高的人不會漏改這邊。
+   * 找不到區塊時用 expect 報（不 throw），失敗才是 AssertionError。
+   */
+  it('黑板的 .chatView 最小高度扣掉粉筆槽的高度，兩邊用同一個變數（短對話不多捲）', () => {
+    const trough = findDeclarations(APP_CSS, ':global([data-theme="board"]) .main::after')
+    expect(trough, 'App.module.css 沒有黑板的 .main::after（粉筆槽）區塊').not.toBeNull()
+    const troughVar = /^var\(\s*(--[\w-]+)\s*\)$/.exec(trough?.height ?? '')?.[1]
+    expect(troughVar, `粉筆槽的 height 要寫成一個變數（現在是 ${trough?.height}），.chatView 才扣得到同一個值`).toBeDefined()
+
+    const chatView = findDeclarations(CHAT_CSS, ':global([data-theme="board"]) .chatView')
+    expect(chatView, 'ChatView.module.css 沒有黑板的 .chatView 區塊：短對話會多捲一個粉筆槽高（盲審 r1 #7）').not.toBeNull()
+    const minus = /^calc\(\s*100%\s*-\s*var\(\s*(--[\w-]+)\s*\)\s*\)$/.exec(chatView?.['min-height'] ?? '')?.[1]
+    expect(minus, `黑板 .chatView 的 min-height 要是 calc(100% - var(--…))（現在是 ${chatView?.['min-height']}）`).toBeDefined()
+    expect(minus, '黑板 .chatView 扣掉的變數要跟粉筆槽的 height 是同一個').toBe(troughVar)
+  })
+
+  /**
+   * 黑板的跳頂／跳底鍵（.jumpButtons）墊高到粉筆槽上面：墊的就是槽高，也用同一個變數（2026-11-09 盲審 r2 #1：槽高變數一開始只統一了
+   * 槽本身與 .chatView，鍵還寫死 22px；槽高一改，長對話捲動途中的鍵就壓到槽上，或離槽不再是 --space-lg。捲到底與短對話時鍵本來就離槽
+   * 更遠：錨點 .jumpDock 跟著 .chatView 的內容走）。整個算式釘死：只看「有沒有出現變數」時，+ 寫成 -、乘 0、拿掉 --space-lg 都會過
+   * （盲審 r3 #1）；找不到 bottom 時用 expect 報（r3 #2）。只看第一個行首區塊，後面再寫一個同選擇器的區塊看不到（findDeclarations 的限制）。
+   */
+  it('黑板的跳頂／跳底鍵墊高的高度也用粉筆槽的變數', () => {
+    const troughVar = boardTroughVar()
+    expect(troughVar, '粉筆槽的 height 不是單一個變數（見上一條）').toBeDefined()
+    const buttons = findDeclarations(CHAT_CSS, ':global([data-theme="board"]) .jumpButtons')
+    expect(buttons, 'ChatView.module.css 沒有黑板的 .jumpButtons 區塊').not.toBeNull()
+    const bottom = buttons?.bottom ?? ''
+    const lifted = new RegExp(`^calc\\(\\s*var\\(\\s*--space-lg\\s*\\)\\s*\\+\\s*var\\(\\s*${troughVar}\\s*\\)\\s*\\)$`)
+    expect(bottom, `黑板跳頂／跳底鍵的 bottom 要是 calc(var(--space-lg) + var(${troughVar}))（現在是 ${bottom || '沒寫'}）：`
+      + '槽高寫死或算式寫錯，槽高一改，鍵就壓到槽上或離槽太遠（盲審 r2 #1、r3 #1）').toMatch(lifted)
   })
 })

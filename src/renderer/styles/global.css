@@ -39,8 +39,8 @@
   /* Code blocks */
   --color-code-bg: #1E293B;
   --color-code-text: #E2E8F0;
-  /* 程式碼註解：highlight.js atom-one-dark 的 #5c6370 在 --color-code-bg 上只有 2.42（時間線）／2.53（檔案室）／3.02（終端機），
-     換這色：5.71／5.97／7.12。每個主題共用這一個值，刻意不照裁決 5（舊主題不調色）：舊主題的註解也一起調亮 */
+  /* 程式碼註解：highlight.js atom-one-dark 的 #5c6370 在 --color-code-bg 上只有 2.42（時間線）／2.41（黑板），
+     換這色：5.71／5.67。每個主題共用這一個值（黑板區塊沒寫，沿用這裡） */
   --color-code-comment: #94A3B8;
   --color-code-inline-bg: rgba(30, 41, 59, 0.06);
 
@@ -53,7 +53,7 @@
   --logo-mark: #1E293B;
 
   /* 用途字色：原本寫死在元件 CSS 裡，換主題不會變。時間線只沿亮度調到它所有出現處（淡底、hover、選中）的底上 ≥ 4.5；
-     檔案室與終端機寫改版前的值（那兩個主題不調色）。按用途命名：同色系在不同地方本來就是不同 hex，合併的話舊主題會變色。
+     黑板在自己的區塊另寫一套。按用途命名：同色系在不同地方本來就是不同 hex，合併的話時間線會變色。
      ⚠️ 每個主題的區塊都要明寫，沒寫會沿用這裡的時間線值（themeContrast.test.ts 會擋）。 */
   --color-outcome-committed-text: #006E13;
   --color-outcome-tested-text: #104DD4;
@@ -70,7 +70,7 @@
   --color-subagent-text: #713DD6;
   --color-health-up-text: #00790A;
   --color-health-down-text: #CC1926;
-  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1）；舊主題寫各自原本的 heat 綠 */
+  /* session id 的「已複製」：原本借熱度圖的 --color-heat-positive（時間線 3.18:1） */
   --color-copied-text: #00781F;
 
   /* 儀表板「未收尾的對話」的 outcome 徽章：白字配實心底；時間線的底色沿亮度調暗到白字 ≥ 4.5，色相跟同頁圖例一致 */
@@ -79,10 +79,10 @@
   --color-outcome-quick-qa-badge-bg: #00809D;
   --color-outcome-badge-text: #FFFFFF;
 
-  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值；檔案室與終端機不寫，沿用這裡。
+  /* 圖表色：原本寫死在儀表板與 Token Budget 的元件裡，這裡是改前的值；黑板在自己的區塊逐一明寫，缺的會悄悄沿用這裡的時間線色。
      熱度格、成本熱度格與建議清單的淡底改用 color-mix()，透明度不再被量化成 1/255，畫出來最多差 1 個色階；其他圖表色不變。
      recharts 把 fill／stroke 寫成 SVG 屬性，Chromium 吃屬性裡的 var()。TS 裡每個都寫完整字串（'var(--chart-cat-1)'），不用樣板字串拼名稱：
-     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值、它們只定義在這裡，以及「元件裡沒有寫死的顏色」。 */
+     cssCustomProperties.test.ts 讀不出拼出來的名稱。chartColorTokens.test.ts 鎖住這些值、它們只定義在這裡與黑板區塊、黑板一個不缺，以及「元件裡沒有寫死的顏色」。 */
   --chart-cat-1: #3b82f6;
   --chart-cat-2: #0891b2;
   --chart-cat-3: #22c55e;
@@ -109,6 +109,12 @@
   --chart-marker-warning: #f59e0b;
   --chart-marker-info: #3b82f6;
   --chart-cost-heat: #f59e0b;
+  /* recharts 沒傳就自己畫的字面色（3.10.1 的預設值）：圓餅每片的框、Area 的 hover 圓點外圈、軸線與刻度線、Tooltip 的游標線。
+     元件改傳這幾個 token（TokenBudget/chartConstants.ts），時間線的值照舊 */
+  --chart-slice-gap: #fff;
+  --chart-dot-ring: #fff;
+  --chart-axis: #666;
+  --chart-cursor: #ccc;
 
   /* Spacing */
   --space-xs: 4px;
@@ -125,7 +131,7 @@
   --font-sans: var(--font-body);
   --font-mono: var(--font-code);
 
-  /* 「一般」字級的最小字 12px（佈景主題 A 從 11 起整組上調一級；三個主題共用） */
+  /* 「一般」字級的最小字 12px（佈景主題 A 從 11 起整組上調一級；各主題共用） */
   --font-scale: 1;
   --font-size-xs: calc(12px * var(--font-scale));
   --font-size-sm: calc(14px * var(--font-scale));
@@ -189,132 +195,175 @@ mark {
 }
 
 /* ============================================================
-   Theme A — Archive Room (Industrial Utility)
+   黑板：取代檔案室與終端機（存著舊主題的使用者，檔案室遷到時間線、終端機遷到黑板：context/resolveTheme.ts）。
+   這裡只寫跟 :root 不同的值；字色、用途字色、徽章、圖表色與熱度色的對比在 tests/renderer/themeContrast.test.ts。
    ============================================================ */
-[data-theme="archive"] {
-  --color-bg: #F5F0E8;
-  --color-bg-sidebar: #EDE8DF;
-  --color-bg-hover: #E0D8C8;
-  --color-bg-selected: #D5CBB8;
-  --color-border: #C4B9A5;
-  --color-text: #2C2417;
-  --color-text-secondary: #7A6E5D;
-  --color-text-muted: #706658;
-  --color-accent: #B8860B;
-  --color-accent-light: #F0E6D0;
-  --color-accent-user: #B8860B;
-  --color-accent-assistant: #B8860B;
-  --color-heat-positive: #15803d;
-  --color-heat-negative: #b91c1c;
-  --color-error: #A63D40;
-  --color-bubble-user: #EDE4D2;
-  --color-bubble-assistant: #F0EBE2;
-  --color-bubble-system: #FFF3CD;
-  --color-code-bg: #2C2417;
-  --color-code-text: #E8E0D2;
-  --color-code-inline-bg: rgba(44, 36, 23, 0.08);
-  --color-mark-bg: #F5D060;
-  --color-system-label: #664d03;
-  --logo-ring: #B8860B;
-  --logo-mark: #2C2417;
-  /* 用途字色與徽章：改版前的值（不調色） */
-  --color-outcome-committed-text: #16a34a;
-  --color-outcome-tested-text: #2563eb;
-  --color-outcome-in-progress-text: #d97706;
-  --color-outcome-quick-qa-text: #7c3aed;
-  --color-remote-text: #0f766e;
-  --color-op-edit-text: #d97706;
-  --color-op-write-text: #16a34a;
-  --color-op-read-text: #2563eb;
-  --color-op-discovery-text: #7c3aed;
-  --color-jaccard-text: #3b82f6;
-  --color-task-in-progress-text: #f59e0b;
-  --color-task-completed-text: #10b981;
-  --color-subagent-text: #8b5cf6;
-  --color-health-up-text: #22c55e;
-  --color-health-down-text: #ef4444;
-  --color-copied-text: #15803d;
-  --color-outcome-unknown-badge-bg: #706658;
-  --color-outcome-in-progress-badge-bg: #f59e0b;
-  --color-outcome-quick-qa-badge-bg: #06b6d4;
-  --color-outcome-badge-text: #FFFFFF;
-  --font-display: 'JetBrains Mono', monospace;
-  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-code: 'JetBrains Mono', monospace;
-  --radius-sm: 0;
-  --radius-md: 0;
-  --radius-lg: 0;
-  --radius-bubble: 0;
-  --shadow-card: 2px 2px 0 var(--color-border);
-  --shadow-bubble: 2px 2px 0 var(--color-border);
-}
-
-/* ============================================================
-   Theme C — Terminal Memory (Retro-Future)
-   ============================================================ */
-[data-theme="terminal"] {
-  --color-bg: #1B1D23;
-  --color-bg-sidebar: #16181E;
-  --color-bg-hover: #252830;
-  --color-bg-selected: #353A4D;
-  --color-border: #3D4255;
-  --color-text: #C9CDD8;
-  --color-text-secondary: #8D95A8;
-  --color-text-muted: #9298AC;
-  --color-accent: #22D3EE;
-  --color-accent-light: rgba(34, 211, 238, 0.1);
-  --color-accent-user: #22D3EE;
-  --color-accent-assistant: #FBBF24;
-  --color-heat-positive: #86efac;
-  --color-heat-negative: #fca5a5;
-  --color-error: #F87171;
+[data-theme="board"] {
+  color-scheme: dark;
+  --color-bg: #15402C;
+  --color-bg-sidebar: #0E3221;
+  --color-bg-hover: #1F4B36;
+  --color-bg-selected: #24543D;
+  --color-border: #4A6556;
+  --color-text: #F2F0E7;
+  --color-text-secondary: #D5D6C7;
+  --color-text-muted: #BEC4B2;
+  --color-accent: #F8E06A;
+  --color-accent-light: #24543D;
+  --color-accent-user: #94D0F4;
+  --color-accent-assistant: #F8E06A;
+  /* 熱度條：正值天藍、負值粉筆橘（粉紅只留給已捨棄分支，兩種色條才分得開） */
+  --color-heat-positive: #94D0F4;
+  --color-heat-negative: #FBB77B;
+  /* 比粉筆粉紅亮一點：強調色淡底（.highlightTarget 等閃一下的起點，#24543D）上 4.55:1 */
+  --color-error: #FFA2A5;
   --color-bubble-user: transparent;
   --color-bubble-assistant: transparent;
-  --color-bubble-system: rgba(251, 191, 36, 0.1);
-  --color-code-bg: #13151A;
-  --color-code-text: #E2E8F0;
-  --color-code-inline-bg: rgba(255, 255, 255, 0.08);
-  --color-mark-bg: rgba(251, 191, 36, 0.3);
-  --color-system-label: #FBBF24;
-  --logo-ring: #22D3EE;
-  --logo-mark: #FBBF24;
-  /* 用途字色與徽章：改版前的值（不調色） */
-  --color-outcome-committed-text: #16a34a;
-  --color-outcome-tested-text: #2563eb;
-  --color-outcome-in-progress-text: #d97706;
-  --color-outcome-quick-qa-text: #7c3aed;
-  --color-remote-text: #0f766e;
-  --color-op-edit-text: #d97706;
-  --color-op-write-text: #16a34a;
-  --color-op-read-text: #2563eb;
-  --color-op-discovery-text: #7c3aed;
-  --color-jaccard-text: #3b82f6;
-  --color-task-in-progress-text: #f59e0b;
-  --color-task-completed-text: #10b981;
-  --color-subagent-text: #8b5cf6;
-  --color-health-up-text: #22c55e;
-  --color-health-down-text: #ef4444;
-  --color-copied-text: #86efac;
-  --color-outcome-unknown-badge-bg: #9298AC;
-  --color-outcome-in-progress-badge-bg: #f59e0b;
-  --color-outcome-quick-qa-badge-bg: #06b6d4;
-  --color-outcome-badge-text: #FFFFFF;
-  --font-display: 'IBM Plex Mono', monospace;
-  --font-body: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-code: 'Fira Code', monospace;
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-bubble: 2px;
+  --color-bubble-system: transparent;
+  --color-code-bg: #0D2F1F;
+  --color-code-text: #F2F0E7;
+  --color-code-inline-bg: #0D2F1F;
+  /* 搜尋命中不塗底，改黃色波浪底線（下面的 mark） */
+  --color-mark-bg: transparent;
+  --color-system-label: #94D0F4;
+  /* 嵌入板面的輸入框、下拉與工具區塊的底 */
+  --color-inset-bg: #0B2A1B;
+  /* 木框（標題列）上的字：木紋漸層暗端上 7.24:1 */
+  --color-on-wood: #23140B;
+  /* 健康度長條段內的名稱：黑字在每個 outcome 色上都至少 6.35:1（板面綠與粉筆白在較暗的幾階都不到 4.5） */
+  --color-segment-label-text: #000000;
+  --logo-ring: #F2F0E7;
+  --logo-mark: #F8E06A;
+  --chalk-yellow: #F8E06A;
+  --chalk-pink: #FAAFBF;
+  --chalk-sky: #94D0F4;
+  --chalk-orange: #FBB77B;
+  --chalk-green: #B9E39A;
+  --chalk-lilac: #D3B2F0;
+  --wood-light: #DDB585;
+  --wood-dark: #C99D6B;
+  --wood-edge: #8B6A44;
+  /* 粉筆槽（App.module.css 的 .main::after）的高度。ChatView.module.css 用到它兩處：黑板的 .chatView 最小高度扣掉它（短對話才不多捲）、
+     跳頂／跳底鍵墊高它（鍵才在槽上面）。它只管槽的盒子高：槽裡的三根粉筆（從上緣算 3–4px）、木條（底部 12px）與陰影是照 22px 排的，
+     改槽高要一起調 .main::after 的背景位置 */
+  --board-trough-height: 22px;
+  /* 板擦形狀的跳頂／跳底鍵：上 58% 深木柄、下 42% 淺毛氈（hover 各亮一階）；粉筆白的箭頭只畫在木柄上 */
+  --eraser-handle: #3A2A1E;
+  --eraser-handle-hover: #4A3828;
+  --eraser-felt: #DCD6C8;
+  --eraser-felt-hover: #E8E2D4;
+  /* 用途字色：同色相的粉筆色（outcome：committed 天藍、tested 黃、in-progress 橘、quick-qa 粉紅） */
+  --color-outcome-committed-text: #94D0F4;
+  --color-outcome-tested-text: #F8E06A;
+  --color-outcome-in-progress-text: #FBB77B;
+  --color-outcome-quick-qa-text: #FAAFBF;
+  --color-remote-text: #B9E39A;
+  --color-op-edit-text: #FBB77B;
+  --color-op-write-text: #B9E39A;
+  --color-op-read-text: #94D0F4;
+  --color-op-discovery-text: #D3B2F0;
+  --color-jaccard-text: #94D0F4;
+  --color-task-in-progress-text: #FBB77B;
+  --color-task-completed-text: #B9E39A;
+  --color-subagent-text: #D3B2F0;
+  --color-health-up-text: #B9E39A;
+  --color-health-down-text: #FAAFBF;
+  --color-copied-text: #B9E39A;
+  /* 未收尾對話的 outcome 徽章：板面綠的字配粉筆色實心底（至少 6.51:1）。
+     in-progress 用淺橘、不用圖表的 #D98546：板面綠的字在那上面只有 4.10:1 */
+  --color-outcome-unknown-badge-bg: #BEC4B2;
+  --color-outcome-in-progress-badge-bg: #FBB77B;
+  --color-outcome-quick-qa-badge-bg: #FAAFBF;
+  --color-outcome-badge-text: #15402C;
+  /* 圖表色：八階亮度，對板面從 10.2 到 3.52:1（各色相在 OKLCH 裡解）。第二輪的粉筆色都在 6.3–8.1:1、相鄰最近只差 1.02 倍，
+     灰階與紅綠色弱下會混在一起。下限 3.5 不是 3.0：.main 的擦痕不隨內容捲動，最亮處（粉筆白 5.5% 疊板面）上也要有 3:1。
+     順序讓工具圓餅（1..8）與標籤圓餅（3,1,4,5,6,7,2,8）都明暗交錯：一般、綠色弱、紅色弱下相鄰最近 1.23 倍 */
+  --chart-cat-1: #F2F0E7;
+  --chart-cat-2: #A6DF9A;
+  --chart-cat-3: #B696EF;
+  --chart-cat-4: #84CAF2;
+  --chart-cat-5: #D98546;
+  --chart-cat-6: #F8E06A;
+  --chart-cat-7: #F39AAE;
+  --chart-cat-8: #AC8660;
+  /* outcome 長條：committed 天藍、tested 黃、in-progress 橘、quick-qa 粉紅，unknown 暗粉筆灰；名稱寫在段內。
+     相鄰最近 1.20 倍（紅色弱下的天藍與黃） */
+  --chart-outcome-committed: #84CAF2;
+  --chart-outcome-tested: #F8E06A;
+  --chart-outcome-in-progress: #D98546;
+  --chart-outcome-quick-qa: #F39AAE;
+  --chart-outcome-unknown: #898F88;
+  --chart-usage-sessions: #94D0F4;
+  --chart-usage-tokens: #F8E06A;
+  --chart-efficiency: #B9E39A;
+  --chart-heat: #F8E06A;
+  /* Token Budget 的圓餅 4 片頭尾相接：用上面的粉筆圖表色明暗交錯（黃、木、白、橘；一般、綠色弱、紅色弱下相鄰最近 2.02 倍，
+     樣稿的天藍、粉紅、白、黃只有 1.03）。new input 照樣稿用白，output 照時間線用暖色 */
+  --chart-token-cache-read: #F8E06A;
+  --chart-token-cache-creation: #AC8660;
+  --chart-token-new-input: #F2F0E7;
+  --chart-token-output: #D98546;
+  /* context 曲線上快取中斷的點、建議清單的左框與淡底：warning 深橘（曲線是粉筆黃，淺橘跟它只差 1.30 倍）、info 天藍 */
+  --chart-marker-warning: #D98546;
+  --chart-marker-info: #84CAF2;
+  --chart-cost-heat: #F8E06A;
+  /* recharts 預設色的黑板值：圓餅的縫與 hover 圓點外圈是板面色，軸線與游標線是粉筆灰（跟刻度字同色） */
+  --chart-slice-gap: var(--color-bg);
+  --chart-dot-ring: var(--color-bg);
+  --chart-axis: var(--color-text-muted);
+  --chart-cursor: var(--color-text-muted);
+  /* 字體：不打包新字型。拉丁字用系統 UI 字體，程式碼用 app 已帶的 Fira Code，標題用 macOS 內建的 Chalkduster
+     （Windows 退到內建的 Segoe Print，沒在 Windows 試過）。中文用楷體-繁（Kaiti TC）：macOS 用到才下載，沒下載過的 Mac
+     退到泛用字族（sans-serif 是蘋方）；Windows 用內建的標楷體（DFKai-SB）。樣稿寫的 BiauKai 不是 Chromium 認得的字族名
+     （macOS 標楷體叫 BiauKaiTC），樣稿實際畫出來的就是楷體-繁 */
+  --font-hand-cjk: 'Kaiti TC', 'DFKai-SB', serif;
+  --font-display: 'Chalkduster', 'Segoe Print', 'Kaiti TC', 'DFKai-SB', cursive;
+  --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Kaiti TC', 'DFKai-SB', sans-serif;
+  --font-code: 'Fira Code', 'Kaiti TC', 'DFKai-SB', monospace;
+  /* 原生的單選、勾選、日期選擇器用粉筆黃，不用系統藍 */
+  accent-color: #F8E06A;
+  --radius-sm: 3px;
+  --radius-md: 6px;
+  --radius-lg: 9px;
+  --radius-bubble: 6px;
   --shadow-card: none;
   --shadow-bubble: none;
 }
 
-/* Terminal theme — scrollbar */
-[data-theme="terminal"] ::-webkit-scrollbar-thumb {
-  background: #3B3F4A;
+[data-theme="board"] ::-webkit-scrollbar-thumb {
+  background: var(--color-border);
 }
 
-[data-theme="terminal"] ::-webkit-scrollbar-thumb:hover {
-  background: #4A5068;
+[data-theme="board"] ::-webkit-scrollbar-thumb:hover {
+  background: #6B8A78;
+}
+
+/* recharts（全域 class 名）：粉筆質感只套在資料線上。套在實心的面積、圓餅與長條上，斑點挖掉的像素多到顏色比圖例淡一截。
+   資料線用 #chalk-line 不用 #chalk（index.html）：#chalk 的區域跟著線的外框，資料是平的時候外框高 0、整條線不畫；
+   #chalk-line 的區域是圖表座標裡的固定範圍，蓋住整張圖（tests/renderer/boardChalk.test.ts）。
+   圓餅片與片之間的縫加寬到 3px，片才不只靠顏色分（縫的顏色是 --chart-slice-gap，元件傳的） */
+[data-theme="board"] .recharts-area-curve {
+  stroke-width: 2.5px;
+  filter: url(#chalk-line);
+}
+
+[data-theme="board"] .recharts-pie-sector path {
+  stroke-width: 3px;
+}
+
+/* 搜尋命中：黃色粉筆波浪底線，不塗螢光底 */
+[data-theme="board"] mark {
+  background: transparent;
+  color: var(--chalk-yellow);
+  text-decoration: underline wavy var(--chalk-yellow);
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 4px;
+  padding: 0;
+}
+
+/* 連結：天藍粉筆。沒寫的話 color-scheme: dark 讓 Chromium 給深色配色的預設連結色 #9E9EFF，擦痕最亮處只有 4.19:1。
+   主題選擇器包在 :where() 裡，特異度只剩 a 的 (0,0,1)：元件給自己連結寫的 class 字色（遠端徽章的 .remoteBadge）蓋得過它，
+   沒有 class 的 markdown 連結照樣是天藍。不包的話是 (0,1,1)，遠端徽章也被染成天藍、跟同列 committed 標籤同色 */
+:where([data-theme="board"]) a {
+  color: var(--chalk-sky);
 }

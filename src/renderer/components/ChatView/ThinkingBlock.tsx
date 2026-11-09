@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useI18n } from '../../i18n/useI18n'
 import MarkdownRenderer from './MarkdownRenderer'
+import BlockIcon from './BlockIcon'
 import { isOmittedThinking, type ThinkingBlock as ThinkingBlockData } from './contentBlocks'
 import styles from './ThinkingBlock.module.css'
 
@@ -27,7 +28,7 @@ export default function ThinkingBlock({ block, searchQuery }: ThinkingBlockProps
   if (block.thinking === '') {
     return (
       <p className={styles.omitted}>
-        <span className={styles.icon} aria-hidden="true">🧠</span>
+        <span className={styles.icon} aria-hidden="true"><BlockIcon kind="thinking" /></span>
         {isOmittedThinking(block)
           ? t('chatView.message.thinkingOmitted')
           : t('chatView.message.thinkingEmpty')}
@@ -41,7 +42,7 @@ export default function ThinkingBlock({ block, searchQuery }: ThinkingBlockProps
       onToggle={(e) => { if (e.currentTarget.open) setOpened(true) }}
     >
       <summary className={styles.summary}>
-        <span className={styles.icon} aria-hidden="true">🧠</span>
+        <span className={styles.icon} aria-hidden="true"><BlockIcon kind="thinking" /></span>
         <span className={styles.label}>{t('chatView.message.thinking')}</span>
       </summary>
       {opened && (

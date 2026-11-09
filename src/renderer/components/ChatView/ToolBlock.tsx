@@ -1,5 +1,6 @@
 import { useMemo } from 'react'
 import { highlightText } from '../../utils/highlightText'
+import BlockIcon from './BlockIcon'
 import styles from './ToolBlock.module.css'
 
 interface ToolBlockProps {
@@ -16,7 +17,7 @@ export default function ToolBlock({ toolName, content, type, searchQuery }: Tool
   return (
     <details className={styles.toolBlock}>
       <summary className={styles.summary}>
-        <span className={styles.icon} aria-hidden="true">{type === 'tool_use' ? '🔧' : '📋'}</span>
+        <span className={styles.icon} aria-hidden="true"><BlockIcon kind={type === 'tool_use' ? 'toolUse' : 'toolResult'} /></span>
         <span className={styles.label}>{label}</span>
       </summary>
       <pre className={styles.content}>{rendered}</pre>

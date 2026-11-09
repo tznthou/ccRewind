@@ -456,7 +456,7 @@
   background: var(--color-bg);
   border: 1px solid var(--color-accent);
   border-radius: var(--radius-sm);
-  /* accent 色的柔和光暈把按鈕從背景分出來（archive 主題的 bg 與 bg-sidebar 幾乎同色，只靠底色會被吃掉）。
+  /* accent 色的柔和光暈把按鈕從背景分出來（當初為了已移除的檔案室主題：它的 bg 與 bg-sidebar 幾乎同色，只靠底色會被吃掉）。
      刻意不用半透明與動畫：半透明更容易被背景吃掉，動畫會搶走閱讀注意力 */
   box-shadow:
     0 0 10px 1px color-mix(in srgb, var(--color-accent) 45%, transparent),
@@ -474,4 +474,58 @@
 .jumpButton:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
+}
+
+/* ============================================================
+   黑板：最小高度、tasks 的狀態徽章、板擦形狀的跳頂／跳底鍵
+   ============================================================ */
+
+/* .main 底下最後一個 flex 子項是 sticky 貼底的粉筆槽（App.module.css 的 .main::after），它佔版面高度。最小高度扣掉槽高，
+   內容塞得進視窗的短對話（載入中、錯誤、空對話也包在 .chatView 裡）才不會多捲一個槽高。flex-shrink: 0 照舊（見 .chatView） */
+:global([data-theme="board"]) .chatView {
+  min-height: calc(100% - var(--board-trough-height));
+}
+
+/* 狀態徽章（四種）拿掉底色、改粉筆虛線框（裁決 32；淡底疊在閃一下的起點上，進行中只有 4.32:1）。
+   框線取代上下各 1px 的 padding，徽章大小不變；底色表在 themeContrast.test.ts */
+:global([data-theme="board"]) .taskStatusBadge {
+  background: transparent;
+  border: 1px dashed currentColor;
+  padding: 0 5px;
+}
+
+/* 跳頂／跳底鍵是兩塊板擦（樣稿 .jb）：上 58% 深木柄、下 42% 淺毛氈，並排、墊高到粉筆槽上面（墊的就是槽高 --board-trough-height）。
+   長對話捲動途中鍵離槽 --space-lg；捲到底與短對話時錨點 .jumpDock 跟著內容走，鍵離槽更遠（各主題的錨點都這樣）。
+   粉筆白的箭頭只能畫在木柄上（對毛氈只有 1.27:1）：箭頭包在 .jumpArrow 裡、木柄色直接墊在它底下（對比量測量得到字底下的顏色），
+   行高 1 讓字框跟字一樣高、靠上對齊 → 字框的底在按鈕高的 58% 以內（19 × 字級 ≤ 20.9 × 字級；寬高、字級、padding 都跟著 --font-scale） */
+:global([data-theme="board"]) .jumpButtons {
+  flex-direction: row;
+  bottom: calc(var(--space-lg) + var(--board-trough-height));
+}
+
+:global([data-theme="board"]) .jumpButton {
+  width: calc(54px * var(--font-scale));
+  height: calc(36px * var(--font-scale));
+  align-items: flex-start;
+  padding-top: calc(1px * var(--font-scale));
+  font-size: var(--font-size-lg);
+  color: var(--color-text);
+  border: 0;
+  border-radius: 4px;
+  background: linear-gradient(var(--eraser-handle) 0 58%, var(--eraser-felt) 58%);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.35);
+}
+
+:global([data-theme="board"]) .jumpButton:hover {
+  color: var(--color-text);
+  background: linear-gradient(var(--eraser-handle-hover) 0 58%, var(--eraser-felt-hover) 58%);
+}
+
+:global([data-theme="board"]) .jumpArrow {
+  line-height: 1;
+  background: var(--eraser-handle);
+}
+
+:global([data-theme="board"]) .jumpButton:hover .jumpArrow {
+  background: var(--eraser-handle-hover);
 }

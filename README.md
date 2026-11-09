@@ -117,7 +117,7 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 | 功能 | 說明 |
 |------|------|
-| **三主題切換** | 檔案室（Archive）、時間線（Timeline）、終端回憶（Terminal），一鍵切換 |
+| **兩種主題** | 時間線（Timeline）與黑板（Blackboard），一鍵切換 |
 | **Active Time** | Session 時長優先顯示活動時間（排除 >5 分鐘閒置），括號附註掛鐘時間。儀表板平均時長同步使用 active time |
 | **更新通知** | 啟動時自動偵測 GitHub 新版本，一鍵開啟下載頁面 |
 | **虛擬捲動** | 大量 Session 不卡頓（@tanstack/react-virtual） |
@@ -175,20 +175,25 @@ Claude Code 刪除 Session 後，ccRewind 會自動封存該筆對話。所有�
 
 > **關於截圖**：這幾張圖是在 app 裡實際開出來的，資料則是合成的：專案、對話內容與 token 數字都是虛構的，刻意讓一場對話同時出現壓縮、三種快取中斷與超過 200K 的 context，不是任何人的真實使用紀錄。資料由 [`scripts/readme-fixture.mjs`](scripts/readme-fixture.mjs) 產生，同一份資料可以重現這些截圖。
 
-### 三種佈景主題
+### 兩種佈景主題
 
-一鍵切換三種視覺風格。下面是同一場示範對話的 Token Budget 面板（一句話、數字卡與對話長度圖）在三種主題下的樣子。
+一鍵切換兩種視覺風格：**時間線**是淺色、冷色調的版面；**黑板**是深色主題，把整個 app 畫成一塊黑板：
+
+- 深綠的板面配粉筆白的字，重點用粉筆黃標出；側欄選中的對話用黃粉筆圈起來，頁面標題與圖表曲線帶著粉筆的毛邊
+- 標題用粉筆字體 Chalkduster（macOS 內建），中文用楷體-繁；app 沒有另外打包這些字型，電腦上沒有時會改用系統字型
+- 對話頁回到頂端／底部的按鈕畫成兩塊板擦；對話被壓縮的地方，摘要用黃粉筆框起來，框上寫著「黑板在這裡擦過」
+- 黑板主題目前只在 macOS 上看過
+
+下面是同一場示範對話的 Token Budget 面板（一句話、數字卡與對話長度圖）在兩種主題下的樣子。
 
 <table>
   <tr>
-    <td align="center"><strong>📂 檔案室 Archive</strong></td>
     <td align="center"><strong>🕐 時間線 Timeline</strong></td>
-    <td align="center"><strong>💻 終端回憶 Terminal</strong></td>
+    <td align="center"><strong>🖍️ 黑板 Blackboard</strong></td>
   </tr>
   <tr>
-    <td><img src="docs/theme-archive-zh.webp" alt="Archive 主題（暖色調檔案室風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
-    <td><img src="docs/theme-timeline-zh.webp" alt="Timeline 主題（冷色調時間線風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
-    <td><img src="docs/theme-terminal-zh.webp" alt="Terminal 主題（深色終端風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="320" /></td>
+    <td><img src="docs/theme-timeline-zh.webp" alt="Timeline 主題（冷色調時間線風格）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="400" /></td>
+    <td><img src="docs/theme-board-zh.webp" alt="Blackboard 主題（深綠黑板、粉筆字）的 Token Budget 面板：一句話、數字卡與對話長度圖" width="400" /></td>
   </tr>
 </table>
 
@@ -328,7 +333,7 @@ ccRewind/
 │   │   │   ├── Archaeology/   # 跨 Session 考古：FileHistoryDrawer、RelatedSessionsPanel
 │   │   │   ├── Storage/       # 儲存管理：總覽卡、專案佔用 bar、排除規則、統一 Confirm Dialog
 │   │   │   ├── TokenBudget/   # Context Budget 面板：白話摘要、對話長度圖、事件與建議、圓餅圖、熱力條
-│   │   │   ├── ThemeSwitcher/ # 三主題切換按鈕
+│   │   │   ├── ThemeSwitcher/ # 主題切換按鈕（時間線／黑板）
 │   │   │   ├── FontScaleSwitcher/ # 三檔字級縮放（含 ARIA radio 鍵盤模式）
 │   │   │   ├── LiveRegion/    # 全域 aria-live 通知（搜尋結果、sync 狀態）
 │   │   │   ├── ErrorBoundary/ # 兩層錯誤邊界：應用程式外殼 + 每則訊息

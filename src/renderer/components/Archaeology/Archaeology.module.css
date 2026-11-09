@@ -276,3 +276,63 @@
   text-align: center;
   padding: var(--space-md) 0;
 }
+
+/* ============================================================
+   黑板：抽屜是從右邊拉進來的一塊框起來的小黑板；時間軸是空心粉筆點，徽章改粉筆虛線框
+   ============================================================ */
+:global([data-theme="board"]) .drawerOverlay {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+:global([data-theme="board"]) .drawer {
+  border-left: 10px solid var(--wood-dark);
+  box-shadow: inset 2px 0 0 var(--wood-edge), -12px 0 32px rgba(0, 0, 0, 0.45);
+}
+
+:global([data-theme="board"]) .drawerHeader {
+  border-bottom: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+
+:global([data-theme="board"]) .drawerTitle {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: var(--font-size-base);
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .timeline::before {
+  background: color-mix(in srgb, var(--color-text) 40%, transparent);
+  filter: url(#chalk);
+}
+
+:global([data-theme="board"]) .timelineEntry::before {
+  background: var(--color-bg);
+  border-color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+:global([data-theme="board"]) .timelineEntry[data-op="edit"]::before {
+  border-color: var(--chalk-orange);
+  background: var(--color-bg);
+}
+
+:global([data-theme="board"]) .timelineEntry[data-op="write"]::before {
+  border-color: var(--chalk-green);
+  background: var(--color-bg);
+}
+
+:global([data-theme="board"]) .timelineEntry[data-op="read"]::before {
+  border-color: var(--chalk-sky);
+  background: var(--color-bg);
+}
+
+:global([data-theme="board"]) .opBadge[data-op],
+:global([data-theme="board"]) .jaccardBadge {
+  background: transparent;
+  border: 1px dashed currentColor;
+}
+
+:global([data-theme="board"]) .relatedPanel {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 50%, transparent);
+  border-radius: 9px 14px 8px 12px;
+}

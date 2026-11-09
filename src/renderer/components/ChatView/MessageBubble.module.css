@@ -88,7 +88,7 @@
 }
 
 /* highlight.js atom-one-dark 的註解色 #5c6370 在程式碼底上不到 4.5:1（在它自己的 #282c34 上也只有 2.32）：
-   換成 --color-code-comment（每個主題共用一個值，斜體照舊）。ThinkingBlock 的程式碼區塊有同一組規則（行內程式碼除外） */
+   換成 --color-code-comment（每個主題共用一個值，斜體照舊）。ThinkingBlock 的程式碼區塊有同一組規則（含黑板的 1.5px 框；行內程式碼除外） */
 .content :global(.hljs-comment),
 .content :global(.hljs-quote) {
   color: var(--color-code-comment);
@@ -194,24 +194,6 @@
 }
 
 /* ============================================================
-   Theme A — Archive Room
-   ============================================================ */
-
-:global([data-theme="archive"]) .bubble {
-  box-shadow: var(--shadow-bubble);
-}
-
-:global([data-theme="archive"]) .role {
-  font-family: var(--font-display);
-  font-variant: small-caps;
-  border: 1px solid var(--color-accent);
-  padding: 1px 6px;
-  /* 跟字級表走（原本寫死 10px，選「特大」也不變） */
-  font-size: var(--font-size-xs);
-  letter-spacing: 0.5px;
-}
-
-/* ============================================================
    Theme B — Timeline
    ============================================================ */
 
@@ -226,47 +208,6 @@
 }
 
 /* ============================================================
-   Theme C — Terminal Memory
-   ============================================================ */
-
-:global([data-theme="terminal"]) .bubble {
-  background: transparent;
-  border: none;
-  border-bottom: 1px dashed var(--color-border);
-  border-radius: 0;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-:global([data-theme="terminal"]) .role {
-  font-family: var(--font-code);
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-:global([data-theme="terminal"]) .user .role::before {
-  content: '\25B8 ';
-  color: var(--color-accent-user);
-}
-
-:global([data-theme="terminal"]) .assistant .role::before {
-  content: '\25C2 ';
-  color: var(--color-accent-assistant);
-}
-
-:global([data-theme="terminal"]) .user .role {
-  color: var(--color-accent-user);
-}
-
-:global([data-theme="terminal"]) .assistant .role {
-  color: var(--color-accent-assistant);
-}
-
-:global([data-theme="terminal"]) .content :global(pre) {
-  border: 1px dashed var(--color-border);
-}
-
-/* ============================================================
    Token Heat Gutter — theme-aware left border
    ============================================================ */
 
@@ -278,7 +219,124 @@
   border-left: 4px solid var(--current-heat-color);
 }
 
-/* Terminal — glow effect for depth on transparent bubbles */
-:global([data-theme="terminal"]) .bubble[data-heat] {
-  box-shadow: 0 0 8px var(--current-heat-color);
+/* ============================================================
+   黑板：泡泡透明、整排（樣稿的泡泡沒有左右對齊與寬度上限：透明泡泡再靠左右對齊，字會從中間開始）；
+   角色名用標題字體、中文介面補「：」；熱度條與已捨棄條改成泡泡左外側的粉筆條；壓縮分界畫黃粉筆框
+   ============================================================ */
+:global([data-theme="board"]) .bubble {
+  position: relative;
+  align-self: stretch;
+  max-width: none;
+  padding: 12px 0 14px;
+  border: 0;
+  border-radius: 0;
+}
+
+:global([data-theme="board"]) .role {
+  font-family: var(--font-display);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+/* useI18n 會更新 <html lang>：中文介面才在角色名後面補全形冒號 */
+:global([data-theme="board"]) .role:lang(zh)::after {
+  content: '：';
+  font-family: var(--font-hand-cjk);
+}
+
+:global([data-theme="board"]) .user .role {
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .time {
+  font-family: var(--font-display);
+  font-size: var(--font-size-sm);
+}
+
+:global([data-theme="board"]) .content {
+  line-height: 1.8;
+  padding-left: 2px;
+}
+
+:global([data-theme="board"]) .content :global(pre) {
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+
+:global([data-theme="board"]) .badge {
+  border: 0;
+  padding: 0;
+  font-family: var(--font-hand-cjk);
+  font-size: var(--font-size-base);
+  font-weight: 400;
+}
+
+:global([data-theme="board"]) .badge[data-badge="compact"] {
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .badge[data-badge="abandoned"] {
+  color: var(--chalk-pink);
+}
+
+:global([data-theme="board"]) .systemMessage {
+  margin: 2px 0 12px;
+  padding: 0;
+  font-size: var(--font-size-sm);
+}
+
+/* 熱度條：泡泡左外側的粉筆條（在 .chatView 的 padding 裡）。濾鏡要套在獨立的元素上 → 偽元素 */
+:global([data-theme="board"]) .bubble[data-heat]::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 18px;
+  bottom: 18px;
+  width: 5px;
+  border-radius: 3px;
+  background: var(--current-heat-color);
+  filter: url(#chalk);
+}
+
+/* 已捨棄分支：角色名劃粉紅線，左側畫粉紅粉筆條。粉紅條跟熱度條共用同一個偽元素、規則排在後面（同 specificity 後者勝）
+   → 已捨棄的不畫熱度（裁決 25）。實際資料裡已捨棄只標在 user 訊息、熱度只算 assistant，兩者不會同時出現：這是防呆（裁決 30） */
+:global([data-theme="board"]) .bubble[data-abandoned="true"] .role {
+  text-decoration: line-through;
+  text-decoration-color: var(--chalk-pink);
+  text-decoration-thickness: 2px;
+}
+
+:global([data-theme="board"]) .bubble[data-abandoned="true"]::before {
+  content: '';
+  position: absolute;
+  left: -16px;
+  top: 14px;
+  bottom: 14px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--chalk-pink);
+  filter: url(#chalk);
+}
+
+/* 壓縮分界：黃粉筆框（壓縮之前的內容不畫淡；角色與時間不藏，裁決 24） */
+:global([data-theme="board"]) .bubble[data-compact] {
+  margin: 22px 0 10px;
+  padding: 16px 20px;
+  border: 2.5px solid var(--chalk-yellow);
+  border-radius: 14px 22px 12px 18px;
+}
+
+/* 框上的說明（只有黑板會畫，MessageBubble.tsx）：壓在上框線上，板面色的底把框線切開 */
+.compactNote {
+  position: absolute;
+  top: 0;
+  left: 18px;
+  transform: translateY(-50%);
+  margin: 0;
+  padding: 0 8px;
+  background: var(--color-bg);
+  font-family: var(--font-hand-cjk);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
 }

@@ -114,16 +114,8 @@
   color: var(--color-text);
 }
 
-/* Theme C — Terminal: mono input, dashed border */
-:global([data-theme="terminal"]) .input {
-  font-family: var(--font-code);
-  border-style: dashed;
-}
-
-:global([data-theme="terminal"]) .container {
-  border-bottom-style: dashed;
-}
-
-:global([data-theme="terminal"]) .scopeLabel {
-  font-family: var(--font-code);
+/* 黑板：搜尋框嵌進板面 */
+:global([data-theme="board"]) .input {
+  background: var(--color-inset-bg);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 45%, transparent);
 }

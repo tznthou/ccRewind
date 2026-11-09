@@ -478,3 +478,36 @@
 .insightsExpand:hover {
   background: var(--color-bg-hover);
 }
+
+/* ============================================================
+   黑板：開關鍵改粉筆虛線、卡片改粉筆框、圖表與建議的標題改黃色粉筆字、建議清單用粉筆虛線分隔
+   ============================================================ */
+:global([data-theme="board"]) .toggleButton {
+  font-family: var(--font-display);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+:global([data-theme="board"]) .card {
+  background: transparent;
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 50%, transparent);
+  border-radius: 9px 14px 8px 12px;
+}
+
+:global([data-theme="board"]) .chartTitle,
+:global([data-theme="board"]) .insightsTitle {
+  font-family: var(--font-display);
+  font-weight: 400;
+  color: var(--chalk-yellow);
+}
+
+:global([data-theme="board"]) .detailsToggle {
+  border-top: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+
+:global([data-theme="board"]) .insightsPanel {
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+:global([data-theme="board"]) .insightItem + .insightItem {
+  border-top: 1.5px dashed color-mix(in srgb, var(--color-text) 25%, transparent);
+}

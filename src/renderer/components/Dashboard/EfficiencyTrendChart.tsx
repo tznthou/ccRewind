@@ -3,7 +3,7 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianG
 import type { DailyEfficiency } from '../../../shared/types'
 import { useI18n } from '../../i18n/useI18n'
 import { formatTokens } from '../../utils/formatTokens'
-import { CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../TokenBudget/chartConstants'
+import { CHART_ACTIVE_DOT, CHART_AXIS_LINE, CHART_CURSOR, CHART_TOOLTIP_STYLE, CHART_TOOLTIP_ITEM_STYLE } from '../TokenBudget/chartConstants'
 import styles from './Dashboard.module.css'
 
 interface Props {
@@ -38,14 +38,19 @@ export default function EfficiencyTrendChart({ data }: Props) {
               dataKey="label"
               tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               interval="preserveStartEnd"
+              axisLine={CHART_AXIS_LINE}
+              tickLine={CHART_AXIS_LINE}
             />
             <YAxis
               tickFormatter={formatTokens}
               tick={{ fontSize: 12, fill: 'var(--color-text-muted)' }}
               // 要放得下各主題字型最寬的刻度，數字由 tests/renderer/yAxisTickWidth.test.ts 檢查
               width={56}
+              axisLine={CHART_AXIS_LINE}
+              tickLine={CHART_AXIS_LINE}
             />
             <Tooltip
+              cursor={CHART_CURSOR}
               contentStyle={CHART_TOOLTIP_STYLE}
               itemStyle={CHART_TOOLTIP_ITEM_STYLE}
               formatter={(value, name) => {
@@ -63,6 +68,7 @@ export default function EfficiencyTrendChart({ data }: Props) {
               fill="var(--chart-efficiency)"
               fillOpacity={0.15}
               name="avgTokensPerTurn"
+              activeDot={CHART_ACTIVE_DOT}
             />
           </AreaChart>
         </ResponsiveContainer>

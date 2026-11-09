@@ -9,32 +9,6 @@
   color: var(--color-text);
 }
 
-/* Terminal 主題：降低亮度，改描邊風格 */
-:global([data-theme="terminal"]) .banner {
-  background-color: rgba(34, 211, 238, 0.08);
-  border-bottom-style: dashed;
-}
-
-:global([data-theme="terminal"]) .downloadBtn {
-  background-color: transparent;
-  border: 1px solid var(--color-accent);
-  color: var(--color-accent);
-}
-
-:global([data-theme="terminal"]) .downloadBtn:hover {
-  background-color: rgba(34, 211, 238, 0.15);
-  opacity: 1;
-}
-
-:global([data-theme="terminal"]) .dismissBtn {
-  color: var(--color-text-muted);
-  border-color: var(--color-border);
-}
-
-:global([data-theme="terminal"]) .dismissBtn:hover {
-  background-color: rgba(255, 255, 255, 0.05);
-}
-
 .info {
   flex: 1;
   min-width: 0;
@@ -51,7 +25,7 @@
 }
 
 /* 頁面底 + accent 框 + 主要文字色（原本 accent 實心底配白字只有 3.7:1）。
-   不用 accent-light 底：橫幅本身就是 accent-light，同色的話比旁邊有框的「略過」還不顯眼。終端機主題另有規則（上面） */
+   不用 accent-light 底：橫幅本身就是 accent-light，同色的話比旁邊有框的「略過」還不顯眼。 */
 .downloadBtn {
   padding: 2px 8px;
   border-radius: 4px;

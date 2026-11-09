@@ -41,7 +41,7 @@ function readManifest(): FontEntry[] {
   return (JSON.parse(readFileSync(MANIFEST, 'utf8')) as { fonts: FontEntry[] }).fonts
 }
 
-/** 授權檔原樣保存(IBM 的是 CRLF), 比對前統一成 LF */
+/** 授權檔原樣保存, 有的是 CRLF(以前打包的 IBM Plex 那份就是), 比對前統一成 LF */
 function readLicense(name: string): string | null {
   const p = path.join(LICENSE_DIR, name)
   return existsSync(p) ? readFileSync(p, 'utf8').replace(/\r\n/g, '\n') : null
@@ -74,7 +74,7 @@ function reservedNameClauses(notice: string): string[] {
 
 /**
  * OFL 1.1 本文(標題到結尾, 拿掉分隔線、壓縮空白)的 SHA-256。SIL 官方的 OFL.txt
- * (https://openfontlicense.org/documents/OFL.txt, 2026-11-03 抓)與五份打包的授權檔都是這個值。
+ * (https://openfontlicense.org/documents/OFL.txt, 2026-11-03 抓)與每份打包的授權檔都是這個值。
  * 只檢查幾段文字的話, 砍掉一半的授權檔也會過(2026-11-03 審查實測)。
  */
 const OFL_BODY_SHA256 = '70006bea3c19ca31505acc2ab97296f48cccbf972825a66d81321f1474e30ebf'
@@ -157,5 +157,49 @@ describe('打包字型的授權', () => {
         problems.push(`${e.file}: 有保留字型名稱卻登記成修改版(要放著作權人發布的原檔, 或改名)`)
     }
     expect(problems).toEqual([])
+  })
+})
+
+/**
+ * 解析器直接吃字串的案例: 2026-11 刪掉 IBM Plex 之後, 打包的授權檔都沒有宣告保留字型名稱,
+ * 「保留字型名稱照授權檔登記」那條只剩負例, 解析器壞到一律回空也照樣綠(突變實測)。每條各釘一種寫法。
+ */
+describe('保留字型名稱的解析', () => {
+  it.each([
+    // 刪掉的 OFL-IBMPlex.txt 第一行
+    {
+      label: 'IBM 原句: 雙引號、句尾沒有句點',
+      notice: 'Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"',
+      name: 'Plex',
+    },
+    // SIL 官方 OFL.txt 範本開頭兩行的格式, 佔位字換成名稱
+    {
+      label: 'SIL 範本: 名稱不加引號',
+      notice: 'Copyright (c) 2020, Example Type Foundry (https://example.com),\nwith Reserved Font Name Example Sans.',
+      name: 'Example Sans',
+    },
+    // 2026-11-03 盲審之後的負向案例: 要求 Name 後面接空白的版本整個漏掉
+    {
+      label: 'Name 後面接冒號',
+      notice: 'Copyright 2014-2020 The Fira Code Project Authors (https://github.com/tonsky/FiraCode)\nwith Reserved Font Name: "Fira".',
+      name: 'Fira',
+    },
+    // Adobe Source Han Sans 的 LICENSE.txt 開頭(2026-11-03 盲審抓的原文, 取到第一個句點)
+    {
+      label: 'Adobe: Font 與 Name 之間換行、單引號',
+      notice: "Copyright 2014-2025 Adobe (http://www.adobe.com/), with Reserved Font\nName 'Source'.",
+      name: 'Source',
+    },
+  ])('$label', ({ notice, name }) => {
+    const clauses = reservedNameClauses(notice)
+    expect(clauses).toHaveLength(1)
+    expect(clauses[0]).toContain(name)
+  })
+
+  it('沒宣告的聲明抽不出任何一段, 就算有 reserved、Font 這些字', () => {
+    const notice =
+      'Copyright 2020 The Example Project Authors (https://github.com/example/example). All rights reserved.\n\n' +
+      'This Font Software is licensed under the SIL Open Font License, Version 1.1.'
+    expect(reservedNameClauses(notice)).toEqual([])
   })
 })

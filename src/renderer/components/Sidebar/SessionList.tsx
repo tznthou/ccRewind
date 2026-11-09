@@ -14,7 +14,7 @@ import styles from './Sidebar.module.css'
 type SortKey = 'time' | 'tokens'
 
 // 列高不固定：每一列量自己的實際高度（measureElement）。三行內容（標題 / meta / tags）裡 meta 會折兩行或三行，
-// 取決於訊息數與 token 數的位數、字級與主題的字型（終端機的 Fira Code 最寬）：舊字級下同一字級各列就差到
+// 取決於訊息數與 token 數的位數、字級與主題的字型：舊字級下同一字級各列就差到
 // 86–126px（2026-11-01 量 30 列）。以前寫死 92px，放不下時 .sessionItem 這個 flex 容器會把帶 overflow: hidden 的
 // 標籤列壓扁、標題被推出上緣；而且光改 estimateSize 不會重排（virtual-core 的 measurement memo 不依賴它）。
 // 字級或主題一變，畫出來的列由 ResizeObserver 重新量；沒畫出來的捲到時才量。
