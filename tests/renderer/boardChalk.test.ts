@@ -106,7 +106,7 @@ describe('黑板粉筆濾鏡', () => {
         + '跟著線的外框，資料是平的時候外框高 0，濾鏡區域也是 0，整條線不畫（盲審 r1 #4）').toBe('userSpaceOnUse')
       const [x, y, width, height] = REGION_KEYS.map(k => userUnits(filter?.attrs[k]))
       const region = REGION_KEYS.map(k => `${k}=${filter?.attrs[k]}`).join(' ')
-      expect([x, y, width, height].every(v => v !== null), `${where} 用的 #${ref.id} 的 x／y／width／height 要寫成不帶單位的數字 `
+      expect([x, y, width, height].every(v => v !== null), `${where} 用的 #${ref.id} 的 x／y／width／height 要寫成不帶單位的數字`
         + `（圖表座標），不用百分比：百分比對哪個 viewport 算是瀏覽器的行為，這裡驗不到：${region}`).toBe(true)
       expect(x! <= REGION_NEAR && y! <= REGION_NEAR && x! + width! >= REGION_FAR && y! + height! >= REGION_FAR,
         `${where} 用的 #${ref.id} 的區域要蓋住整張圖（x、y ≤ ${REGION_NEAR}，x + width、y + height ≥ ${REGION_FAR}）：${region}`).toBe(true)
