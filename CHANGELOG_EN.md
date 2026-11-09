@@ -15,8 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Chalk-white text on a dark green board, with highlights in chalk yellow; the selected session in the sidebar is circled in yellow chalk, and page titles and chart curves have a rough chalk edge
   - In a conversation, the jump-to-top and jump-to-bottom buttons are drawn as two erasers; where the conversation was compacted, the summary sits in a yellow chalk frame with the note "The board was wiped here" on its edge
   - Links in messages are in sky-blue chalk
-  - **Fonts**: the app bundles no extra fonts for Blackboard. Titles use the chalk font Chalkduster, built into macOS, and on Windows Segoe Print, built into Windows; Chinese text uses Kaiti TC, a font macOS downloads only when it is first needed, so a Mac that has not downloaded it falls back to a system font, and Windows uses DFKai-SB; English text uses the system interface font, and code uses Fira Code, which the app already bundles
-  - ⚠️ The Blackboard theme has only been checked on macOS so far; Segoe Print and DFKai-SB have not been looked at on Windows
+  - **Fonts**: the app bundles no extra fonts for Blackboard. Titles use the chalk font Chalkduster, built into macOS; Chinese text uses Kaiti TC, a font macOS has to download separately, so a Mac that has not downloaded it falls back to a system font; English text uses the system interface font, and code uses Fira Code, which the app already bundles
+  - ⚠️ The Blackboard theme has only been checked on macOS so far: on Windows, titles and Chinese text are set to Segoe Print and DFKai-SB, and how they look there has not been checked
 
 ### Changed
 

@@ -14,8 +14,8 @@
   - 深綠的板面配粉筆白的字，重點用粉筆黃標出；側欄選中的對話用黃粉筆圈起來，頁面標題與圖表曲線帶著粉筆的毛邊
   - 對話頁回到頂端／底部的按鈕畫成兩塊板擦；對話被壓縮的地方，摘要用黃粉筆框起來，框上寫著「黑板在這裡擦過」
   - 訊息裡的連結用天藍粉筆色
-  - **字型**：app 沒有為黑板另外打包字型。標題用 macOS 內建的粉筆字體 Chalkduster，Windows 上改用內建的 Segoe Print；中文用楷體-繁（Kaiti TC），這是 macOS 用到才下載的字體，沒下載過的 Mac 會改用系統字型，Windows 上改用標楷體；英文用系統的介面字型，程式碼用 app 本來就帶的 Fira Code
-  - ⚠️ 黑板主題目前只在 macOS 上看過，Segoe Print 與標楷體沒有在 Windows 上實際看過
+  - **字型**：app 沒有為黑板另外打包字型。標題用 macOS 內建的粉筆字體 Chalkduster；中文用楷體-繁（Kaiti TC），這是 macOS 要另外下載的字體，沒下載過的 Mac 會改用系統字型；英文用系統的介面字型，程式碼用 app 本來就帶的 Fira Code
+  - ⚠️ 黑板主題目前只在 macOS 上看過：Windows 上的標題與中文設定成 Segoe Print 與標楷體（DFKai-SB），實際的樣子沒有看過
 
 ### Changed
 
