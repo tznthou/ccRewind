@@ -7,6 +7,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.30.0] - 2026-11-09
+
+### Added
+
+- **A new theme: Blackboard** ([#178](https://github.com/tznthou/ccRewind/pull/178)): a dark theme that draws the whole app as a blackboard
+  - Chalk-white text on a dark green board, with highlights in chalk yellow; the selected session in the sidebar is circled in yellow chalk, and page titles and chart curves have a rough chalk edge
+  - In a conversation, the jump-to-top and jump-to-bottom buttons are drawn as two erasers; where the conversation was compacted, the summary sits in a yellow chalk frame with the note "The board was wiped here" on its edge
+  - Links in messages are in sky-blue chalk
+  - **Fonts**: the app bundles no extra fonts for Blackboard. Titles use the chalk font Chalkduster, built into macOS, and on Windows Segoe Print, built into Windows; Chinese text uses Kaiti TC, a font macOS downloads only when it is first needed, so a Mac that has not downloaded it falls back to a system font, and Windows uses DFKai-SB; English text uses the system interface font, and code uses Fira Code, which the app already bundles
+  - ⚠️ The Blackboard theme has only been checked on macOS so far; Segoe Print and DFKai-SB have not been looked at on Windows
+
+### Changed
+
+- **The thinking, tool call and tool result icons are now line icons** ([#178](https://github.com/tznthou/ccRewind/pull/178)): 🧠🔧📋 are replaced with line icons in the colour of the text, on both Timeline and Blackboard
+- **Dependency updates**: Electron from 44.10.0 to 44.10.2 ([#174](https://github.com/tznthou/ccRewind/pull/174)); `@tanstack/react-virtual` from 3.14.24 to 3.14.26 ([#176](https://github.com/tznthou/ccRewind/pull/176)); pnpm, used for development, from 11.28.9 to 11.28.11 ([#175](https://github.com/tznthou/ccRewind/pull/175)); ESLint, used for development, from 10.13.0 to 10.14.0 and globals from 17.13.0 to 17.14.0 ([#177](https://github.com/tznthou/ccRewind/pull/177))
+- **Development**: new tests: on Blackboard, text and badge colours reach 4.5:1 on the backgrounds they appear on (the brightest chalk smudge included), and chart colours 3.5:1 on the board and 3:1 on a smudge; Blackboard must write out every chart colour, and the chart components must replace recharts' built-in default colours with theme colours; chart lines with the chalk texture still draw when the data is flat; a short conversation does not scroll by the chalk trough's height, and the jump buttons sit above the trough; on Blackboard, a project health bar names a segment only when the name fits; old theme settings map to the new themes (the two copies of the table agree); the renderer uses no `data:` images (the CSP does not allow them, so they would not draw); the chat view uses no emoji icons; the y-axis widths also allow for Blackboard's system font (measured on macOS only); code comments and every highlight colour are checked against each theme's code background, and every element that renders Markdown must carry the code block styles ([#173](https://github.com/tznthou/ccRewind/pull/173)). Development only
+
+### Removed
+
+- **The archive and terminal themes are removed** ([#178](https://github.com/tznthou/ccRewind/pull/178)): the themes are now Timeline and Blackboard. If you used archive, the new version opens in Timeline; if you used terminal, in Blackboard. The fonts only those two themes used (IBM Plex Sans, IBM Plex Mono in two weights, JetBrains Mono) are removed along with their license files, so the app now bundles 3 font files instead of 7
+
+### Fixed
+
+- **Code comments are readable on the code block background** ([#173](https://github.com/tznthou/ccRewind/pull/173)): highlight.js's atom-one-dark style colours comments #5c6370, made for its own background; message code blocks use the theme's code background instead, where comments were 2.42:1 on Timeline. Comments are now #94A3B8: 5.71:1 on Timeline and 5.67:1 on Blackboard, still italic
+- **Code in thinking blocks is drawn as a code block, as in messages** ([#173](https://github.com/tznthou/ccRewind/pull/173)): the message code block styles did not reach thinking blocks, so code tagged with a language kept atom-one-dark's own dark background (comments at 2.32:1) and untagged code was plain monospace text on the page. They now take the theme's code background, text colour and comment colour, and untagged code becomes a code block too; inline code is unchanged
+
 ## [1.29.1] - 2026-11-05
 
 ### Fixed

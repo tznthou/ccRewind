@@ -6,6 +6,32 @@
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)，版本號遵循 [Semantic Versioning](https://semver.org/spec/v2.0.0.html)。
 
+## [1.30.0] - 2026-11-09
+
+### Added
+
+- **新主題「黑板」**（[#178](https://github.com/tznthou/ccRewind/pull/178)）：深色主題，把整個 app 畫成一塊黑板
+  - 深綠的板面配粉筆白的字，重點用粉筆黃標出；側欄選中的對話用黃粉筆圈起來，頁面標題與圖表曲線帶著粉筆的毛邊
+  - 對話頁回到頂端／底部的按鈕畫成兩塊板擦；對話被壓縮的地方，摘要用黃粉筆框起來，框上寫著「黑板在這裡擦過」
+  - 訊息裡的連結用天藍粉筆色
+  - **字型**：app 沒有為黑板另外打包字型。標題用 macOS 內建的粉筆字體 Chalkduster，Windows 上改用內建的 Segoe Print；中文用楷體-繁（Kaiti TC），這是 macOS 用到才下載的字體，沒下載過的 Mac 會改用系統字型，Windows 上改用標楷體；英文用系統的介面字型，程式碼用 app 本來就帶的 Fira Code
+  - ⚠️ 黑板主題目前只在 macOS 上看過，Segoe Print 與標楷體沒有在 Windows 上實際看過
+
+### Changed
+
+- **思考過程、工具呼叫與工具結果的圖示改成線條圖示**（[#178](https://github.com/tznthou/ccRewind/pull/178)）：🧠🔧📋 換成跟文字同色的線條圖示，時間線與黑板都一樣
+- **依賴更新**：Electron 從 44.10.0 更新到 44.10.2（[#174](https://github.com/tznthou/ccRewind/pull/174)）；`@tanstack/react-virtual` 從 3.14.24 更新到 3.14.26（[#176](https://github.com/tznthou/ccRewind/pull/176)）；開發用的 pnpm 從 11.28.9 更新到 11.28.11（[#175](https://github.com/tznthou/ccRewind/pull/175)）；開發用的 ESLint 從 10.13.0 更新到 10.14.0、globals 從 17.13.0 更新到 17.14.0（[#177](https://github.com/tznthou/ccRewind/pull/177)）
+- **開發**：新增測試：黑板的字色與徽章在實際出現的底色上（含粉筆擦痕最亮處）至少 4.5:1，圖表色對板面至少 3.5:1、對擦痕至少 3:1；黑板要寫出每一個圖表色，圖表元件要把 recharts 內建的預設色換成主題色；資料是平的時候，帶粉筆質感的圖表線照樣畫得出來；短對話不會因為底部的粉筆槽多捲一段，跳頂／跳底鍵墊在粉筆槽上方；黑板的專案健康長條裡，名稱放得下才標在段內；舊主題的設定換成新主題（兩份對照表一致）；renderer 不用 `data:` 圖片（CSP 不允許，會畫不出來）；對話頁不用 emoji 圖示；縱軸寬度也照黑板的系統字型檢查（只量了 macOS）；程式碼區塊的註解與各種標色對每個主題程式碼底色的對比，以及每個顯示 Markdown 的地方都套上程式碼區塊的樣式（[#173](https://github.com/tznthou/ccRewind/pull/173)）。只影響開發
+
+### Removed
+
+- **移除檔案室與終端機主題**（[#178](https://github.com/tznthou/ccRewind/pull/178)）：主題剩時間線與黑板。原本用檔案室的，打開新版時換成時間線；用終端機的換成黑板。只有這兩個主題用到的字型（IBM Plex Sans、兩種字重的 IBM Plex Mono、JetBrains Mono）和它們的授權檔一起移除，app 打包的字型檔從 7 個變成 3 個
+
+### Fixed
+
+- **程式碼區塊的註解看得清楚了**（[#173](https://github.com/tznthou/ccRewind/pull/173)）：highlight.js 的 atom-one-dark 配色把註解畫成 #5c6370，那是配它自己的底色；訊息裡的程式碼區塊用的是主題的程式碼底色，註解在時間線上只有 2.42:1。註解改成 #94A3B8：時間線 5.71:1、黑板 5.67:1，仍是斜體
+- **思考過程裡的程式碼跟訊息一樣畫成程式碼區塊**（[#173](https://github.com/tznthou/ccRewind/pull/173)）：以前訊息的程式碼樣式套不到思考過程，有標語言的程式碼用 atom-one-dark 自己的深底（註解 2.32:1），沒標語言的只是頁面上的等寬字。現在用主題的程式碼底色、字色與註解色，沒標語言的也畫成程式碼區塊；行內程式碼不變
+
 ## [1.29.1] - 2026-11-05
 
 ### Fixed
