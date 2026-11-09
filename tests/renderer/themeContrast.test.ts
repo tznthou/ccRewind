@@ -664,7 +664,11 @@ describe('黑板的對比', () => {
   /**
    * 連結（2026-11-05 完成條件 1）：renderer 沒有任何 CSS 給 <a> 上色，主題設了 color-scheme: dark 時 Chromium 給深色配色的預設連結色
    * #9E9EFF —— 黑板板面 4.88、擦痕最亮處 4.19、搜尋跳轉閃色起點（accent-light）3.65。字色 token 的掃描抓不到（沒有 color: 宣告）。
-   * 所以：這種主題要在 global.css 寫 `[data-theme="x"] a { color: var(--…) }`，而且那個 token 要在上面的字色對比清單裡。
+   * 所以：這種主題要在 global.css 寫 `:where([data-theme="x"]) a { color: var(--…) }`，而且那個 token 要在上面的字色對比清單裡。
+   *
+   * 主題選擇器要包在 :where() 裡（2026-11-06 盲審 r1 #1）：不包的話特異度 (0,1,1)，壓過元件給自己連結寫的單一 class 字色 (0,1,0)。
+   * 黑板的遠端徽章（renderer 唯一的 <a>，`.remoteBadge` 的 --color-remote-text）就被蓋成天藍，跟同列 committed 標籤同色。
+   * 包了是 (0,0,1)：沒有 class 的 markdown 連結照樣吃主題色，有 class 的元件留著自己的字色，UA 的預設連結色照樣被蓋掉（作者層永遠贏）。
    */
   it('設了 color-scheme: dark 的主題給連結明確的字色，而且那個色有對比測試', () => {
     const block = (id: string) => {
@@ -673,10 +677,14 @@ describe('黑板的對比', () => {
     }
     const dark = THEME_IDS.filter(id => /(?<![-\w])color-scheme\s*:\s*dark\b/.test(block(id)))
     expect(dark, '黑板設了 color-scheme: dark').toContain('board')
+    const css = GLOBAL_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
     for (const id of dark) {
-      const rule = GLOBAL_CSS.replace(/\/\*[\s\S]*?\*\//g, '')
-        .match(new RegExp(`\\[data-theme="${id}"\\]\\s+a\\s*\\{[^}]*?(?<![-\\w])color\\s*:\\s*var\\(\\s*(--[\\w-]+)`))
-      expect(rule, `global.css 沒有 [data-theme="${id}"] a { color: var(--…) }`).not.toBeNull()
+      // 包不包 :where() 都先認成連結規則，再另外斷言有包：寫回舊寫法時，失敗訊息才會說 #1 而不是「沒有規則」
+      const rule = css.match(new RegExp(
+        `(?::where\\(\\s*)?\\[data-theme="${id}"\\](?:\\s*\\))?\\s+a\\s*\\{[^}]*?(?<![-\\w])color\\s*:\\s*var\\(\\s*(--[\\w-]+)`))
+      expect(rule, `global.css 沒有 ${id} 的連結規則 :where([data-theme="${id}"]) a { color: var(--…) }`).not.toBeNull()
+      expect(rule?.[0], `${id} 的連結規則要寫成 :where([data-theme="${id}"]) a：不包 :where() 的特異度 (0,1,1) 壓過元件自己的單一 class 字色，`
+        + '黑板的遠端徽章會被蓋成連結的天藍、跟同列 committed 標籤同色（盲審 r1 #1）').toMatch(/^:where\(\s*\[data-theme=/)
       expect(BOARD_TEXT_TOKENS, `${id} 的連結色 ${rule?.[1]} 不在有對比測試的字色清單裡`).toContain(rule?.[1])
     }
   })

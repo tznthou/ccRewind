@@ -355,7 +355,9 @@ mark {
   padding: 0;
 }
 
-/* 連結：天藍粉筆。沒寫的話 color-scheme: dark 讓 Chromium 給深色配色的預設連結色 #9E9EFF，擦痕最亮處只有 4.19:1 */
-[data-theme="board"] a {
+/* 連結：天藍粉筆。沒寫的話 color-scheme: dark 讓 Chromium 給深色配色的預設連結色 #9E9EFF，擦痕最亮處只有 4.19:1。
+   主題選擇器包在 :where() 裡，特異度只剩 a 的 (0,0,1)：元件給自己連結寫的 class 字色（遠端徽章的 .remoteBadge）蓋得過它，
+   沒有 class 的 markdown 連結照樣是天藍。不包的話是 (0,1,1)，遠端徽章也被染成天藍、跟同列 committed 標籤同色 */
+:where([data-theme="board"]) a {
   color: var(--chalk-sky);
 }
