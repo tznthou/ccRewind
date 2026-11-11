@@ -465,7 +465,10 @@ function strayReturns(returns: ReturnInfo[], wrapper: string): string[] {
   return returns.flatMap(r => r.kind === 'null' || (r.kind === 'element' && r.cls === wrapper && !/^(pre|code)$/i.test(r.tag)) ? [] : [r.text])
 }
 
-/** rules 裡沒掛在 .wrapper 底下的選擇器（:not(…) 裡的不算：:not(.wrapper) 是「不在外層裡」） */
+/**
+ * rules 裡沒掛在 .wrapper 底下的選擇器（:not(…) 裡的不算：:not(.wrapper) 是「不在外層裡」）。
+ * 只看外層 class 有沒有出現：接在外層旁邊的（.wrapper + pre、.wrapper ~ pre）也算有掛，看不出來
+ */
 function unanchoredSelectors(rules: CssRule[], wrapper: string): string[] {
   const wrapperRe = new RegExp(`\\.${wrapper}(?![\\w-])`)
   return rules.flatMap(r => r.selectors).filter(s => !wrapperRe.test(withoutNot(unwrapGlobal(s))))
@@ -474,7 +477,8 @@ function unanchoredSelectors(rules: CssRule[], wrapper: string): string[] {
 /**
  * 拿掉 :global、清空 :not(…) 之後，選擇器指名的程式碼區塊部分：pre／code 元素（元素名不分大小寫）、highlight.js 的 hljs 與
  * rehype-highlight 給 <code> 的 language-*（class 寫法 .hljs／.language-x，或 [class^="hljs-"] 這類 class 屬性選擇器）。
- * 擋不到沒有指名的寫法：`*`、`:not(p)` 這類否定、class 以外的屬性選擇器。那些規則照樣蓋得到程式碼區塊，只是這裡看不出來。
+ * 擋不到沒有指名的寫法：`*`、`:not(p)` 這類否定、class 以外的屬性選擇器；也認不出 = 前後有空白的屬性選擇器（[class = "hljs"]）。
+ * 那些規則照樣蓋得到程式碼區塊，只是這裡看不出來。
  * 寧可誤紅：CSS module 裡沒包 :global 的 .language-x 會被雜湊、其實選不到 highlight.js 的 class，這裡照樣算指名
  */
 const CODE_BLOCK_PART = /(^|[\s>+~(,])(pre|code)(?![\w-])|\.hljs(?!\w)|\.language-|\[class[~|^$*]?=\s*["']?[^"'\]]*(hljs|language-)/i

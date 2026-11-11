@@ -1,6 +1,6 @@
 /* MarkdownRenderer 的輸出（訊息內文與思考區塊共用）。程式碼區塊的規則只寫在這裡：以前兩邊各在外層抄一份，漏抄過三次。
    renderer 其他 CSS 寫了指名 pre／code 元素、hljs 或 language-*（class 或 class 屬性選擇器）的規則，themeContrast.test.ts 會紅；
-   `*`、`:not(p)` 這類沒指名的寫法照樣蓋得到這裡，測試看不出來。
+   `*`、`:not(p)` 這類沒指名的寫法，與 = 前後有空白的屬性選擇器（[class = "hljs"]），照樣蓋得到這裡，測試看不出來。
    這裡給 .hljs-*（.hljs、註解、引用以外）加的字色沒有對比測試：逐色對比只讀 highlight.js 的樣式檔。
    行內程式碼不在這裡：只有訊息給它底色（MessageBubble.module.css），思考區塊刻意沒有。
    行距沒寫：跟著外層走（訊息 1.6、黑板主題的訊息 1.8、思考區塊 1.7），兩邊不一樣 */
