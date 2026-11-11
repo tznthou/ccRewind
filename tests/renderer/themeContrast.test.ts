@@ -283,17 +283,19 @@ describe('佈景主題 A：時間線的對比', () => {
 
 /**
  * 程式碼區塊（2026-11-05）：MarkdownRenderer 對每個主題都載同一份 highlight.js 樣式（下面讀 import 那行，目前是 atom-one-dark），
- * 那份樣式是配它自己的底（atom-one-dark 的 #282c34）。用 MarkdownRenderer 的元件在包住它的那層把 <pre> 的底換成 --color-code-bg、
+ * 那份樣式是配它自己的底（atom-one-dark 的 #282c34）。MarkdownRenderer 輸出外層那個 class 把 <pre> 的底換成 --color-code-bg、
  * 字換成 --color-code-text，.hljs 的底改透明、字色沿用 → 程式碼區塊實際的底是主題的 --color-code-bg。
  * atom-one-dark 的註解色 #5c6370 在 --color-code-bg 上只有 2.42（時間線）、2.41（黑板），在 #282c34 上也只有 2.32
  * → 註解與引用改用 --color-code-comment（每個主題共用一個值，見 global.css）。樣式其餘的字色直接讀檔逐色檢查：
  * highlight.js 的 patch 會自動合併，樣式換上的顏色不到 4.5:1（或是認不得的寫法）時這裡會紅。
- * 同日盲審：思考區塊（ThinkingBlock）也用 MarkdownRenderer，原本沒有這組規則：有標語言的程式碼照 atom-one-dark 原樣畫
- * （註解 2.32），沒標語言的只是頁面上的等寬字、沒有框 → 每個畫 MarkdownRenderer 的地方都要有這組規則；
- * 引用了 MarkdownRenderer 卻認不出畫在哪裡的檔案直接紅（fail closed），主題限定或更具體的規則也不能換掉這些值。
+ * 規則只寫在 MarkdownRenderer.module.css 一處（2026-11-11）：以前訊息（MessageBubble）與思考區塊（ThinkingBlock）各在包住
+ * MarkdownRenderer 的那層抄一份，漏抄過三次（思考區塊整組沒有、終端機與黑板的框只有訊息有），測試只守得到底、字色與註解色。
+ * 現在 MarkdownRenderer 的輸出包一層自己的 class、規則寫在那層，主題限定或更具體的規則也不能換掉這些值；
+ * renderer 其他 CSS 寫了選到程式碼區塊的規則就紅。行內程式碼寫成 :not(pre) > code 放行：只有訊息給它底色，思考區塊刻意沒有。
  */
 const RENDERER_DIR = fileURLToPath(new URL('../../src/renderer', import.meta.url))
 const MARKDOWN_RENDERER = path.join('components', 'ChatView', 'MarkdownRenderer.tsx')
+const MARKDOWN_RENDERER_CSS = path.join('components', 'ChatView', 'MarkdownRenderer.module.css')
 const COMMENT_TOKEN = /^var\(\s*--color-code-comment\s*(,[^)]*)?\)$/
 
 interface CssRule { selectors: string[]; decls: [string, string][]; inAtRule: boolean }
@@ -393,51 +395,57 @@ function wrapperClass(node: ts.Node, sf: ts.SourceFile): string | null {
   return null
 }
 
-interface Mount { file: string; wrapper: string | null; css: string | null }
-
-/** 指到 MarkdownRenderer 模組的字串（import、export … from、import()） */
-const RENDERER_SPECIFIER = /['"`][^'"`\n]*\/MarkdownRenderer(\.tsx?)?['"`]/
-
 /**
- * renderer 裡每個畫 MarkdownRenderer 的地方：所在檔案、包住它的 class、styles 來自哪個 CSS module。
- * 只認得 `import X from` 與 `import { default as X } from` 再寫成 <X />；refs 是所有引用到那個模組的檔案，認不出掛載點的由測試報紅
+ * MarkdownRenderer.tsx 畫 react-markdown 的元素有幾個、包住它的 className={styles.x} 的 x、styles 來自哪個 CSS module。
+ * 只認得 `import X from 'react-markdown'` 再寫成 <X />；元素不是剛好一個時 wrapper 是 null，由測試報紅
  */
-function markdownMounts(): { mounts: Mount[]; refs: string[] } {
-  const mounts: Mount[] = []
-  const refs: string[] = []
-  for (const file of readdirSync(RENDERER_DIR, { recursive: true, encoding: 'utf8' })) {
-    if (!/\.tsx?$/.test(file) || file === MARKDOWN_RENDERER) continue
-    const text = readFileSync(path.join(RENDERER_DIR, file), 'utf-8')
-    if (!RENDERER_SPECIFIER.test(text)) continue
-    refs.push(file)
-    const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
-    const names = new Set<string>()
-    let css: string | null = null
-    for (const stmt of sf.statements) {
-      if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
-      const clause = stmt.importClause
-      if (/(^|\/)MarkdownRenderer$/.test(stmt.moduleSpecifier.text) && clause) {
-        if (clause.name) names.add(clause.name.text)
-        const named = clause.namedBindings
-        if (named && ts.isNamedImports(named)) {
-          for (const el of named.elements) if ((el.propertyName ?? el.name).getText(sf) === 'default') names.add(el.name.text)
-        }
-      }
-      if (clause?.name?.text === 'styles' && stmt.moduleSpecifier.text.endsWith('.module.css')) css = path.join(path.dirname(file), stmt.moduleSpecifier.text)
-    }
-    const visit = (node: ts.Node) => {
-      if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && names.has(node.tagName.getText(sf))) {
-        mounts.push({ file, wrapper: wrapperClass(node, sf), css })
-      }
-      ts.forEachChild(node, visit)
-    }
-    visit(sf)
+function markdownWrapper(): { elements: number; wrapper: string | null; css: string | null } {
+  const text = readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER), 'utf-8')
+  const sf = ts.createSourceFile(MARKDOWN_RENDERER, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
+  let name: string | null = null
+  let css: string | null = null
+  for (const stmt of sf.statements) {
+    if (!ts.isImportDeclaration(stmt) || !ts.isStringLiteral(stmt.moduleSpecifier)) continue
+    const clause = stmt.importClause
+    if (stmt.moduleSpecifier.text === 'react-markdown' && clause?.name) name = clause.name.text
+    if (clause?.name?.text === 'styles' && stmt.moduleSpecifier.text.endsWith('.module.css')) css = path.join(path.dirname(MARKDOWN_RENDERER), stmt.moduleSpecifier.text)
   }
-  return { mounts, refs }
+  const wrappers: (string | null)[] = []
+  const visit = (node: ts.Node) => {
+    if ((ts.isJsxSelfClosingElement(node) || ts.isJsxOpeningElement(node)) && node.tagName.getText(sf) === name) wrappers.push(wrapperClass(node, sf))
+    ts.forEachChild(node, visit)
+  }
+  visit(sf)
+  return { elements: wrappers.length, wrapper: wrappers.length === 1 ? wrappers[0] : null, css }
+}
+
+/** 拿掉 :global、清空 :not(…) 之後，選擇器指名 pre／code 元素或 highlight.js 的 class = 選到程式碼區塊裡的東西 */
+const CODE_BLOCK_PART = /(^|[\s>+~(,])(pre|code)(?![\w-])|\.hljs(?!\w)/
+/** 行內程式碼：以 :not(pre) > code 結尾（拿掉 :global 之後）；前面那段（第 1 組）不能再指名程式碼區塊 */
+const INLINE_CODE = /^(.*?):not\(\s*pre\s*\)\s*>\s*code$/
+
+/** :not(…) 的括號清空（巢狀的一起）：:not 裡寫的是「不是什麼」，不算指名 */
+function withoutNot(selector: string): string {
+  let out = ''
+  for (let i = 0; i < selector.length; i++) {
+    if (!selector.startsWith(':not(', i)) {
+      out += selector[i]
+      continue
+    }
+    let depth = 1
+    let j = i + ':not('.length
+    for (; j < selector.length && depth > 0; j++) {
+      if (selector[j] === '(') depth++
+      else if (selector[j] === ')') depth--
+    }
+    out += ':not()'
+    i = j - 1
+  }
+  return out
 }
 
 /**
- * 每個掛載點在包住 MarkdownRenderer 的那層（.x）都要有的值；var() 可以帶後備值。
+ * MarkdownRenderer 外層那個 class（.x）底下要有的值；var() 可以帶後備值。
  * match 比選擇器最右邊那段：主題限定、更具體或寫在 @media 裡、選到同一個元素的規則也要是這個值
  */
 const CODE_BLOCK_RULES: { target: string; match: RegExp; props: string[]; want: RegExp; label: string }[] = [
@@ -491,28 +499,46 @@ describe('程式碼區塊的對比', () => {
     expect(backgrounds, `${HIGHLIGHT.spec} 有別的底色：那些字要改成對它算`).toEqual(['.hljs'])
   })
 
-  it('每個畫 MarkdownRenderer 的地方，包住它的那層都有程式碼區塊的規則', () => {
-    const { mounts, refs } = markdownMounts()
-    // 掃描壞掉時清單是空的、照樣全綠：已知的兩處要找得到
-    expect(mounts.map(m => path.basename(m.file))).toEqual(expect.arrayContaining(['MessageBubble.tsx', 'ThinkingBlock.tsx']))
-    const unrecognised = refs.filter(file => !mounts.some(m => m.file === file))
-      .map(file => `${file}：引用了 MarkdownRenderer，卻認不出它畫在哪裡（只認得 import X from 或 import { default as X } from，再寫成 <X />）`)
-    const problems = mounts.flatMap(({ file, wrapper, css }) => {
-      if (!wrapper || !css) return [`${file}：MarkdownRenderer 沒有包在 className={styles.x} 的元素裡，或沒有 import styles`]
-      const rules = cssRules(readFileSync(path.join(RENDERER_DIR, css), 'utf-8'))
-      const wrapperClass = new RegExp(`\\.${wrapper}(?![\\w-])`)
-      return CODE_BLOCK_RULES.flatMap(({ target, match, props, want, label }) => {
-        const selector = `.${wrapper} ${target}`
-        const value = lastValue(rules, selector, props)
-        const base = value !== undefined && want.test(value) ? [] : [`${css}：${selector} 的 ${props[0]} 是 ${value ?? '（沒寫）'}，要 ${label}`]
-        // 同一個元素的其他規則（主題限定、更具體、@media 裡）：設了這個屬性就要是同一個值，不然上面的對比前提不成立
-        const overrides = rules.flatMap(rule => rule.selectors
-          .filter(s => (s !== selector || rule.inAtRule) && match.test(splitSubject(s).subject) && wrapperClass.test(splitSubject(s).context))
-          .flatMap(s => rule.decls.filter(([prop, v]) => props.includes(prop) && !want.test(v)).map(([prop, v]) => `${css}：${s} { ${prop}: ${v} }，要 ${label}`)))
-        return [...base, ...overrides]
-      })
+  it('MarkdownRenderer 自己包一層 class，程式碼區塊的規則寫在那層', () => {
+    const { elements, wrapper, css } = markdownWrapper()
+    expect(elements, `${MARKDOWN_RENDERER} 畫 react-markdown 的元素要剛好一個（只認得 import X from 'react-markdown' 再寫成 <X />）`).toBe(1)
+    expect(css, `${MARKDOWN_RENDERER} 的 styles 要 import 自 ./MarkdownRenderer.module.css`).toBe(MARKDOWN_RENDERER_CSS)
+    expect(wrapper, `${MARKDOWN_RENDERER} 畫 react-markdown 的元素沒有包在 className={styles.x} 的元素裡`).not.toBeNull()
+    const rules = cssRules(readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER_CSS), 'utf-8'))
+    const wrapperRe = new RegExp(`\\.${wrapper}(?![\\w-])`)
+    const problems = CODE_BLOCK_RULES.flatMap(({ target, match, props, want, label }) => {
+      const selector = `.${wrapper} ${target}`
+      const value = lastValue(rules, selector, props)
+      const base = value !== undefined && want.test(value) ? [] : [`${MARKDOWN_RENDERER_CSS}：${selector} 的 ${props[0]} 是 ${value ?? '（沒寫）'}，要 ${label}`]
+      // 同一個元素的其他規則（主題限定、更具體、@media 裡）：設了這個屬性就要是同一個值，不然上面的對比前提不成立
+      const overrides = rules.flatMap(rule => rule.selectors
+        .filter(s => (s !== selector || rule.inAtRule) && match.test(splitSubject(s).subject) && wrapperRe.test(splitSubject(s).context))
+        .flatMap(s => rule.decls.filter(([prop, v]) => props.includes(prop) && !want.test(v)).map(([prop, v]) => `${MARKDOWN_RENDERER_CSS}：${s} { ${prop}: ${v} }，要 ${label}`)))
+      return [...base, ...overrides]
     })
-    expect([...unrecognised, ...problems], [...unrecognised, ...problems].join('\n')).toEqual([])
+    expect(problems, problems.join('\n')).toEqual([])
+  })
+
+  it('renderer 的 CSS 只有 MarkdownRenderer.module.css 寫程式碼區塊的規則（行內程式碼除外）', () => {
+    const problems: string[] = []
+    const inline: { file: string; selector: string }[] = []
+    let files = 0
+    for (const file of readdirSync(RENDERER_DIR, { recursive: true, encoding: 'utf8' })) {
+      if (!file.endsWith('.css') || file === MARKDOWN_RENDERER_CSS) continue
+      files++
+      for (const rule of cssRules(readFileSync(path.join(RENDERER_DIR, file), 'utf-8'))) {
+        for (const selector of rule.selectors) {
+          const plain = unwrapGlobal(selector)
+          const tail = INLINE_CODE.exec(plain)
+          if (tail && !CODE_BLOCK_PART.test(withoutNot(tail[1]))) inline.push({ file, selector })
+          else if (CODE_BLOCK_PART.test(withoutNot(plain))) problems.push(`${file}：${selector}`)
+        }
+      }
+    }
+    // 掃描壞掉時什麼都找不到、照樣全綠：要掃到檔案，訊息的行內程式碼規則要找得到
+    expect(files, '一個 .css 都沒掃到').toBeGreaterThan(0)
+    expect(inline.map(i => i.file), '訊息的行內程式碼規則（:not(pre) > code）沒找到').toContain(path.join('components', 'ChatView', 'MessageBubble.module.css'))
+    expect(problems, `程式碼區塊的規則要寫在 ${MARKDOWN_RENDERER_CSS}（行內程式碼寫成 :not(pre) > code）：\n${problems.join('\n')}`).toEqual([])
   })
 
   it('renderer 的 CSS 給 .hljs-comment／.hljs-quote 的字色都是 --color-code-comment', () => {
@@ -528,8 +554,8 @@ describe('程式碼區塊的對比', () => {
         }
       }
     }
-    // 掃描壞掉時什麼都找不到、照樣全綠：兩個掛載點的規則要找得到
-    expect(found.filter(f => f.ok).map(f => path.basename(f.file))).toEqual(expect.arrayContaining(['MessageBubble.module.css', 'ThinkingBlock.module.css']))
+    // 掃描壞掉時什麼都找不到、照樣全綠：MarkdownRenderer 的規則要找得到
+    expect(found.filter(f => f.ok).map(f => path.basename(f.file))).toEqual(expect.arrayContaining(['MarkdownRenderer.module.css']))
     const others = found.filter(f => !f.ok).map(f => `${f.file}：${f.rule}`)
     expect(others, others.join('\n')).toEqual([])
   })

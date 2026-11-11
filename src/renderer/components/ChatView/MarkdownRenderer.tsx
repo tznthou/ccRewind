@@ -6,6 +6,7 @@ import rehypeSanitize from 'rehype-sanitize'
 import type { PluggableList } from 'unified'
 import rehypeSearchHighlight from '../../utils/rehypeSearchHighlight'
 import 'highlight.js/styles/atom-one-dark.css'
+import styles from './MarkdownRenderer.module.css'
 
 interface MarkdownRendererProps {
   content: string
@@ -24,11 +25,13 @@ export default memo(function MarkdownRenderer({ content, searchQuery }: Markdown
     [searchQuery],
   )
   return (
-    <Markdown
-      remarkPlugins={REMARK_PLUGINS}
-      rehypePlugins={rehypePlugins}
-    >
-      {content}
-    </Markdown>
+    <div className={styles.markdownRenderer}>
+      <Markdown
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={rehypePlugins}
+      >
+        {content}
+      </Markdown>
+    </div>
   )
 })

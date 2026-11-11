@@ -1,0 +1,36 @@
+/* MarkdownRenderer 的輸出（訊息內文與思考區塊共用）。程式碼區塊的規則只寫在這裡：以前兩邊各在外層抄一份，漏抄過三次；
+   renderer 其他 CSS 寫了選到程式碼區塊的規則，themeContrast.test.ts 會紅。
+   行內程式碼不在這裡：只有訊息給它底色（MessageBubble.module.css），思考區塊刻意沒有 */
+.markdownRenderer :global(pre) {
+  background-color: var(--color-code-bg);
+  color: var(--color-code-text);
+  padding: var(--space-md);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+  margin: var(--space-sm) 0;
+}
+
+.markdownRenderer :global(pre code) {
+  font-family: var(--font-mono);
+  font-size: var(--font-size-sm);
+}
+
+.markdownRenderer :global(.hljs) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+/* highlight.js atom-one-dark 的註解色 #5c6370 在程式碼底上不到 4.5:1（在它自己的 #282c34 上也只有 2.32）：
+   換成 --color-code-comment（每個主題共用一個值，斜體照舊） */
+.markdownRenderer :global(.hljs-comment),
+.markdownRenderer :global(.hljs-quote) {
+  color: var(--color-code-comment);
+}
+
+/* 黑板：程式碼底 #0D2F1F 對板面 #15402C（思考區塊的底也是它）只有 1.25:1，沒框看不出邊界 */
+:global([data-theme="board"]) .markdownRenderer :global(pre) {
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 30%, transparent);
+}
