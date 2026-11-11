@@ -403,14 +403,15 @@ function wrapperClass(node: ts.Node, sf: ts.SourceFile): string | null {
   return null
 }
 
+/** 元件函式的一個 return：回傳帶 className={styles.x} 的 JSX 元素（cls = x、tag = 元素名）、null，或其他東西（text = 原文） */
+type ReturnInfo = { kind: 'element'; cls: string | null; tag: string; text: string } | { kind: 'null' } | { kind: 'other'; text: string }
+
 /**
- * MarkdownRenderer.tsx 的結構：react-markdown 匯入的名字（預設與具名都算：MarkdownHooks、MarkdownAsync）畫的元素有幾個、
- * 包住它的 className={styles.x} 的 x、styles 來自哪個 CSS module，以及元件函式（function MarkdownRenderer，要剛好一個）的每個
- * return 回傳什麼：包外層的元素回傳那個 x、return null 回傳 'null'、其他回傳那段原文。元素不是剛好一個時 wrapper 是 null、
- * 認不出元件函式時 returns 是 null，都由測試報紅
+ * MarkdownRenderer.tsx（或測試給的原始碼）的結構：react-markdown 匯入的名字（預設與具名都算：MarkdownHooks、MarkdownAsync）
+ * 畫的元素有幾個、包住它的 className={styles.x} 的 x、styles 來自哪個 CSS module，以及元件函式（function MarkdownRenderer，
+ * 要剛好一個）的每個 return。元素不是剛好一個時 wrapper 是 null、認不出元件函式時 returns 是 null，都由測試報紅
  */
-function markdownWrapper(): { elements: number; wrapper: string | null; css: string | null; returns: string[] | null } {
-  const text = readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER), 'utf-8')
+function markdownStructure(text: string): { elements: number; wrapper: string | null; css: string | null; returns: ReturnInfo[] | null } {
   const sf = ts.createSourceFile(MARKDOWN_RENDERER, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX)
   const names = new Set<string>()
   let css: string | null = null
@@ -433,17 +434,18 @@ function markdownWrapper(): { elements: number; wrapper: string | null; css: str
   }
   visit(sf)
   const body = components.length === 1 ? components[0].body : undefined
-  let returns: string[] | null = null
+  let returns: ReturnInfo[] | null = null
   if (body) {
-    const found: string[] = []
+    const found: ReturnInfo[] = []
     const collect = (node: ts.Node) => {
       if (ts.isFunctionLike(node)) return // 內層函式（useMemo 的 callback 等）的 return 不是元件回傳的
       if (ts.isReturnStatement(node)) {
         let e = node.expression
         while (e && ts.isParenthesizedExpression(e)) e = e.expression
-        if (!e) found.push('（空的 return）')
-        else if (e.kind === ts.SyntaxKind.NullKeyword) found.push('null')
-        else found.push((ts.isJsxElement(e) && stylesClassOf(e.openingElement.attributes, sf)) || e.getText(sf).slice(0, 80))
+        if (e && e.kind === ts.SyntaxKind.NullKeyword) found.push({ kind: 'null' })
+        else if (e && ts.isJsxElement(e)) {
+          found.push({ kind: 'element', cls: stylesClassOf(e.openingElement.attributes, sf), tag: e.openingElement.tagName.getText(sf), text: e.getText(sf).slice(0, 80) })
+        } else found.push({ kind: 'other', text: e ? e.getText(sf).slice(0, 80) : '（空的 return）' })
       }
       ts.forEachChild(node, collect)
     }
@@ -453,12 +455,29 @@ function markdownWrapper(): { elements: number; wrapper: string | null; css: str
   return { elements: wrappers.length, wrapper: wrappers.length === 1 ? wrappers[0] : null, css, returns }
 }
 
+const markdownWrapper = () => markdownStructure(readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER), 'utf-8'))
+
 /**
- * 拿掉 :global、清空 :not(…) 之後，選擇器指名的程式碼區塊部分：pre／code 元素（元素名不分大小寫）、highlight.js 的 class、
- * rehype-highlight 給 <code> 的 language-*（class 或屬性選擇器都算）。
- * 擋不到沒有指名的寫法：`*`、`:not(p)` 這類否定、其他屬性選擇器。那些規則照樣蓋得到程式碼區塊，只是這裡看不出來
+ * 不是回傳外層的 return：null 以外，都要回傳 className={styles.wrapper} 的元素，而且那個元素不能是 <pre>／<code> 本身
+ * （程式碼區塊的規則是後代選擇器，外層自己就是 <pre> 時選不到它）
  */
-const CODE_BLOCK_PART = /(^|[\s>+~(,])(pre|code)(?![\w-])|\.hljs(?!\w)|language-/i
+function strayReturns(returns: ReturnInfo[], wrapper: string): string[] {
+  return returns.flatMap(r => r.kind === 'null' || (r.kind === 'element' && r.cls === wrapper && !/^(pre|code)$/i.test(r.tag)) ? [] : [r.text])
+}
+
+/** rules 裡沒掛在 .wrapper 底下的選擇器（:not(…) 裡的不算：:not(.wrapper) 是「不在外層裡」） */
+function unanchoredSelectors(rules: CssRule[], wrapper: string): string[] {
+  const wrapperRe = new RegExp(`\\.${wrapper}(?![\\w-])`)
+  return rules.flatMap(r => r.selectors).filter(s => !wrapperRe.test(withoutNot(unwrapGlobal(s))))
+}
+
+/**
+ * 拿掉 :global、清空 :not(…) 之後，選擇器指名的程式碼區塊部分：pre／code 元素（元素名不分大小寫）、highlight.js 的 hljs 與
+ * rehype-highlight 給 <code> 的 language-*（class 寫法 .hljs／.language-x，或 [class^="hljs-"] 這類 class 屬性選擇器）。
+ * 擋不到沒有指名的寫法：`*`、`:not(p)` 這類否定、class 以外的屬性選擇器。那些規則照樣蓋得到程式碼區塊，只是這裡看不出來。
+ * 寧可誤紅：CSS module 裡沒包 :global 的 .language-x 會被雜湊、其實選不到 highlight.js 的 class，這裡照樣算指名
+ */
+const CODE_BLOCK_PART = /(^|[\s>+~(,])(pre|code)(?![\w-])|\.hljs(?!\w)|\.language-|\[class[~|^$*]?=\s*["']?[^"'\]]*(hljs|language-)/i
 /** 行內程式碼：以 :not(pre) > code 結尾（拿掉 :global 之後）；前面那段（第 1 組）不能再指名程式碼區塊 */
 const INLINE_CODE = /^(.*?):not\(\s*pre\s*\)\s*>\s*code$/i
 
@@ -493,11 +512,12 @@ function withoutNot(selector: string): string {
 /**
  * MarkdownRenderer 外層那個 class（.x）底下要有的值；var() 可以帶後備值。
  * match 比選擇器最右邊那段：主題限定、更具體或寫在 @media 裡、選到同一個元素的規則也要是這個值。
- * 擋不到：最右段寫成 :is(pre) 這類的、對 pre code 設的值（沒標語言的區塊，<code> 沒有 class，會吃到）
+ * 擋不到：最右段寫成 :is(pre) 這類的、對 pre code 設的值（沒標語言的區塊，<code> 沒有 class，會吃到）、
+ * 給 .hljs-*（.hljs、註解、引用以外）設的字色（下面的逐色對比只讀 highlight.js 樣式檔，不讀 MarkdownRenderer.module.css）
  */
 const CODE_BLOCK_RULES: { target: string; match: RegExp; props: string[]; want: RegExp; label: string }[] = [
-  { target: ':global(pre)', match: /^pre(?![\w-])/, props: ['background-color', 'background'], want: /^var\(\s*--color-code-bg\s*(,[^)]*)?\)$/, label: 'var(--color-code-bg)' },
-  { target: ':global(pre)', match: /^pre(?![\w-])/, props: ['color'], want: /^var\(\s*--color-code-text\s*(,[^)]*)?\)$/, label: 'var(--color-code-text)' },
+  { target: ':global(pre)', match: /^pre(?![\w-])/i, props: ['background-color', 'background'], want: /^var\(\s*--color-code-bg\s*(,[^)]*)?\)$/, label: 'var(--color-code-bg)' },
+  { target: ':global(pre)', match: /^pre(?![\w-])/i, props: ['color'], want: /^var\(\s*--color-code-text\s*(,[^)]*)?\)$/, label: 'var(--color-code-text)' },
   { target: ':global(.hljs)', match: /\.hljs(?![\w-])/, props: ['background-color', 'background'], want: /^transparent$/, label: 'transparent' },
   { target: ':global(.hljs)', match: /\.hljs(?![\w-])/, props: ['color'], want: /^inherit$/, label: 'inherit' },
   { target: ':global(.hljs-comment)', match: /\.hljs-comment(?![\w-])/, props: ['color'], want: COMMENT_TOKEN, label: 'var(--color-code-comment)' },
@@ -569,17 +589,19 @@ describe('程式碼區塊的對比', () => {
     // 外層在元件裡面：提早 return 別的東西（<pre>、react-markdown 的其他元件）就拿不到程式碼區塊的樣式
     expect(returns, `${MARKDOWN_RENDERER} 認不出元件函式（要剛好一個 function MarkdownRenderer）`).not.toBeNull()
     expect(returns!.length, `${MARKDOWN_RENDERER} 的元件函式沒有 return`).toBeGreaterThan(0)
-    expect(returns!.filter(r => r !== wrapper && r !== 'null'), `${MARKDOWN_RENDERER} 的每個 return 都要回傳 className={styles.${wrapper}} 的元素（或 null）`).toEqual([])
+    expect(strayReturns(returns!, wrapper!), `${MARKDOWN_RENDERER} 的每個 return 都要回傳 className={styles.${wrapper}} 的元素（不是 <pre>／<code> 本身）或 null`).toEqual([])
     const rules = cssRules(readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER_CSS), 'utf-8'))
     // 沒掛在外層 class 底下的規則是全域規則：蓋得到外層 class 的值，覆寫檢查卻看不到
-    const wrapperRe = new RegExp(`\\.${wrapper}(?![\\w-])`)
-    const unanchored = rules.flatMap(r => r.selectors).filter(s => !wrapperRe.test(unwrapGlobal(s)))
-    expect(unanchored, `${MARKDOWN_RENDERER_CSS} 的每個選擇器都要掛在 .${wrapper} 底下`).toEqual([])
+    expect(unanchoredSelectors(rules, wrapper!), `${MARKDOWN_RENDERER_CSS} 的每個選擇器都要掛在 .${wrapper} 底下`).toEqual([])
     const problems = codeBlockRuleProblems(rules, wrapper!, MARKDOWN_RENDERER_CSS)
     expect(problems, problems.join('\n')).toEqual([])
   })
 
-  it('程式碼區塊規則的判斷：已知的寫法分得對（判斷本身壞掉時這條先紅，上下兩條的綠燈才算數）', () => {
+  /**
+   * 上一條與下一條用到的判斷，逐一拿已知答案驗：選擇器分類、標準值與覆寫檢查、掛在外層底下的檢查、元件 return 的檢查。
+   * 這些判斷寫壞時（永遠判沒事），真實檔案剛好沒有會觸發它們的寫法，上下兩條照樣綠；這條會先紅
+   */
+  it('程式碼區塊守衛的判斷本身：已知的寫法判得對', () => {
     const cases: [string, 'inline' | 'block' | null][] = [
       ['.content :global(pre)', 'block'],
       ['.content :global(pre code)', 'block'],
@@ -590,12 +612,15 @@ describe('程式碼區塊的對比', () => {
       ['.content :global(PRE)', 'block'],
       ['.content :global(:is(pre, p))', 'block'],
       ['.content :global(.hljs-comment)', 'block'],
+      ['.content :global([class^="hljs-"])', 'block'],
+      ['.content :global(span[class*="hljs"])', 'block'],
       ['.content :global(.language-diff)', 'block'],
       ['.content :global([class*="language-"])', 'block'],
       ['.content :global(:not(pre) > code)', 'inline'],
       [':global([data-theme="board"]) .content :global(:not(pre) > code)', 'inline'],
       ['.content :global(p)', null],
       ['.content :global(:not(pre))', null],
+      ['.languageOption', null],
       ['.prefix', null],
       ['[data-pre]', null],
     ]
@@ -604,11 +629,12 @@ describe('程式碼區塊的對比', () => {
       return got === want ? [] : [`${s}：要 ${want}，判成 ${got}`]
     })
     expect(wrong, wrong.join('\n')).toEqual([])
-    // 掃描排除的那份：它的每個選擇器都要被認成程式碼區塊（真實檔案的寫法也分得對）
-    const own = cssRules(readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER_CSS), 'utf-8')).flatMap(r => r.selectors)
-    expect(own.length, `${MARKDOWN_RENDERER_CSS} 讀不到規則`).toBeGreaterThan(0)
-    expect(own.filter(s => codeSelectorKind(s) !== 'block'), `${MARKDOWN_RENDERER_CSS} 有選擇器沒被認成程式碼區塊規則`).toEqual([])
-    // 覆寫檢查：合成的 CSS 裡，主題限定、更具體、@media 裡的覆寫都要抓得到
+    // 真實檔案的寫法也分得對：上一條讀的那幾個選擇器要在檔裡，而且被認成程式碼區塊規則
+    const { wrapper } = markdownWrapper()
+    const own = new Set(cssRules(readFileSync(path.join(RENDERER_DIR, MARKDOWN_RENDERER_CSS), 'utf-8')).flatMap(r => r.selectors))
+    const relied = [...new Set(CODE_BLOCK_RULES.map(r => `.${wrapper} ${r.target}`))]
+    expect(relied.filter(s => !own.has(s) || codeSelectorKind(s) !== 'block'), `上一條讀的選擇器要在 ${MARKDOWN_RENDERER_CSS} 裡、而且被認成程式碼區塊規則`).toEqual([])
+    // 標準值與覆寫：合成的 CSS 裡，值寫錯、主題限定、更具體、@media 裡的覆寫各抓到一條
     const good = cssRules([
       '.x :global(pre) { background-color: var(--color-code-bg); color: var(--color-code-text) }',
       '.x :global(.hljs) { background: transparent; color: inherit }',
@@ -616,9 +642,31 @@ describe('程式碼區塊的對比', () => {
     ].join('\n'))
     expect(codeBlockRuleProblems(good, 'x', 'good')).toEqual([])
     const plus = (extra: string) => codeBlockRuleProblems([...good, ...cssRules(extra)], 'x', 'test')
+    expect(plus('.x :global(pre) { background-color: red }'), '標準值寫錯').toHaveLength(1)
     expect(plus(':global([data-theme="board"]) .x :global(pre) { background-color: #000 }'), '主題限定的覆寫').toHaveLength(1)
+    expect(plus(':global([data-theme="board"]) .x :global(PRE) { background-color: #000 }'), '大寫 PRE 的覆寫').toHaveLength(1)
     expect(plus('.x :global(pre) :global(.hljs) { color: red }'), '更具體的覆寫').toHaveLength(1)
     expect(plus('@media (min-width: 1px) { .x :global(.hljs-comment) { color: #5c6370 } }'), '@media 裡的覆寫').toHaveLength(1)
+    // 掛在外層底下：:not(.x) 不算掛；外層自己的規則（例如行距）算
+    expect(unanchoredSelectors(cssRules('.x :global(pre) { color: red } .x { line-height: 1.6 } :global(#root pre):not(.x) { color: red }'), 'x'))
+      .toEqual([':global(#root pre):not(.x)'])
+    // 元件的 return：提早回傳別的元素、回傳變數、外層自己就是 <pre> 都要報出來
+    const tsx = (body: string) => [
+      "import Markdown from 'react-markdown'",
+      "import styles from './MarkdownRenderer.module.css'",
+      'export default function MarkdownRenderer({ content }: { content: string }) {',
+      body,
+      '  return <div className={styles.x}><Markdown>{content}</Markdown></div>',
+      '}',
+    ].join('\n')
+    const stray = (body: string) => {
+      const { returns } = markdownStructure(tsx(body))
+      return returns === null ? ['（認不出元件函式）'] : strayReturns(returns, 'x')
+    }
+    expect(stray('  if (!content) return null'), '只有 return null 與外層').toEqual([])
+    expect(stray('  if (content.length > 9) { if (content) return <pre>{content}</pre> }'), '巢狀區塊裡提早 return <pre>').toHaveLength(1)
+    expect(stray('  const x = <pre>{content}</pre>\n  if (content) return x'), '回傳變數').toHaveLength(1)
+    expect(stray('  if (content) return <pre className={styles.x}>{content}</pre>'), '外層自己就是 <pre>').toHaveLength(1)
   })
 
   it('renderer 的 CSS 只有 MarkdownRenderer.module.css 指名程式碼區塊（行內程式碼除外）', () => {
@@ -639,7 +687,8 @@ describe('程式碼區塊的對比', () => {
     // 掃描壞掉時什麼都找不到、照樣全綠：要掃到檔案、認得出訊息的行內程式碼規則（判斷本身由上一條守）
     expect(files, '一個 .css 都沒掃到').toBeGreaterThan(0)
     expect(inline, '訊息的行內程式碼規則（:not(pre) > code）沒找到').toContain(path.join('components', 'ChatView', 'MessageBubble.module.css'))
-    expect(problems, `程式碼區塊的規則要寫在 ${MARKDOWN_RENDERER_CSS}；不是 MarkdownRenderer 畫的 <pre>／<code>（例如工具區塊自己的）改用 class 選擇器；行內程式碼寫成 :not(pre) > code：\n${problems.join('\n')}`).toEqual([])
+    expect(problems, `程式碼區塊的規則要寫在 ${MARKDOWN_RENDERER_CSS}；行內程式碼寫成 :not(pre) > code；` +
+      `選的其實不是 MarkdownRenderer 的程式碼區塊（例如工具區塊自己的 <pre>、剛好叫 language-x 的 class）就改用別的 class：\n${problems.join('\n')}`).toEqual([])
   })
 
   it('renderer 的 CSS 給 .hljs-comment／.hljs-quote 的字色都是 --color-code-comment', () => {
