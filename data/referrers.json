@@ -1162,5 +1162,17 @@
       "count": 31,
       "uniques": 31
     }
+  ],
+  "2026-11-13T10:58:57Z": [
+    {
+      "referrer": "github.com",
+      "count": 32,
+      "uniques": 4
+    },
+    {
+      "referrer": "aocr.org",
+      "count": 7,
+      "uniques": 7
+    }
   ]
 }
