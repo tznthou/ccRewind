@@ -60,6 +60,9 @@ export default function DistributionPieChart({ data, emptyText, unitLabel, ariaL
               paddingAngle={2}
               dataKey="value"
               stroke={CHART_SLICE_GAP}
+              // recharts 3.10.1 的 Pie 預設進場動畫先等 400ms 再轉 1500ms（defaultPieProps），
+              // 打開儀表板、換區間都會重播；黑板的名稱標籤也要等動畫結束才畫
+              isAnimationActive={false}
               label={direct
                 ? (p) => ((p.percent ?? 0) < LABEL_MIN_SHARE ? null : (
                     <text x={p.x} y={p.y} textAnchor={p.textAnchor} dominantBaseline="central" fill="var(--color-text)" fontSize={12}>
