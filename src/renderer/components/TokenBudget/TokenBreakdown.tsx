@@ -40,6 +40,9 @@ export default function TokenBreakdown({ stats }: Props) {
             paddingAngle={2}
             dataKey="value"
             stroke={CHART_SLICE_GAP}
+            // recharts 3.10.1 的 Pie 預設進場動畫先等 400ms 再轉 1500ms（defaultPieProps）。
+            // 圓餅在「詳細數據」展開時才掛載，有動畫就要等將近 2 秒才看到完整比例
+            isAnimationActive={false}
           />
 
           <Tooltip
