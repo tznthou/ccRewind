@@ -40,6 +40,9 @@ export default function TokenBreakdown({ stats }: Props) {
             paddingAngle={2}
             dataKey="value"
             stroke={CHART_SLICE_GAP}
+            // recharts 預設進場動畫是延遲 400ms 再轉 1500ms：圓餅在「詳細數據」展開時才掛載，
+            // 展開後要等將近 2 秒才看到完整的比例（2026-11-15 量：掛載 18-197ms、畫完 1961-2114ms）
+            isAnimationActive={false}
           />
 
           <Tooltip
