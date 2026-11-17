@@ -10,7 +10,8 @@
 
 ## 接續
 
-- 新 session 開始前，先讀取 `.claude/RESUME.md`
+- 新 session 開始前，先讀取 Claude Code 記憶目錄的 `RESUME.md`（交接）與 `.claude/RULES.md`（開工規矩、期限、待裁決）
+- `.claude/RESUME.md` 自 2026-11-15 起封存，只在查舊紀錄時讀
 
 ## 工作流程
 
